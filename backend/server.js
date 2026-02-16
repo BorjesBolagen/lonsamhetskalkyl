@@ -23,9 +23,34 @@ app.use(cors(corsOptions))
 app.use('/api/auth', authRoutes)
 app.use('/api/calc', calcRoutes)
 
+let lastMessage = {
+  message: 'No messages yet.',
+  sentAt: ''
+}
+
 // Standard route för test, health check
 app.get('/', (req, res) => {
-  res.send('Backend server is running')
+  res.type('html').send(`
+    <html>
+      <head><title>Backend</title></head>
+      <body style="font-family: sans-serif; padding: 24px;">
+        <h1>Backend server is running</h1>
+        <p><strong>Last message from frontend:</strong> ${lastMessage.message}</p>
+        <p><strong>Time:</strong> ${lastMessage.sentAt || 'N/A'}</p>
+      </body>
+    </html>
+  `)
+})
+
+app.post('/api/message', (req, res) => {
+  const { message, sentAt } = req.body || {}
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ error: 'Message is required' })
+  }
+
+  const timeValue = typeof sentAt === 'string' ? sentAt : ''
+  lastMessage = { message, sentAt: timeValue }
+  return res.json({ received: message, sentAt: timeValue })
 })
 
 // Startar servern på den port som anges i miljövariablerna eller 5000 som default

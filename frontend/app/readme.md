@@ -1,1 +1,1 @@
-App directory for Next.js application. Contains the main layout and hompage of the application.
+Next.js route directory. Contains the root route, login, dashboard, and the shared layout.

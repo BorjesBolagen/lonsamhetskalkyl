@@ -1,1 +1,1 @@
-Statiska filer för frontend, bilder, ikoner, logotyper etc.
+Static files for the frontend (images, icons, logos).

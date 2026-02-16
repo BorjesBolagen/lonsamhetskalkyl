@@ -1,9 +1,5 @@
-// Login-sida
+import LoginPage from "../../components/LoginPage";
 
 export default function Login() {
-  return (
-    <div>
-      <h1>Login</h1>
-    </div>
-  );
+  return <LoginPage />;
 }

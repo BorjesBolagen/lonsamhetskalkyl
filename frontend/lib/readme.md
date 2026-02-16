@@ -1,1 +1,1 @@
-Här finns alla funktioner för att kommunicera med backend.
+Shared frontend utilities. API helpers can live here if needed.
