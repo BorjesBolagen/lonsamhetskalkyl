@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import authRoutes from './routes/auth.js'
 import calcRoutes from './routes/calc.js'
+import { supabase } from './lib/supabaseClient.js'
 
 dotenv.config() // Ladda in .evn filen så vi kan använda miljövariabler
 
@@ -23,23 +24,39 @@ app.use(cors(corsOptions))
 app.use('/api/auth', authRoutes)
 app.use('/api/calc', calcRoutes)
 
-let lastMessage = {
-  message: 'No messages yet.',
-  sentAt: ''
-}
+app.get('/', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('message, sent_at')
+      .order('id', { ascending: false })
+      .limit(1)
+      .single()
 
-// Standard route för test, health check
-app.get('/', (req, res) => {
-  res.type('html').send(`
-    <html>
-      <head><title>Backend</title></head>
-      <body style="font-family: sans-serif; padding: 24px;">
-        <h1>Backend server is running</h1>
-        <p><strong>Last message from frontend:</strong> ${lastMessage.message}</p>
-        <p><strong>Time:</strong> ${lastMessage.sentAt || 'N/A'}</p>
-      </body>
-    </html>
-  `)
+    const lastMessage = error || !data ? { message: 'No messages yet.', sent_at: '' } : data
+    const displayTime = lastMessage.sent_at || 'N/A'
+
+    res.type('html').send(`
+      <html>
+        <head><title>Backend</title></head>
+        <body style="font-family: sans-serif; padding: 24px;">
+          <h1>Backend server is running</h1>
+          <p><strong>Last message from frontend:</strong> ${lastMessage.message}</p>
+          <p><strong>Time:</strong> ${displayTime}</p>
+        </body>
+      </html>
+    `)
+  } catch (err) {
+    res.type('html').send(`
+      <html>
+        <head><title>Backend</title></head>
+        <body style="font-family: sans-serif; padding: 24px;">
+          <h1>Backend server is running</h1>
+          <p style="color: red;">Error connecting to database</p>
+        </body>
+      </html>
+    `)
+  }
 })
 
 app.post('/api/message', (req, res) => {
@@ -49,8 +66,16 @@ app.post('/api/message', (req, res) => {
   }
 
   const timeValue = typeof sentAt === 'string' ? sentAt : ''
-  lastMessage = { message, sentAt: timeValue }
-  return res.json({ received: message, sentAt: timeValue })
+  
+  supabase
+    .from('messages')
+    .insert([{ message, sent_at: timeValue }])
+    .then(() => {
+      res.json({ received: message, sentAt: timeValue })
+    })
+    .catch(() => {
+      res.status(500).json({ error: 'Failed to save message' })
+    })
 })
 
 // Startar servern på den port som anges i miljövariablerna eller 5000 som default

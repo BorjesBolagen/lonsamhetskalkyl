@@ -51,7 +51,7 @@ export default function Dashboard() {
         </label>
         <input
           id="message"
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400"
           type="text"
           placeholder="Write a message"
           value={message}
