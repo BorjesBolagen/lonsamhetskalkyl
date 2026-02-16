@@ -1,0 +1,411 @@
+================================================================================
+LÖNSAMHETSKALKYL - PROJEKTÖVERSIKT
+================================================================================
+
+PROJEKTSYFTE
+================================================================================
+Ett system för trafikledare att planera och optimera fraktfördelning på lastbilar.
+Systemet kommer att använda historisk data för att kalkylera priser mellan städer
+och tillåta trafikledare att testa olika frakt-kombinationer för att maximera
+lönsamhet.
+
+STATUS: ALPHA - Grundstruktur upprättad, test-funktionalitet implementerad
+
+
+SYSTEMARKITEKTUR
+================================================================================
+
+Systemet är uppdelat i två huvuddelar:
+
+1. FRONTEND (Next.js, React)
+   - URL: https://lonsamhetskalkyl.vercel.app
+   - Användarfasade gränssnitt
+   - Miljö: Node.js + React 19
+   - Port (lokal): 3000
+
+2. BACKEND (Express, Node.js)
+   - URL: https://lonsamhetskalkyl-backend.vercel.app
+   - REST API för data och beräkningar
+   - Databaskommunikation via Supabase
+   - Port (lokal): 5000
+
+3. DATABAS (Supabase)
+   - PostgreSQL managed service
+   - Lagring av historisk frakt-data
+   - Service Role Key för backend-åtkomst
+
+
+================================================================================
+FRONTEND STRUKTUR (Next.js 16.1.6)
+================================================================================
+
+MAPPAR OCH FILER:
+
+app/
+├── layout.tsx          - Root layout, metadata, global styles
+├── page.tsx            - /  (root) - Visar LoginPage
+├── readme.md           - Dokumentation för app-mappen
+│
+├── dashboard/
+│   ├── page.tsx        - /dashboard - Interaktivt testverktyg
+│   └── readme.md       - Beskrivning av dashboard
+│
+└── login/
+    ├── page.tsx        - /login - Login-sida (använder LoginPage)
+    └── readme.md       - Beskrivning av login
+
+
+components/
+├── LoginPage.tsx       - Återanvändbar login-komponent
+├── DataTable.tsx       - [Tom placeholder för framtida bruk]
+├── Footer.tsx          - [Tom placeholder för framtida bruk]
+└── Header.tsx          - [Tom placeholder för framtida bruk]
+ 
+
+
+lib/
+├── api.ts              - [Tom, framtida API-hjälpfunktioner]
+└── readme.md           - Beskrivning av lib-mappen
+
+
+styles/
+└── globals.css         - Global styling (Tailwind CSS v4)
+
+
+public/
+└── (Statiska filer - bilder, ikoner, etc)
+
+
+---- VIKTIGA FILER FÖRKLARADE ----
+
+app/layout.tsx
+  - Definierar metadata: title="Frontend", description="Frontend"
+  - Importerar globals.css från ../styles/globals.css
+  - Sätter upp Geist-fonter
+  - RootLayout wrapprar alla sidor med html/body
+
+app/page.tsx
+  - Root-route (/) - Visar login automatiskt
+  - Importerar och renderar LoginPage-komponenten
+  
+app/dashboard/page.tsx [MAIN TEST PAGE]
+  - /dashboard sida - Interaktivt testverktyg
+  - "use client" - Client-side component
+  - Features:
+    * Text input för meddelande
+    * Knapp som skickar POST /api/message till backend
+    * Visar backend-svar med tidsstämpel
+    * Knappen är disabled medan requesten pågår
+    * Hämtar API_URL från process.env.NEXT_PUBLIC_API_URL
+  
+components/LoginPage.tsx [SHARED COMPONENT]
+  - Enkel login-sida: titel + knapp
+  - Knappen navigerar till /dashboard
+  - Återanvänds av både / och /login
+
+styles/globals.css
+  - Tailwind CSS import
+  - CSS variabler för tema (light/dark mode)
+  - Bastal styling
+
+
+---- ENVIRONMENT VARIABLES (FRONTEND) ----
+
+.env.local (för lokal utveckling)
+  NEXT_PUBLIC_API_URL=http://localhost:5000
+
+.env.production (för Vercel deployment)
+  NEXT_PUBLIC_API_URL=https://lonsamhetskalkyl-backend.vercel.app
+
+OBS: NEXT_PUBLIC_* är synliga i browser, så API-URL är säker att exponera.
+
+
+================================================================================
+BACKEND STRUKTUR (Express 5.2.1)
+================================================================================
+
+MAPPAR OCH FILER:
+
+.env
+  SUPABASE_URL=<din_supabase_project_url>
+  SUPABASE_SERVICE_ROLE_KEY=<din_service_role_key>
+  (Optional: PORT, FRONTEND_URL)
+
+server.js [MAIN FILE]
+  - Express-app setup
+  - CORS-konfiguration
+  - API-routes definition
+  - Supabase-integration
+
+lib/
+├── supabaseClient.js   - Supabase-klient setup
+└── (Framtida: utils, validators, etc)
+
+routes/
+├── auth.js             - Autentisering (tom struktur, framtida bruk)
+├── calc.js             - Lönsamhetsberäkningar (tom struktur, framtida bruk)
+└── (Framtida: shipments.js, pricing.js, etc)
+
+README.md              - Körinstruktioner
+
+
+---- VIKTIGA FILER FÖRKLARADE ----
+
+server.js [CORE]
+  
+  1. SETUP
+     - Importerar express, cors, dotenv, supabase-klient
+     - Lägger middleware: express.json(), cors()
+  
+  2. CORS-KONFIGURATION
+     - origin: process.env.FRONTEND_URL (säker från brute-force)
+     - methods: GET, POST, PUT, DELETE, OPTIONS
+  
+  3. ROUTES
+     app.use('/api/auth', authRoutes)    - Framtida: login/register
+     app.use('/api/calc', calcRoutes)    - Framtida: priskalkylering
+  
+  4. FAVICON HANDLER
+     GET /favicon.ico → 204 (undviker 404-errors)
+  
+  5. HEALTH CHECK (Framtida: ta bort eller ersätt)
+     GET / → HTML-sida som visar senaste meddelande från DB
+     [DETTA KAN ÄNDRAS NÄR VI GÖR RENT REST API]
+  
+  6. MESSAGE ENDPOINT
+     POST /api/message
+     - Input: { message: string, sentAt: string }
+     - Output: { received: string, sentAt: string }
+     - Sparar i Supabase-tabell 'messages'
+     - Async operatio med .then()/.catch()
+  
+  7. SERVER START
+     Lyssnar på PORT 5000 (lokal) eller process.env.PORT (prod)
+
+
+lib/supabaseClient.js
+  - Importerar @supabase/supabase-js
+  - Skapar client med SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
+  - Exporteras för använding i server.js
+
+
+routes/auth.js, routes/calc.js
+  - Tom struktur för framtida endpoints
+  - Express routers som kan expanderas senare
+
+
+---- ENVIRONMENT VARIABLES (BACKEND) ----
+
+.env (Lokal + Vercel)
+  SUPABASE_URL=https://xxxxx.supabase.co
+  SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+  FRONTEND_URL=https://lonsamhetskalkyl.vercel.app (eller http://localhost:3000)
+  PORT=5000 (optional, default 5000)
+
+
+================================================================================
+SUPABASE-INTEGRATION
+================================================================================
+
+DATABASKONFIGURATION
+
+Tabell: 'messages' (för test-funktionalitet)
+Kolumner:
+  - id (BIGINT, PRIMARY KEY, AUTO INCREMENT)
+  - message (TEXT, NOT NULL)
+  - sent_at (TEXT, valfri)
+  - created_at (TIMESTAMP, DEFAULT NOW())
+
+Denna tabell används för att lagra test-meddelanden från frontend.
+Senare kommer flera tabeller för frakt-data, priser, historik, etc.
+
+
+HEMLIG HANTERING:
+  - Service Role Key sparas INTE i repo (.gitignore)
+  - Sätts upp i Vercel → Environment Variables
+  - Backend använder denna för att skriv/läs från DB
+
+
+================================================================================
+DATAFLÖDE - VAD HÄNDER NÄR DU SKICKAR ETT MEDDELANDE
+================================================================================
+
+1. FRONTEND (Dashboard)
+   - Användare skriver text i input-fält
+   - Klickar "Send to backend"
+   - JavaScript hämtar aktuel tidsstämpel (HH:MM:SS)
+   - Gör POST-request till ${NEXT_PUBLIC_API_URL}/api/message
+
+2. BACKEND (Express)
+   - Mottar POST /api/message { message, sentAt }
+   - Validerar att message är string
+   - Koallar supabase.from('messages').insert([{ message, sent_at: sentAt }])
+   - Returnerar JSON: { received: message, sentAt: sentAt }
+
+3. SUPABASE (Database)
+   - Tar emot INSERT-request från backend
+   - Sparar ny rad i 'messages'-tabell
+   - Auto-sätter created_at timestamp
+   - Bekräftar INSERT genomfördes
+
+4. FRONTEND (Dashboard)
+   - Mottar JSON-response från backend
+   - Visar: "Backend replied: [meddelande] ([tid])"
+   - Knappen blir klickbar igen
+
+
+================================================================================
+VERSIONSKONTROLL & DEPLOYMENT
+================================================================================
+
+GIT STRUKTUR:
+- Backend och Frontend ligger i samma Git-repo
+- Folder: /backend, /frontend
+
+DEPLOYMENT:
+- Frontend: Vercel (kopplat till /frontend-mappen)
+  * Automatisk deploy på git push
+  * Bygger med 'npm run build'
+  * Kör på https://lonsamhetskalkyl.vercel.app
+  
+- Backend: Vercel (kopplat till /backend-mappen)
+  * Automatisk deploy på git push
+  * Node.js environment
+  * Kör på https://lonsamhetskalkyl-backend.vercel.app
+
+ENVIRONMENT VARIABLES I VERCEL:
+- Frontend: NEXT_PUBLIC_API_URL
+- Backend: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, FRONTEND_URL
+
+
+================================================================================
+VÄGLEDNING FÖR FRAMTIDA DEVELOPMENT
+================================================================================
+
+NÄSTA STEG (BACKLOG):
+
+1. REFACTOR BACKEND → PURE REST API
+   - Ta bort GET / HTML-rendering
+   - Gör alla responses till JSON
+   - Endpoints för framtida frakt-logik
+
+2. DASHBOARD IMPROVEMENTS
+   - Visa lista över alla meddelanden (inte bara senast)
+   - Auto-refresh meddelandelista (polling eller WebSockets)
+   - Filtreringsmöjligheter
+
+3. AUTHENTISERING
+   - Implementera /api/auth/login
+   - Implementera /api/auth/register
+   - JWT-tokens eller session-baserad
+   - Protect dashboard-sidan
+
+4. PRISKALKYL-LOGIK
+   - /api/prices?from=X&to=Y endpoint
+   - Hämta historisk data från DB
+   - Beräkna pris baserat på avstånd, vikt, frakt-typ
+   - Testa olika frakt-kombinationer
+
+5. DATABASSCHEMAT EXPANDERA
+   - shipments table (frakter)
+   - routes table (sträckor, avstånd)
+   - pricing_history table (historiska priser)
+   - vehicles table (lastbilar, kapacitet)
+   - users table (trafikledare)
+
+6. FRONTEND EXPANSION
+   - Interaktivt frakt-test UI
+   - Visualization av rutt-optimering
+   - Reports/export av data
+   - Profil-sida för trafikledare
+
+
+================================================================================
+VANLIGA KOMMANDON
+================================================================================
+
+LOKAL DEVELOPMENT:
+
+Backend:
+  cd backend
+  npm install
+  npm run dev      # Startar på http://localhost:5000
+
+Frontend:
+  cd frontend
+  npm install
+  npm run dev      # Startar på http://localhost:3000
+
+GIT:
+  git add .
+  git commit -m "beskrivning"
+  git push         # Triggar auto-deploy på Vercel
+
+
+================================================================================
+FILER UPPDATERADE IDAG (2026-02-16)
+================================================================================
+
+Frontend:
+  - app/page.tsx                  (Login redirect → Direct render)
+  - app/dashboard/page.tsx        (Input styling, Supabase-integration)
+  - app/login/page.tsx            (Component reuse)
+  - components/LoginPage.tsx      (Shared component)
+  - components/               (Removed: DataTable, Footer, Header)
+  - styles/globals.css            (Import path fixed)
+  - README.md                      (Updated structure + env vars)
+
+Backend:
+  - server.js                      (Supabase integration, favicon handler)
+  - lib/supabaseClient.js         (Verified)
+  - package.json                  (type: "module")
+  - README.md                      (Created with instructions)
+
+Config:
+  - .env.production               (API URL configured)
+  - .env                          (Supabase credentials)
+
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Problem: "Can't resolve './globals.css'"
+Lösning: Import-vägen måste vara ../styles/globals.css från app/
+
+
+Problem: CORS error när frontend anropar backend
+Lösning: Sätt FRONTEND_URL i backend .env och i Vercel environment vars
+
+
+Problem: Supabase-messages sparas inte
+Lösning: 
+  1. Kontrollera SUPABASE_SERVICE_ROLE_KEY är satt i Vercel
+  2. Verifiera messages-tabell finns i Supabase
+  3. Kolla Vercel-logs för databas-errors
+
+
+Problem: Frontend sidan visar inte uppdaterad data
+Lösning: För närvarande måste du ladda om sidan. Framtida: implementera polling/WebSockets.
+
+
+================================================================================
+KONTAKTPERSONER & FRÅGOR
+================================================================================
+
+För frågor om:
+- Struktur: Se denna fil
+- Frontend: Kolla frontend/README.md
+- Backend: Kolla backend/README.md
+- Deployment: Vercel dashboard
+
+
+================================================================================
+VERSION HISTORY
+================================================================================
+
+2026-02-16 - Initial setup
+  - Frontend och backend strukturerat
+  - Supabase-integration implementerad
+  - Test-funktionalitet (message send/receive) working
+  - Deployed till Vercel
