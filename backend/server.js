@@ -20,6 +20,11 @@ const corsOptions = {
 }
 app.use(cors(corsOptions))
 
+// Ignorera favicon-requests
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).send()
+})
+
 // Koppla routes
 app.use('/api/auth', authRoutes)
 app.use('/api/calc', calcRoutes)
