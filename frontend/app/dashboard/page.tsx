@@ -1,0 +1,1 @@
+// Sidan där lönsamhet visas

@@ -1,0 +1,1 @@
+App directory for Next.js application. Contains the main layout and hompage of the application.

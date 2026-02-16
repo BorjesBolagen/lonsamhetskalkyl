@@ -1,0 +1,1 @@
+Here is the global styles for the application.

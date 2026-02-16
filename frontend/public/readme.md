@@ -1,0 +1,1 @@
+Statiska filer för frontend, bilder, ikoner, logotyper etc.

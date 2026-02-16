@@ -1,0 +1,1 @@
+Här finns alla funktioner för att kommunicera med backend.
