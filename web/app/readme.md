@@ -1,0 +1,1 @@
+Next.js route directory. Contains the root route, login, dashboard, and the shared layout.
