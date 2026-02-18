@@ -1,10 +1,10 @@
 {
-  "name": "backend",
+  "name": "ml-backend",
   "version": "1.0.0",
   "description": "",
   "main": "server.js",
   "scripts": {
-    "dev": "nodemon server.js",
+    "dev": "node server.js",
     "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -12,13 +12,5 @@
   "author": "",
   "license": "ISC",
   "type": "module",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.95.3",
-    "cors": "^2.8.5",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.11"
-  }
+  "dependencies": {}
 }

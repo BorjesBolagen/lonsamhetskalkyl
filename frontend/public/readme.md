@@ -1,1 +1,0 @@
-Static files for the frontend (images, icons, logos).

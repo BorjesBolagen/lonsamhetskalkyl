@@ -1,1 +1,0 @@
-Shared frontend utilities. API helpers can live here if needed.

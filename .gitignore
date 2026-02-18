@@ -1,19 +1,19 @@
 # Node modules
 node_modules/
-frontend/node_modules/
-backend/node_modules/
+web/node_modules/
+ml-backend/node_modules/
 
 # Loggfiler
 *.log
 
 # Miljövariabler
 .env
-frontend/.env
-backend/.env
+web/.env
+ml-backend/.env
 
 # Next.js build
-frontend/.next
-frontend/out
+web/.next
+web/out
 
 # Vercel och OS filer
 .vercel/
