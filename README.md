@@ -2,6 +2,40 @@
 
 Kandidatprojekt vid Linköpings Universitet åt Börjes Koncernen att ta fram ett program som ska räkna på lönsamhet.
 
+## Snabbstart för utveckling (webbappen)
+
+Detta projekt använder Next.js och körs via Node.js + npm.
+
+### Vad är npm?
+
+npm är paketverktyget som följer med Node.js. Det används för att installera beroenden och köra projektets kommandon. Om du inte redan har npm, installera Node.js (LTS) från https://nodejs.org/ så får du npm automatiskt.
+
+### Installera och starta lokalt
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Öppna http://localhost:3000.
+
+### Vanliga kommandon
+
+- `npm run dev` Startar utvecklingsservern.
+- `npm run build` Bygger produktion (Vercel kör detta automatiskt).
+- `npm run start` Kör den byggda produktionen lokalt (kräver `npm run build`).
+
+### Om dev-servern kraschar (cacheproblem)
+
+Ibland kan `.next`-cachen bli korrupt (t.ex. "Failed to open database" / "invalid digit found in string"). Då kan du ta bort cachen och starta om.
+
+```bash
+cd web
+rm -rf .next
+npm run dev
+```
+
 ## Fullstack i Next.js - förklaring och arkitektur
 
 Denna sektion beskriver hur ett fullstack-upplägg i Next.js fungerar, hur Supabase samt server/client-side delas upp och varför filstrukturen ser ut som den gör.

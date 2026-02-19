@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   try {
     const supabase = getSupabaseServerClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("messages")
       .insert([{ message, sent_at: timeValue }]);
 
