@@ -13,8 +13,13 @@ Open http://localhost:3000.
 
 ## Environment variables
 
-- `SUPABASE_URL` - Supabase project URL (server-side only)
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (server-side only)
+Frontend & Backend (public):
+
+- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
+
+Backend only (secret):
+
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (server-side only, never expose to frontend)
 
 ## Structure
 

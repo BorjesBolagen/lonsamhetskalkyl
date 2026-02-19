@@ -75,8 +75,13 @@ Exakta filer där Supabase används:
 
 Viktigt:
 
-- `SUPABASE_SERVICE_ROLE_KEY` får aldrig exponeras till klienten.
-- Klientkod får bara använda `NEXT_PUBLIC_` env om det är harmlöst.
+Frontend & Backend (public):
+
+- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
+
+Backend only (secret):
+
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (server-side endast, aldrig exponera till frontend)
 
 ### Hur allt pratar inom Next.js
 
