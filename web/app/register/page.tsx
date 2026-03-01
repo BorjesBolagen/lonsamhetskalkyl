@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import Footer from "../../components/Footer";
+import { useRouter } from "next/navigation";
 import {
   pageContainerNoNav,
   centeredContentContainer,
@@ -11,10 +11,10 @@ import {
   link,
 } from "@/styles/constants";
 
-export default function Login() {
+export default function Register() {
   const router = useRouter();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     router.push("/home");
   };
@@ -22,8 +22,8 @@ export default function Login() {
   return (
     <div style={pageContainerNoNav}>
       <div style={centeredContentContainer}>
-        <h1>Login</h1>
-        <form onSubmit={handleLogin} style={form}>
+        <h1>Registrera</h1>
+        <form onSubmit={handleRegister} style={form}>
           <div>
             <input type="text" placeholder="Användarnamn" style={input} />
           </div>
@@ -31,11 +31,11 @@ export default function Login() {
             <input type="password" placeholder="Lösenord" style={input} />
           </div>
           <button type="submit" style={button}>
-            Logga in
+            Registrera
           </button>
         </form>
-        <Link href="/register" style={link}>
-          Registrera
+        <Link href="/login" style={link}>
+          Tillbaka
         </Link>
       </div>
       <Footer />

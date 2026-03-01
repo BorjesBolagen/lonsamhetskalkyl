@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Frontend",
-  description: "Frontend",
+  title: "Lönsamhetskalkyl",
+  description: "Trafikledningssystem för lönsamhetsanalys av leveranser",
 };
 
 export default function RootLayout({
@@ -28,6 +28,7 @@ export default function RootLayout({
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        style={{ margin: 0, padding: 0 }}
       >
         {children}
       </body>

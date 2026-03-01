@@ -2,15 +2,16 @@
 
 Kandidatprojekt vid Linköpings Universitet åt Börjes Koncernen att ta fram ett program som ska räkna på lönsamhet.
 
-## Snabbstart för utveckling (webbappen)
+## Projektstruktur
 
-Detta projekt använder Next.js och körs via Node.js + npm.
+Projektet är indelat i två huvuddelar:
 
-### Vad är npm?
+- **[web/](web/)** - Next.js fullstack webbapplikation för trafikledning och lönsamhetsanalys
+- **[ml-backend/](ml-backend/)** - Node.js Express server (framtida ML/NN-integrationspunkt)
 
-npm är paketverktyget som följer med Node.js. Det används för att installera beroenden och köra projektets kommandon. Om du inte redan har npm, installera Node.js (LTS) från https://nodejs.org/ så får du npm automatiskt.
+## Snabbstart
 
-### Installera och starta lokalt
+### Webbappen (Next.js)
 
 ```bash
 cd web
@@ -20,15 +21,15 @@ npm run dev
 
 Öppna http://localhost:3000.
 
-### Vanliga kommandon
+Se [web/README.md](web/README.md) för detaljerad dokumentation av webbappen, funktioner, och API.
 
-- `npm run dev` Startar utvecklingsservern.
-- `npm run build` Bygger produktion (Vercel kör detta automatiskt).
-- `npm run start` Kör den byggda produktionen lokalt (kräver `npm run build`).
+### Vanliga kommandon (web)
+
+- `npm run dev` - Startar utvecklingsservern, programmera och se ändringar live
+- `npm run build` - Bygger för produktion, kompilerar koden.
+- `npm run start` - Kör den byggda produktionen lokalt
 
 ### Om dev-servern kraschar (cacheproblem)
-
-Ibland kan `.next`-cachen bli korrupt (t.ex. "Failed to open database" / "invalid digit found in string"). Då kan du ta bort cachen och starta om.
 
 ```bash
 cd web
@@ -36,103 +37,93 @@ rm -rf .next
 npm run dev
 ```
 
-## Fullstack i Next.js - förklaring och arkitektur
+## Arkitektur & Teknologi
 
-Denna sektion beskriver hur ett fullstack-upplägg i Next.js fungerar, hur Supabase samt server/client-side delas upp och varför filstrukturen ser ut som den gör.
+### Fullstack i Next.js
 
-### Vad menas med fullstack i Next.js
+Denna lösning använder ett fullstack-upplägg i Next.js:
 
-Next.js frameworket kan innehålla:
+- **Frontend** - React TSX-komponenter som körs i webbläsaren
+- **Backend** - API-routes under `app/api/` som körs server-side
+- **Database** - Supabase för datalagringing och autentisering
 
-- Frontend (UI som körs i webbläsaren)
-- Backend (server-side logik, API-routes, och data-hämtning)
+Tack vare detta kan vi utveckla både frontend och backend i ett, med separation av server-side och client-side logik.
 
-Det betyder att ni kan lägga affärslogik och databasanrop i Next.js utan en separat backend-server. Allt deployas som en app, men det finns fortfarande en tydlig gräns mellan server-side och client-side kod.
+### Mappstruktur
 
-### Varför filstrukturen ser ut som den gör
+```
+lonsamhetskalkyl/
+├── web/                          # Next.js webbapplikation
+│   ├── app/                       # Routes, sidor och API
+│   ├── components/                # Återanvänndbara UI-komponenter
+│   ├── lib/                       # Shared utilities, API-klienter
+│   ├── styles/                    # Global styling
+│   └── README.md                  # Webbapp-specifik dokumentation
+├── ml-backend/                    # Framtida ML/NN-service (Node.js)
+└── README.md                      # Denna fil
+```
 
-Projektet är uppdelat för att ge tydlig separation mellan UI, serverlogik och framtida ML:
+### Teknologistac
 
-- [web/app](web/app) innehåller routes och sidor i Next.js (App Router).
-- [web/app/api](web/app/api) innehåller API-routes som körs server-side.
-- [web/components](web/components) innehåller återanvändbara UI-komponenter.
-- [web/lib](web/lib) innehåller delad logik, API-klienter och server-only helpers.
-- [web/styles](web/styles) innehåller globala styles (Tailwind CSS).
-- [ml-backend](ml-backend) är en placeholder för framtida ML/NN-service (se längre ned).
+- **Frontend & Backend**: Next.js med TypeScript (TSX)
+- **Styling**: Tailwind CSS
+- **State Management**: React hooks
+- **Database**: Supabase
+- **API**: Next.js Route Handlers
+- **Framtida ML**: Python
 
-Denna uppdelning gör det enkelt att hålla enkel beräkningslogik nära UI:t, samtidigt som tunga ML-beräkningar kan flyttas ut utan att ändra frontend-kontraktet.
+## Hur delar pratar tillsammans
 
-### Kommunikation med Supabase
+### Server-side vs Client-side
 
-Supabase ska alltid anropas server-side om ni använder hemliga nycklar.
+I Next.js app router:
 
-- I Next.js fullstack: Supabase-klienten ligger i server-side kod (t.ex. API-routes eller server components)
+- **Server components** (default) - Körs på servern, kan läsa hemliga env och prata med DB
+- **Client components** (`"use client"`) - Körs i webbläsaren, kan använda state och event handlers
+- **API routes** (`app/api/`) - Körs alltid server-side
 
-Exakta filer där Supabase används:
+Tumregel:
 
-- [web/lib/supabaseServer.ts](web/lib/supabaseServer.ts) skapar en server-only Supabase-klient.
-- [web/app/api/message/route.ts](web/app/api/message/route.ts) anropar Supabase och sparar data.
+- Om du använder `window`, `document`, eller event handlers (onClick) → **client-side**
+- Om du läser hemliga env, pratar med DB, eller gör autentisering → **server-side**
 
-Viktigt:
+### Dataflöde exempel
 
-Frontend & Backend (public):
+1. Frontend (client component) skickar formdata eller begär data
+2. API-route (server-side) validerar och pratar med Supabase
+3. Resultat returneras som JSON till klienten
+4. Frontend uppdaterar UI
 
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
 
-Backend only (secret):
+## Miljövaribler
 
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (server-side endast, aldrig exponera till frontend)
+### Frontend (public)
 
-### Hur allt pratar inom Next.js
+Dessa är OK för att exponeras till frontend:
 
-Vanligt dataflöde i fullstack:
+- `NEXT_PUBLIC_SUPABASE_URL` - Supabase projekt-URL
 
-1. Frontend (client component) begär data
-2. Next.js server-side kod (server component eller API-route) gör beräkning eller DB-anrop
-3. Resultat skickas tillbaka till klienten som JSON eller renderad HTML
+### Backend (hemlig)
 
-Du kan välja att:
+Dessa får **ALDRIG** exponeras till frontend:
 
-- Hämta data direkt i en server component (snabbt, inget extra API-anrop i klienten)
-- Skapa en `app/api/...` route som klienten anropar med `fetch`
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role nyckel (server-side only)
 
-Exakta filer för dagens flöde:
+## Framtida ML/NN-backend
 
-- [web/app/dashboard/page.tsx](web/app/dashboard/page.tsx) skickar meddelanden.
-- [web/lib/api.ts](web/lib/api.ts) gör `fetch` mot `/api/message`.
-- [web/app/api/message/route.ts](web/app/api/message/route.ts) tar emot och sparar via Supabase.
+För tunga beräkningar är en separat Python-service rekommenderat:
 
-### Vad blir all koden skriven i
+**Copilots förslag:**
 
-- Frontend och backend i Next.js skrivs i TypeScript.
-- UI-styling görs med Tailwind CSS (globalt via [web/styles/globals.css](web/styles/globals.css)).
-- Den eventuellt framtida ML/NN-backenden planeras i Python.
+- **Framework**: FastAPI + Uvicorn (snabbt, tydliga typer)
+- **Deployment**: Egen URL som Next.js anropar server-side
+- **Långtidkörningar**: Använd job queue (Redis + Celery) för async jobb
 
-### Hur vet jag vad som är server-side och client-side
+## Supabase Integration
 
-I Next.js (app router):
+Supabase hanteras **alltid server-side** via:
 
-- Server components är default. De kör på servern.
-- Client components markeras med `"use client"` högst upp i filen. De kör i webbläsaren.
-- API-routes ligger under `app/api/` och kör alltid server-side.
+- [web/lib/supabaseServer.ts](web/lib/supabaseServer.ts) - Server-only Supabase-klient
+- [web/app/api/message/route.ts](web/app/api/message/route.ts) - Exempel på API-route som sparar till DB
 
-Snabb tumregel:
 
-- Om du använder `window`, `document`, eller event handlers (onClick) är det client-side.
-- Om du läser hemliga env eller pratar med DB är det server-side.
-
-### Konkreta exempel: server-side vs client-side
-
-- [web/app/dashboard/page.tsx](web/app/dashboard/page.tsx) är client-side eftersom filen har `"use client"` och använder state.
-- [web/app/api/message/route.ts](web/app/api/message/route.ts) är server-side eftersom det är en API-route och läser env/Supabase.
-- [web/lib/supabaseServer.ts](web/lib/supabaseServer.ts) är server-only och kan aldrig importeras i klientkod.
-
-### Framtida ML/NN-backend i Python (förslag)
-
-För tunga beräkningar är en separat Python-service bäst. Rekommenderat upplägg:
-
-- FastAPI + Uvicorn (snabbt, tydliga typer, enkel deployment).
-- En separat deployment (egen URL) som Next.js anropar server-side.
-- Om beräkningar tar lång tid: använd job queue (t.ex. Redis + Celery) och returnera `jobId`.
-
-Det gör att Next.js kan fortsätta vara snabb i UI:t, medan ML-tjänsten kan skala på egna resurser (CPU/GPU) utan att påverka webbappen.
