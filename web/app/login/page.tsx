@@ -2,6 +2,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Footer from "../../components/Footer";
+import { useState } from "react";
+import { getSupabaseServerClient } from "@/lib/supabaseServer";
+//import { useFormState } from "react-dom";
 import {
   pageContainerNoNav,
   centeredContentContainer,
@@ -13,10 +16,14 @@ import {
 
 export default function Login() {
   const router = useRouter();
+  const [name, setName] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    router.push("/home");
+    if (name == "admin") {
+      router.push("/home");
+    }
+    //router.push("/home");
   };
 
   return (
@@ -25,7 +32,7 @@ export default function Login() {
         <h1>Login</h1>
         <form onSubmit={handleLogin} style={form}>
           <div>
-            <input type="text" placeholder="Användarnamn" style={input} />
+            <input value = {name} onChange={e => setName(e.target.value)} type="text" placeholder="Användarnamn" style={input} />
           </div>
           <div>
             <input type="password" placeholder="Lösenord" style={input} />

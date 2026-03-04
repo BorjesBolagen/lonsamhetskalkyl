@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 type Database = {
   public: {
     Tables: {
+      
       messages: {
         Row: {
           id: number;
@@ -21,6 +22,24 @@ type Database = {
         };
         Relationships: [];
       };
+
+      test: {
+        Row: {
+          id: string; // uuid är oftast string i JS
+          name: string;
+          password: string;
+        };
+        Insert: {
+          name: string;
+          password: string;
+        };
+        Update: {
+          name?: string;
+          password?: string;
+        };
+        Relationships: [];
+      };
+
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
