@@ -11,7 +11,6 @@ Webbappen erbjuder följande sidor för trafikledare och administratörer:
 - **Login** - Autentisering för trafikledare
 - **Registrering** - Nya användare kan registrera sig
 - **Översikt** - Dashboard med statusöversikt över nuvarande leveranser
-- **Kalkylator** - Beräkna lönsamhet för enskilda leveranser mellan två platser
 - **Simulator** - Planera och simulera flera leveranser samtidigt
 - **Inställningar** - Användarinställningar och områdeshantering
 - **Konto** - Användarkontouppgifter och profilinformation
@@ -46,6 +45,7 @@ app/
 ├── settings/               # Inställningar
 ├── admin/                  # Admin-panel
 └── api/
+  ├── login/              # API-endpoint för login/healthcheck
     └── message/            # API-endpoint för meddelanden
 
 components/
