@@ -41,7 +41,6 @@ app/
 ├── login/                  # Inloggningssida
 ├── register/               # Registreringssida
 ├── home/                   # Översikt/dashboard
-├── calculator/             # Lönsamhetskalkylator
 ├── simulator/              # Simuleringsverktyg
 ├── account/                # Användarhantering
 ├── settings/               # Inställningar

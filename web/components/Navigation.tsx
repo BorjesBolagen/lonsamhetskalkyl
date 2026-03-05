@@ -46,12 +46,6 @@ export default function Navigation({ currentPage }: NavigationProps) {
             Översikt
           </Link>
           <Link
-            href="/calculator"
-            style={getLinkStyle(currentPage === "calculator")}
-          >
-            Kalkylator
-          </Link>
-          <Link
             href="/simulator"
             style={getLinkStyle(currentPage === "simulator")}
           >
