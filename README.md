@@ -94,8 +94,9 @@ Tumregel:
 3. Resultat returneras som JSON till klienten
 4. Frontend uppdaterar UI
 
-
 ## Miljövaribler
+
+Skapa en `.env.local`-fil i `web/`-katalogen och fyll i nycklarna. Du hittar URL nyckeln på första sidan i Supabase dashboard, kolla efter "Project URL". Service role nyckeln hittar du under "Settings" → "API Keys" → "Legacy anon, service_role API key" i Supabase.
 
 ### Frontend (public)
 
@@ -125,5 +126,3 @@ Supabase hanteras **alltid server-side** via:
 
 - [web/lib/supabaseServer.ts](web/lib/supabaseServer.ts) - Server-only Supabase-klient
 - [web/app/api/message/route.ts](web/app/api/message/route.ts) - Exempel på API-route som sparar till DB
-
-
