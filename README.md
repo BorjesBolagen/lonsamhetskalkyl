@@ -98,6 +98,8 @@ Tumregel:
 
 ## Miljövaribler
 
+Skapa en `.env.local`-fil i `web/`-katalogen och fyll i nycklarna. Du hittar URL nyckeln på första sidan i Supabase dashboard, kolla efter "Project URL". Service role nyckeln hittar du under "Settings" → "API Keys" → "Legacy anon, service_role API key" i Supabase.
+
 ### Frontend (public)
 
 Dessa är OK för att exponeras till frontend:
