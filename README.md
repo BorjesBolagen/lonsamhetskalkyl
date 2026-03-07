@@ -1,5 +1,7 @@
 # Lönsamhetskalkyl
 
+![Projekt Visir Logo](docs/projekt_visir_logo.png)
+
 Kandidatprojekt vid Linköpings Universitet åt Börjes Koncernen att ta fram ett program som ska räkna på lönsamhet.
 
 ## Projektstruktur
@@ -94,7 +96,6 @@ Tumregel:
 3. Resultat returneras som JSON till klienten
 4. Frontend uppdaterar UI
 
-
 ## Miljövaribler
 
 ### Frontend (public)
@@ -125,5 +126,3 @@ Supabase hanteras **alltid server-side** via:
 
 - [web/lib/supabaseServer.ts](web/lib/supabaseServer.ts) - Server-only Supabase-klient
 - [web/app/api/message/route.ts](web/app/api/message/route.ts) - Exempel på API-route som sparar till DB
-
-
