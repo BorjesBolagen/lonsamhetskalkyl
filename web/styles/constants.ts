@@ -25,7 +25,7 @@ export const pageContainer = {
   paddingTop: "80px",
 };
 
-// Page layout - huvudcontainer för sidor utan Navigation (login, register)
+// Page layout - huvudcontainer för sidor utan Navigation (login)
 export const pageContainerNoNav = {
   display: "flex",
   flexDirection: "column" as const,
@@ -45,7 +45,7 @@ export const contentWrapper = {
   flex: 1,
 };
 
-// Centered content container - för login/register forms
+// Centered content container - för login forms
 export const centeredContentContainer = {
   flex: 1,
   display: "flex",

@@ -9,7 +9,6 @@ Next.js fullstack webbapplikation för ett trafikledningssystem med lönsamhetsk
 Webbappen erbjuder följande sidor för trafikledare och administratörer:
 
 - **Login** - Autentisering för trafikledare
-- **Registrering** - Nya användare kan registrera sig
 - **Översikt** - Dashboard med statusöversikt över nuvarande leveranser
 - **Simulator** - Planera och simulera flera leveranser samtidigt
 - **Inställningar** - Användarinställningar och områdeshantering
@@ -38,7 +37,6 @@ app/
 ├── layout.tsx              # Root layout för alla sidor
 ├── page.tsx                # Root page (/)
 ├── login/                  # Inloggningssida
-├── register/               # Registreringssida
 ├── home/                   # Översikt/dashboard
 ├── simulator/              # Simuleringsverktyg
 ├── account/                # Användarhantering
@@ -49,7 +47,7 @@ app/
     └── message/            # API-endpoint för meddelanden
 
 components/
-├── Navigation.tsx          # Sticky navigationsbalk (alla sidor utom login/register)
+├── Navigation.tsx          # Sticky navigationsbalk (alla sidor utom login)
 ├── Footer.tsx              # Sidfot (alla sidor)
 
 lib/
@@ -100,7 +98,6 @@ Hälsokontroll för API-endpointen.
   "status": "ok"
 }
 ```
-
 
 ### Miljövaribler
 

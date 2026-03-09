@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
@@ -11,12 +10,11 @@ import {
   form,
   input,
   button,
-  link,
 } from "@/styles/constants";
 
 export default function Login() {
   const router = useRouter();
-  const [name, setName] = useState('');
+  const [name, setName] = useState("");
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +30,13 @@ export default function Login() {
         <h1>Login</h1>
         <form onSubmit={handleLogin} style={form}>
           <div>
-            <input value = {name} onChange={e => setName(e.target.value)} type="text" placeholder="Användarnamn" style={input} />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              type="text"
+              placeholder="Användarnamn"
+              style={input}
+            />
           </div>
           <div>
             <input type="password" placeholder="Lösenord" style={input} />
@@ -41,9 +45,6 @@ export default function Login() {
             Logga in
           </button>
         </form>
-        <Link href="/register" style={link}>
-          Registrera
-        </Link>
       </div>
       <Footer />
     </div>
