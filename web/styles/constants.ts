@@ -94,6 +94,14 @@ export const textarea = {
   boxSizing: "border-box" as const,
 };
 
+// Dropdown/Select - standard select-stil
+export const select = {
+  padding: "8px",
+  border: border.standard,
+  width: "100%",
+  boxSizing: "border-box" as const,
+};
+
 // Form - wrapper för formulär
 export const form = {
   display: "flex",

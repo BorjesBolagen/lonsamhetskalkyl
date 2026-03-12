@@ -1,52 +1,6 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
-
-type Database = {
-  public: {
-    Tables: {
-      
-      messages: {
-        Row: {
-          id: number;
-          message: string;
-          sent_at: string | null;
-          created_at: string;
-        };
-        Insert: {
-          message: string;
-          sent_at?: string | null;
-        };
-        Update: {
-          message?: string;
-          sent_at?: string | null;
-        };
-        Relationships: [];
-      };
-
-      test: {
-        Row: {
-          id: string; // uuid är oftast string i JS
-          name: string;
-          password: string;
-        };
-        Insert: {
-          name: string;
-          password: string;
-        };
-        Update: {
-          name?: string;
-          password?: string;
-        };
-        Relationships: [];
-      };
-
-    };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
-};
+import { Database } from "@/lib/supabaseServerSchema";
 
 type SupabaseClientFactory = ReturnType<typeof createClient<Database>>;
 
