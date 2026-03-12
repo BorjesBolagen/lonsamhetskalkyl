@@ -25,7 +25,6 @@ type Database = {
 
       test: {
         Row: {
-          id: string; // uuid är oftast string i JS
           name: string;
           password: string;
         };
