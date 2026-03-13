@@ -23,6 +23,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      Accounts: {
+        Row: {
+          name: string
+          password: string
+        }
+        Insert: {
+          name: string
+          password: string
+        }
+        Update: {
+          name?: string
+          password?: string
+        }
+        Relationships: []
+      }
       Addon: {
         Row: {
           addon_type: number
@@ -184,21 +199,6 @@ export type Database = {
           },
         ]
       }
-      test: {
-        Row: {
-          name: string
-          password: string
-        }
-        Insert: {
-          name: string
-          password: string
-        }
-        Update: {
-          name?: string
-          password?: string
-        }
-        Relationships: []
-      }
       Truck: {
         Row: {
           capacity: number
@@ -220,6 +220,7 @@ export type Database = {
       User: {
         Row: {
           email: string
+          email_verified: boolean | null
           filters: Json | null
           id: string
           role: Database["public"]["Enums"]["User_specialization_types"] | null
@@ -227,6 +228,7 @@ export type Database = {
         }
         Insert: {
           email: string
+          email_verified?: boolean | null
           filters?: Json | null
           id?: string
           role?: Database["public"]["Enums"]["User_specialization_types"] | null
@@ -234,6 +236,7 @@ export type Database = {
         }
         Update: {
           email?: string
+          email_verified?: boolean | null
           filters?: Json | null
           id?: string
           role?: Database["public"]["Enums"]["User_specialization_types"] | null

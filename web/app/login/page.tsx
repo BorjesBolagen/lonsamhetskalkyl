@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { loginUser } from "@/lib/api";
 
 export default function Login() {
   const router = useRouter();
@@ -15,6 +16,14 @@ export default function Login() {
     setIsLoading(true);
 
     try {
+      const response = await loginUser(name, password);
+
+      if (response.success) {
+        router.push("/home");
+      } else {
+        setErrorMsg(response.message || "Inloggning misslyckades");
+      }
+      /*
       const response = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -28,8 +37,9 @@ export default function Login() {
       } else {
         setErrorMsg(result.error || "Inloggning misslyckades");
       }
+      */
     } catch (err) {
-      setErrorMsg("Kunde inte kontakta servern");
+      setErrorMsg("Kunde inte kontakta servern: " + (err as Error).message);
     } finally {
       setIsLoading(false);
     }

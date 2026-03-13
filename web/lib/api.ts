@@ -42,3 +42,18 @@ export const signupUser = async (email: string, password: string, role?: string)
 
 	return (await response.json()) as BasicResponse;
 };
+
+export const loginUser = async (email: string, password: string): Promise<BasicResponse> => {
+	const response = await fetch("/api/login", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ email, password }),
+	});
+
+	if (!response.ok) {
+		const body = await response.json()
+		throw new Error(body.message ?? "Något gick fel.");
+	}
+
+	return (await response.json()) as BasicResponse;
+};

@@ -2,9 +2,6 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { SignupPayload, validateEmail } from "@/app/api/Utils";
 
-
-
-
 /* API route for admin user signup
    Takes JSON input:
    {
