@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { Enums } from "@/lib/supabaseServerSchema";
+import { SignupPayload, validateEmail } from "@/app/api/Utils";
 
-type SignupPayload = {
-  email: string;
-  password: string;
-  role?: Enums<"User_specialization_types">;
-};
 
-function validateEmail(email: string): boolean {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
-}
+
 
 /* API route for admin user signup
    Takes JSON input:

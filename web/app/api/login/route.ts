@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { LoginPayload, validateEmail } from "@/app/api/Utils";
+
 
 export async function POST(request: Request) {
   try {
@@ -7,6 +9,8 @@ export async function POST(request: Request) {
     const { name, password } = body;
 
     const supabase = getSupabaseServerClient();
+
+    // Assert the user has authorized the email thru verification email
 
     const { data, error } = await supabase
       .from("Accounts")
