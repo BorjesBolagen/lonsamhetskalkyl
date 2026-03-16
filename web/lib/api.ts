@@ -27,33 +27,3 @@ export const sendMessage = async (message: string): Promise<MessageResponse> => 
 
 	return (await response.json()) as MessageResponse;
 };
-
-export const signupUser = async (email: string, password: string, role?: string): Promise<BasicResponse> => {
-	const response = await fetch("/api/admin/signup", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ email, password, role }),
-	});
-
-	if (!response.ok) {
-		const body = await response.json()
-		throw new Error(body.message ?? "Något gick fel.");
-	}
-
-	return (await response.json()) as BasicResponse;
-};
-
-export const loginUser = async (email: string, password: string): Promise<BasicResponse> => {
-	const response = await fetch("/api/login", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ email, password }),
-	});
-
-	if (!response.ok) {
-		const body = await response.json()
-		throw new Error(body.message ?? "Något gick fel.");
-	}
-
-	return (await response.json()) as BasicResponse;
-};

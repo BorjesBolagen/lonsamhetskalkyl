@@ -2,9 +2,10 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
-import { sendMessage, signupUser } from "@/lib/api";
+import { sendMessage } from "@/lib/api";
 import { Enums } from "@/lib/supabaseServerSchema";
 import { Constants } from "@/lib/supabaseServerSchema";
+import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import {
   pageContainer,
   contentWrapper,
@@ -55,8 +56,35 @@ export default function Admin() {
 
     setIsSigningUp(true);
     try {
-      const data = await signupUser(signupEmail, signupPassword, role);
-      setSignupResponse("Backend svarade: " + data.message);
+      const supabase = getSupabaseBrowserClient();
+
+      // Check if email is already present in supabase
+      const { data: existingUser, error: existingUserError } = await supabase
+        .from('User')
+        .select('id')
+        .eq('email', signupEmail)
+        .maybeSingle();
+
+      if (existingUser) {
+        setSignupResponse("Angivet e-mail är redan registrerad.");
+        return;
+      }
+
+      // Make signup
+      const { data, error } = await supabase.auth.signUp({
+        email: signupEmail,
+        password: signupPassword,
+      });
+
+      console.log("Signup response data:", data);
+      console.log("Signup response error:", error);
+
+      if (error) {
+        setSignupResponse("Fel vid registrering: " + error.message);
+      } else {
+        setSignupResponse("Skapade användare " + data.user?.email + " verifieringsmail skickat.");
+      }
+
     } catch (error) {
       setSignupResponse("Fel vid registrering: " + (error as Error).message);
     } finally {

@@ -1,11 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { loginUser } from "@/lib/api";
+import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
 export default function Login() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -16,28 +16,21 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await loginUser(name, password);
-
-      if (response.success) {
-        router.push("/home");
-      } else {
-        setErrorMsg(response.message || "Inloggning misslyckades");
-      }
-      /*
-      const response = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, password }),
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       });
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        router.push("/home");
+      console.log("Login response data:", data);
+      console.log("Login response error:", error);
+      console.log("Current session after login attempt:", supabase.auth.getSession());
+      
+      if (error) {
+        setErrorMsg("Inloggning misslyckades: " + error.message);
       } else {
-        setErrorMsg(result.error || "Inloggning misslyckades");
+        router.push("/home");
       }
-      */
     } catch (err) {
       setErrorMsg("Kunde inte kontakta servern: " + (err as Error).message);
     } finally {
@@ -78,8 +71,8 @@ export default function Login() {
             <input
               type="text"
               placeholder="Email"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none"
               required
             />
