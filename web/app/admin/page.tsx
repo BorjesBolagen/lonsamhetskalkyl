@@ -85,6 +85,17 @@ export default function Admin() {
         setSignupResponse("Skapade användare " + data.user?.email + " verifieringsmail skickat.");
       }
 
+      if (!data.user) {
+        setSignupResponse("Kunde inte skapa användare: " + JSON.stringify(data));
+        return;
+      }
+
+      // Add role to user in User table
+      const { error: userError } = await supabase
+        .from('User')
+        .update({ role })
+        .eq('id', data.user.id)
+
     } catch (error) {
       setSignupResponse("Fel vid registrering: " + (error as Error).message);
     } finally {
