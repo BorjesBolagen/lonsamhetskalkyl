@@ -2,7 +2,7 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
-import { sendMessage } from "@/lib/api";
+import { sendMessage, tokenCheck } from "@/lib/api";
 import { Enums } from "@/lib/supabaseServerSchema";
 import { Constants } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
@@ -32,6 +32,9 @@ export default function Admin() {
   const [signupPassword, setSignupPassword] = useState("");
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [signupResponse, setSignupResponse] = useState("");
+
+  // Used for token check
+  const [tokenResponse, setTokenResponse] = useState("");
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,9 +78,6 @@ export default function Admin() {
         email: signupEmail,
         password: signupPassword,
       });
-
-      console.log("Signup response data:", data);
-      console.log("Signup response error:", error);
 
       if (error) {
         setSignupResponse("Fel vid registrering: " + error.message);
@@ -229,6 +229,42 @@ export default function Admin() {
                 {adminResponse}
               </pre>
             </div>
+          )}
+        </div>
+        <div style={box}>
+          <h3>Token Check</h3>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              const response = await tokenCheck();
+              setTokenResponse(response.message);
+              console.log("Token check response:", response);
+            } catch (error) {
+              console.error("Error checking token:", error);
+            }
+          }}>
+            <button
+              type="submit"
+              style={button}
+            >
+              Check Token
+            </button>
+          </form>
+          {tokenResponse && (
+            <div style={{ marginTop: "15px" }}>
+              <h4>Token Check Response:</h4>
+              <pre
+                style={{
+                  backgroundColor: colors.lightGray,
+                  padding: "10px",
+                  border: border.standard,
+                  overflowX: "auto",
+                }}
+              >
+                {JSON.stringify(tokenResponse, null, 2)}
+              </pre>
+            </div>
+
           )}
         </div>
       </div>

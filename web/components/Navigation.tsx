@@ -9,6 +9,7 @@ import {
   navRight,
   button,
 } from "@/styles/constants";
+import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
 interface NavigationProps {
   currentPage?: string;
@@ -23,7 +24,17 @@ export default function Navigation({ currentPage }: NavigationProps) {
   const router = useRouter();
 
   const handleLogout = () => {
-    router.push("/login");
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      supabase.auth.signOut();
+      console.log("User signed out successfully");
+      router.push("/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+
+    
   };
 
   return (

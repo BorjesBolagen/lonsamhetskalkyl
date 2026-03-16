@@ -21,10 +21,6 @@ export default function Login() {
         email,
         password
       });
-
-      console.log("Login response data:", data);
-      console.log("Login response error:", error);
-      console.log("Current session after login attempt:", supabase.auth.getSession());
       
       if (error) {
         setErrorMsg("Inloggning misslyckades: " + error.message);
