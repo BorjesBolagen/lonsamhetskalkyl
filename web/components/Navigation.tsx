@@ -1,8 +1,6 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-<<<<<<< HEAD
-=======
 import {
   navContainer,
   navFlex,
@@ -12,7 +10,7 @@ import {
   button,
 } from "@/styles/constants";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
->>>>>>> bc848a1eeeedc847047987c9ddac9877cca86b5c
+
 
 interface NavigationProps {
   currentPage?: string;
