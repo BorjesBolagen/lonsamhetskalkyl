@@ -1,23 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  navContainer,
-  navFlex,
-  navGroup,
-  navCenter,
-  navRight,
-  button,
-} from "@/styles/constants";
 
 interface NavigationProps {
   currentPage?: string;
 }
-
-const getLinkStyle = (isActive: boolean) => ({
-  ...button,
-  ...(isActive ? { backgroundColor: "black", color: "white" } : {}),
-});
 
 export default function Navigation({ currentPage }: NavigationProps) {
   const router = useRouter();
@@ -26,45 +13,71 @@ export default function Navigation({ currentPage }: NavigationProps) {
     router.push("/login");
   };
 
+  const getLinkClasses = (isActive: boolean) =>
+    `px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
+      isActive ? "bg-black text-white" : "text-white hover:bg-black/20"
+    }`;
+
   return (
-    <nav style={navContainer}>
-      <div style={navFlex}>
-        {/* Vänster hörn - Inställningar och Område */}
-        <div style={navGroup}>
-          <Link
-            href="/settings"
-            style={getLinkStyle(currentPage === "settings")}
-          >
-            Inställningar
-          </Link>
-          <span style={{ color: "black" }}>Område: Linköping</span>
-        </div>
+    <nav className="bg-[#307C44]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          {/* Left corner */}
+          <div className="flex items-center space-x-4">
+            <Link
+              href="/settings"
+              className={getLinkClasses(currentPage === "settings")}
+            >
+              Inställningar
+            </Link>
+            <span className="text-white font-medium">Område: Linköping</span>
+          </div>
 
-        {/* Mitten - Huvudnavigation */}
-        <div style={navCenter}>
-          <Link href="/home" style={getLinkStyle(currentPage === "home")}>
-            Översikt
-          </Link>
-          <Link
-            href="/simulator"
-            style={getLinkStyle(currentPage === "simulator")}
-          >
-            Simulator
-          </Link>
-          <Link href="/admin" style={getLinkStyle(currentPage === "admin")}>
-            Admin
-          </Link>
+          {/* Center navigation */}
+          <div className="flex space-x-4">
+            <Link
+              href="/home"
+              className={getLinkClasses(currentPage === "home")}
+            >
+              Översikt
+            </Link>
+            <Link
+              href="/simulator"
+              className={getLinkClasses(currentPage === "simulator")}
+            >
+              Simulator
+            </Link>
+            <Link
+              href="/admin"
+              className={getLinkClasses(currentPage === "admin")}
+            >
+              Admin
+            </Link>
+          </div>
+          {/* Right corner */}
+          <div className="flex items-center space-x-4">
+            <Link
+              href="/notifications"
+              className={getLinkClasses(currentPage === "notifications")}
+            >
+              Notifikationer
+            </Link>
+          <div className="flex items-center space-x-4">
+            <Link
+              href="/account"
+              className={getLinkClasses(currentPage === "account")}
+            >
+              Konto
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-white text-green-700 font-medium rounded-lg hover:bg-gray-100 transition-colors duration-200"
+            >
+              Logga ut
+            </button>
+          </div>
         </div>
-
-        {/* Höger hörn - Konto och Logga ut */}
-        <div style={navRight}>
-          <Link href="/account" style={getLinkStyle(currentPage === "account")}>
-            Konto
-          </Link>
-          <button onClick={handleLogout} style={button}>
-            Logga ut
-          </button>
-        </div>
+      </div>
       </div>
     </nav>
   );
