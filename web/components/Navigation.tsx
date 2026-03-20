@@ -1,6 +1,18 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+<<<<<<< HEAD
+=======
+import {
+  navContainer,
+  navFlex,
+  navGroup,
+  navCenter,
+  navRight,
+  button,
+} from "@/styles/constants";
+import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
+>>>>>>> bc848a1eeeedc847047987c9ddac9877cca86b5c
 
 interface NavigationProps {
   currentPage?: string;
@@ -10,7 +22,17 @@ export default function Navigation({ currentPage }: NavigationProps) {
   const router = useRouter();
 
   const handleLogout = () => {
-    router.push("/login");
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      supabase.auth.signOut();
+      console.log("User signed out successfully");
+      router.push("/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+
+    
   };
 
   const getLinkClasses = (isActive: boolean) =>
