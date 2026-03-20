@@ -11,6 +11,7 @@ import {
 } from "@/styles/constants";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
+//Kommentar för att testa
 
 interface NavigationProps {
   currentPage?: string;
