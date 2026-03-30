@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -8,6 +10,9 @@ export async function updateSession(request: NextRequest) {
 
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.
+  
+  const rememberMe = request.cookies.get("sb-remember-me")?.value === "1";
+  
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -21,10 +26,11 @@ export async function updateSession(request: NextRequest) {
           supabaseResponse = NextResponse.next({
             request,
           })
-          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
-        },
+          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, 
+            {...options, maxAge: COOKIE_MAX_AGE, path: '/', sameSite: 'lax', secure: process.env.NODE_ENV === 'production', ...(rememberMe ? { maxAge: COOKIE_MAX_AGE} : {})}))
+        }
       },
-    }
+    },
   )
 
   // Do not run code between createServerClient and
@@ -37,16 +43,19 @@ export async function updateSession(request: NextRequest) {
 
   const user = data?.claims
 
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth')
-  ) {
+if (
+  !user &&
+  !request.nextUrl.pathname.startsWith("/login") &&
+  !request.nextUrl.pathname.startsWith("/api/login") &&
+  !request.nextUrl.pathname.startsWith("/auth")
+) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
+
+  supabaseResponse.headers.set("Cache-Control", "private, no-store")
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
   // creating a new response object with NextResponse.next() make sure to:

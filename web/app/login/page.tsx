@@ -9,6 +9,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [rememberMe, setRememerMe] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,22 +17,29 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const supabase = getSupabaseBrowserClient();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      
-      if (error) {
-        setErrorMsg("Inloggning misslyckades: " + error.message);
-      } else {
-        router.push("/home");
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          }, body: JSON.stringify({email, password, rememberMe}),
+        });
+
+        const result = await res.json();
+
+      if (!res.ok || !result.ok) {
+        setErrorMsg("Inloggning misslyckades: " + (result.error ?? "Okänt fel"));
+        return;
       }
+        router.push("/home");
+        router.refresh();
+
     } catch (err) {
       setErrorMsg("Kunde inte kontakta servern: " + (err as Error).message);
     } finally {
       setIsLoading(false);
     }
+
+
   };
 
   return (
@@ -88,7 +96,7 @@ export default function Login() {
 
           <div className="flex items-center justify-between text-xs text-gray-600">
             <label className="flex items-center cursor-pointer">
-              <input type="checkbox" className="mr-2 accent-[#76a57d]" />
+              <input type="checkbox" checked = {rememberMe} onChange={(e) => setRememerMe(e.target.checked)} className="mr-2 accent-[#76a57d]"  />
               Kom ihåg mig
             </label>
             <a href="#" className="underline hover:text-black transition-colors">
