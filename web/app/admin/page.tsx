@@ -2,7 +2,7 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
-import { sendMessage, tokenCheck } from "@/lib/api";
+import { sendMessage, checkUserExists } from "@/lib/api";
 import { Enums, Constants } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
@@ -56,8 +56,8 @@ export default function Admin() {
     setIsSigningUp(true);
     try {
       const supabase = getSupabaseBrowserClient();
-      const { data: existingUser } = await supabase.from('User').select('id').eq('email', signupEmail).maybeSingle();
-      if (existingUser) {
+      const userExistsResponse = await checkUserExists(signupEmail);
+      if (userExistsResponse.status) {
         setSignupResponse("E-mail är redan registrerad.");
         return;
       }

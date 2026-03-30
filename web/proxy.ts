@@ -2,7 +2,6 @@ import { type NextRequest } from "next/server"
 import { updateSession } from "./lib/proxy"
 
 export async function proxy(request: NextRequest) {
-  console.log("Proxying request:", request.url)
   return await updateSession(request)
 }
 
