@@ -4,8 +4,9 @@ type MessageResponse = {
 };
 
 type BasicResponse = {
-	success: boolean;
+	status: boolean;
 	message: string;
+	data?: object;
 }
 
 type TokenResponse = {
@@ -42,4 +43,14 @@ export const tokenCheck = async (): Promise<TokenResponse> => {
 	}
 
 	return (await response.json()) as TokenResponse;
+};
+
+export const checkUserExists = async (email: string): Promise<BasicResponse> => {
+  const response = await fetch(`/api/user?email=${encodeURIComponent(email)}`, {
+    method: "GET",
+  });
+
+  if (!response.ok) throw new Error(await response.text());
+
+  return (await response.json()) as BasicResponse;
 };
