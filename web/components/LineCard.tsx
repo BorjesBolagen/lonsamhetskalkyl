@@ -7,18 +7,17 @@ type CardProps = {
 
 export default function LineCard({ title, children }: CardProps) {
   return (
-    <div
-      style={{
-        width: "600px",
-        border: "5px solid #1da06e",
-        borderRadius: "12px",
-        padding: "16px",
-        boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
-        background: "white",
-      }}
-    >
-      <h3>{title}</h3>
-      <div>{children}</div>
+    <div className="bg-white rounded-xl shadow-md p-6 space-y-4 max-w-2xl w-full">
+
+      {/* Titel */}
+      <h2 className="text-lg font-bold text-gray-800 border-b pb-2">
+        {title}
+      </h2>
+
+      {/* Cards */}
+      <div className="flex flex-wrap gap-4">
+        {children}
+      </div>
     </div>
   );
 }

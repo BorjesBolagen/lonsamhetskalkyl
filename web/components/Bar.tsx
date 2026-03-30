@@ -1,39 +1,18 @@
 type Property = {
-    progress: number;
-}
+  progress: number;
+};
 
-export default function Bar({progress}: Property) {
-    const WIDTH = 100;
-    const HEIGHT = WIDTH / 10;
+export default function Bar({ progress }: Property) {
+  const isFull = progress >= 100;
 
-    return (
-        <div style={{
-            width: `${WIDTH}px`,
-            height: `${HEIGHT}px`,
-            background: "black",
-            borderRadius: "0px",
-            padding: "3px",
-            boxSizing: "border-box",
-            display: "flex",
-            marginBottom: "5px"
-            }}>
-            <div style={{
-                    width: `${progress}%`,
-                    height: "100%",
-                    background: "#267723",
-                    borderRadius: "0px",
-                }}
-            />
-            <div style={{
-                    width: `${100 - progress}%`,
-                    height: "100%",
-                    background: "white",
-                    borderRadius: "0px",
-                }}
-            />
-            
-            
-        </div>
-        
-    )
+  return (
+    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
+      <div
+        className={`h-full transition-all duration-300 ${
+          isFull ? "bg-red-500" : "bg-green-500"
+        }`}
+        style={{ width: `${Math.min(progress, 100)}%` }}
+      />
+    </div>
+  );
 }
