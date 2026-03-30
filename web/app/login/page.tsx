@@ -21,7 +21,7 @@ export default function Login() {
         email,
         password
       });
-      
+      console.log("Login response:", data, error);
       if (error) {
         setErrorMsg("Inloggning misslyckades: " + error.message);
       } else {
