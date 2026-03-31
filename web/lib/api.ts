@@ -62,9 +62,9 @@ export const tokenCheck = async (): Promise<TokenResponse> => {
 };
 
 /**
- * Returnerar användardata för givet email
+ * Sign up funktion för supabase
  */
-export const checkUserExists = async (email: string): Promise<BasicResponse> => {
+export const signUpProcedure = async (email: string): Promise<BasicResponse> => {
   const response = await fetch(`/api/user?email=${encodeURIComponent(email)}`, {
     method: "GET",
   });
