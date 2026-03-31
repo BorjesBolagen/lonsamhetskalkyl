@@ -61,7 +61,6 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase.from("User").select("*").eq("email", email).maybeSingle();
 
-    console.log("GET /api/user?email=" + email, { data, error });
     if (error) {
       return NextResponse.json({ status: false, message: "Oväntat fel: " + error.message }, { status: 500 });
     }
