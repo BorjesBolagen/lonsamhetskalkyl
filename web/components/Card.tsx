@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
-import Bar from "./Bar";
+import Pricebar from "./pricebar2"
+import FLMbar from "./FLMbar";
 
 type CardProps = {
   title: string;
@@ -24,11 +25,11 @@ export default function Card({
 
       {/* FLM */}
       <p className="text-xs text-gray-600">FLM</p>
-      <Bar progress={capacity} />
+      <FLMbar progress={capacity} />
 
-      {/* Profit */}
-      <p className="text-xs text-gray-600 mt-1">Profit</p>
-      <Bar progress={price} />
+      {/* Pris */}
+      <p className="text-xs text-gray-600 mt-1">Pris</p>
+      <Pricebar progress={price} />
 
       {/* Button */}
       <div className="mt-2 w-full text-center">

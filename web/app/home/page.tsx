@@ -80,7 +80,7 @@ export default function Home() {
   const Ekipage7 = new Ekipage("L26", "Linköping - Jönköping", 7600, 10.9, "null");
   const Ekipage8 = new Ekipage("L27", "Linköping - Jönköping", 5400, 8.2, "null");
   const Ekipage9 = new Ekipage("L28", "Linköping - Jönköping", 19900, 5.4, "null");
-  const Ekipage10 = new Ekipage("L29", "Linköping - Jönköping", 11700, 15.8, "null");
+  const Ekipage10 = new Ekipage("L29", "Linköping - Jönköping", 2000, 15.8, "null");
 
   linje1.push(Ekipage1, Ekipage2, Ekipage3);
   linje2.push(Ekipage4, Ekipage5, Ekipage6);
@@ -121,20 +121,6 @@ export default function Home() {
 
         <div className="w-80 space-y-6">
 
-          {/* INFO PANEL */}
-          {clickedButton && (
-            <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-              <h2 className="text-xl font-bold mb-4 border-b pb-2">
-                Detaljer
-              </h2>
-
-              <p><strong>ID:</strong> {clickedButton.getId()}</p>
-              <p><strong>Rutt:</strong> {clickedButton.getLine()}</p>
-              <p><strong>Pris:</strong> {clickedButton.getPrice()}</p>
-              <p><strong>FLM:</strong> {clickedButton.getCapacity()}</p>
-            </div>
-          )}
-
           {/* MANUAL INPUT */}
           <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
             <p className="mb-2 font-medium">
@@ -160,7 +146,21 @@ export default function Home() {
               </button>
             </form>
           </div>
+
+          {/* INFO PANEL */}
+          {clickedButton && (
+            <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
+              <h2 className="text-xl font-bold mb-4 border-b pb-2">
+                Detaljer
+              </h2>
+
+              <p><strong>ID:</strong> {clickedButton.getId()}</p>
+              <p><strong>Linje:</strong> {clickedButton.getLine()}</p>
+              <p><strong>Pris:</strong> {clickedButton.getPrice()}</p>
+            </div>
+          )}
         </div>
+
       </main>
 
       <Footer />
