@@ -56,9 +56,8 @@ export default function Admin() {
     setIsSigningUp(true);
     try {
       const supabase = getSupabaseBrowserClient();
-      const userExistsResponse = await signUpProcedure(signupEmail);
-      console.log("User exists response:", userExistsResponse);
-      if (userExistsResponse.status) {
+      const signUpResponse = await signUpProcedure(signupEmail);
+      if (signUpResponse.status) {
         setSignupResponse("E-mail är redan registrerad.");
         return;
       }

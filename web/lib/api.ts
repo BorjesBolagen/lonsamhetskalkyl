@@ -3,16 +3,18 @@ import type {
 	ConsignmentListItem,
 	EquipageItem,
 } from "@/lib/ilogTypes";
+import type { User } from "@/lib/databaseTypes";
 
 type MessageResponse = {
 	received: string;
 	sentAt?: string;
 };
 
-type BasicResponse = {
+// TODO: ta bort default param och uppdatera alla anrop så dem också använder databasens struktur
+type BasicResponse<T = object> = {
 	status: boolean;
 	message: string;
-	data?: object;
+	data?: T;
 }
 
 // Generell svarstyp för nya iLog-interna endpoints. T är datatypen som returneras (EquipageItem[], ConsignmentListItem[], etc).
@@ -73,6 +75,27 @@ export const signUpProcedure = async (email: string): Promise<BasicResponse> => 
 
   return (await response.json()) as BasicResponse;
 };
+
+/**
+ * Getter för alla användare i User-tabellen i supabase. Policies gäller, se Supabase
+ */
+export const getAllUsers = async (): Promise<BasicResponse> => {
+	const response = await fetch("/api/users", {
+		method: "GET",
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+	return (await response.json()) as BasicResponse;
+};
+
+export const getCurrentlySignedInUser = async (): Promise<BasicResponse<User>> => {
+	const response = await fetch("/api/users/get/currentUser", {
+		method: "GET",
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+	return (await response.json()) as BasicResponse<User>;
+}
 
 /**
  * Hämtar lista över ekipage (fordon/transport-enheter).
