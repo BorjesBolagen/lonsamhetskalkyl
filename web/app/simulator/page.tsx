@@ -51,7 +51,7 @@ export default function ProfitCalculatorPage() {
   };
   return (
     <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
-      <Navigation currentPage="Räkna ut lönsamhet" />
+      <Navigation currentPage="simulator" />
 
       <main className="flex-grow flex flex-col lg:flex-row justify-center p-6 gap-6">
         
