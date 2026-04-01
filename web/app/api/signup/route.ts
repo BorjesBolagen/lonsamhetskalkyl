@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
 /* QUeries the database with an email. Returns the user data if the user exists
     Returns on this format
     {
@@ -14,7 +19,11 @@ export async function GET(request: Request) {
   const email = searchParams.get("email");
 
   if (!email) {
-    return NextResponse.json({ status: false, message: "Email is required" }, { status: 400 });
+    return NextResponse.json({ status: false, message: "Inget email angivet" }, { status: 400 });
+  }
+
+  if (!validateEmail(email)) {
+    return NextResponse.json({ status: false, message: "Ogiltigt email-format" }, { status: 400 });
   }
 
   try {
@@ -65,11 +74,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ status: false, message: "Oväntat fel: " + error.message }, { status: 500 });
     }
 
-    if (!data) {
-      return NextResponse.json({ status: false, message: "Angivet email är inte registrerat" }, { status: 400 });
+    if (data) {
+      return NextResponse.json({ status: false, message: "Angivet email är redan registrerat" }, { status: 400 });
     }
 
-    return NextResponse.json({ status: true, message: "Användare hittades" });
+    return NextResponse.json({ status: true, message: "Angivet email finns inte. Sign up går bra" });
   } catch {
     return NextResponse.json({ status: false, message: "Internal server error" }, { status: 500 });
   }

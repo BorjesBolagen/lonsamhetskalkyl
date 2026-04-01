@@ -79,13 +79,13 @@ export const signUpProcedure = async (email: string): Promise<BasicResponse<null
 /**
  * Getter för alla användare i User-tabellen i supabase. Policies gäller, se Supabase
  */
-export const getAllUsers = async (): Promise<BasicResponse<null>> => {
+export const getAllUsers = async (): Promise<BasicResponse<User[]>> => {
 	const response = await fetch("/api/users", {
 		method: "GET",
 	});
 
 	if (!response.ok) throw new Error((await response.json()).message);
-	return (await response.json()) as BasicResponse<null>;
+	return (await response.json()) as BasicResponse<User[]>;
 };
 
 export const getCurrentlySignedInUser = async (): Promise<BasicResponse<User>> => {
@@ -107,6 +107,8 @@ export const getCurrentlySignedInUser = async (): Promise<BasicResponse<User>> =
  * setPassword - tar id, dubbelkoll att inloggad användare är samma som id, och sätter nytt lösenord. Kanske finns någon funktion i supabase.auth
  * 
  */
+
+//export const getUser = async (id: string): Promise<BasicResponse<User>>
 
 /**
  * Hämtar lista över ekipage (fordon/transport-enheter).

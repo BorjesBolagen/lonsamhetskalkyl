@@ -62,31 +62,48 @@ export default function Admin() {
   };
 
   const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!signupEmail.trim() || !signupPassword.trim() || role === "") return;
-    setIsSigningUp(true);
-    try {
-      const supabase = getSupabaseBrowserClient();
-      const signUpResponse = await signUpProcedure(signupEmail);
-      if (signUpResponse.status) {
-        setSignupResponse("E-mail är redan registrerad.");
-        return;
-      }
-      const { data, error } = await supabase.auth.signUp({ email: signupEmail, password: signupPassword });
-      if (error) throw error;
-      
-      if (data.user) {
-        await supabase.from('User').update({ role }).eq('id', data.user.id);
-        setSignupResponse(`Skapade användare ${data.user.email}.`);
-      } else {
-        setSignupResponse("Kunde inte skapa användare");
-      }
-    } catch (error) {
-      setSignupResponse("Fel vid registrering: " + error);
-    } finally {
-      setIsSigningUp(false);
-    }
-  };
+  e.preventDefault();
+
+  if (!signupEmail.trim() || !signupPassword.trim() || role === "") return;
+  setIsSigningUp(true);
+
+  try {
+    const supabase = getSupabaseBrowserClient();
+
+    // Check if email already exists
+    const APIsignUpResponse = await signUpProcedure(signupEmail);
+    if (!APIsignUpResponse.status) throw new Error(APIsignUpResponse.message);
+    
+
+    // Supabase signup
+    const { data, error } = await supabase.auth.signUp({
+      email: signupEmail,
+      password: signupPassword,
+    });
+
+    if (error) throw error;
+    if (!data.user) throw new Error("Kunde inte skapa användare");
+
+    // Update role in User table
+    const { error: updateError } = await supabase
+      .from("User")
+      .update({ role })
+      .eq("id", data.user.id);
+
+    if (updateError) throw updateError;
+
+    // Success
+    setSignupResponse(`Skapade användare ${data.user.email}.`);
+
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : String(error);
+
+    setSignupResponse(`Fel vid registrering: ${message}`);
+  } finally {
+    setIsSigningUp(false);
+  }
+};
 
   return (
     <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
