@@ -66,10 +66,10 @@ export async function GET(request: Request) {
     }
 
     if (!data) {
-      return NextResponse.json({ status: false, message: "Angivet email är inte registrerat", data: null }, { status: 400 });
+      return NextResponse.json({ status: false, message: "Angivet email är inte registrerat" }, { status: 400 });
     }
 
-    return NextResponse.json({ status: true, message: "Användare hittades", data });
+    return NextResponse.json({ status: true, message: "Användare hittades" });
   } catch {
     return NextResponse.json({ status: false, message: "Internal server error" }, { status: 500 });
   }

@@ -11,7 +11,7 @@ type MessageResponse = {
 };
 
 // TODO: ta bort default param och uppdatera alla anrop så dem också använder databasens struktur
-type BasicResponse<T = object> = {
+type BasicResponse<T> = {
 	status: boolean;
 	message: string;
 	data?: T;
@@ -66,26 +66,26 @@ export const tokenCheck = async (): Promise<TokenResponse> => {
 /**
  * Sign up funktion för supabase
  */
-export const signUpProcedure = async (email: string): Promise<BasicResponse> => {
+export const signUpProcedure = async (email: string): Promise<BasicResponse<null>> => {
   const response = await fetch(`/api/signup?email=${encodeURIComponent(email)}`, {
     method: "GET",
   });
 
   if (!response.ok) throw new Error((await response.json()).message);
 
-  return (await response.json()) as BasicResponse;
+  return (await response.json()) as BasicResponse<null>;
 };
 
 /**
  * Getter för alla användare i User-tabellen i supabase. Policies gäller, se Supabase
  */
-export const getAllUsers = async (): Promise<BasicResponse> => {
+export const getAllUsers = async (): Promise<BasicResponse<null>> => {
 	const response = await fetch("/api/users", {
 		method: "GET",
 	});
 
 	if (!response.ok) throw new Error((await response.json()).message);
-	return (await response.json()) as BasicResponse;
+	return (await response.json()) as BasicResponse<null>;
 };
 
 export const getCurrentlySignedInUser = async (): Promise<BasicResponse<User>> => {
@@ -96,6 +96,17 @@ export const getCurrentlySignedInUser = async (): Promise<BasicResponse<User>> =
 	if (!response.ok) throw new Error((await response.json()).message);
 	return (await response.json()) as BasicResponse<User>;
 }
+
+/**
+ * User tabell:
+ * getUser - tar id som input och returnerar all data om en användare i User (id, email, roll osv)
+ * setThreshold - tar id och sätter threshold-värde i User
+ * deleteUser - tar id och raderar användaren från User
+ * setEmail - tar id och sätter nytt email-värde. Måste nog skicka extra verifieringsmejl (och också sätta email_verified = False)
+ * setFilters - tar id och sätter filter-json. Förmodligen där ett element är område, annat är tema (ljus/mörk) osv.
+ * setPassword - tar id, dubbelkoll att inloggad användare är samma som id, och sätter nytt lösenord. Kanske finns någon funktion i supabase.auth
+ * 
+ */
 
 /**
  * Hämtar lista över ekipage (fordon/transport-enheter).
