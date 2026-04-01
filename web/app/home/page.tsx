@@ -1,13 +1,47 @@
 "use client";
 
+import { getIlogLines } from "../../lib/api";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import LineCard from "../../components/LineCard";
 import Card from "../../components/Card";
 
-export default function Home() {
-  const STANDRD_FLM = 19.2;
+class Line {
+    private id: number;
+    private name: string;
+    private fromArea: string;
+    private toArea: string;
+
+    public constructor (
+      id: number,
+      name: string,
+      fromArea: string,
+      toArea: string
+
+    ) {
+      this.id = id;
+      this.name = name;
+      this.fromArea = fromArea;
+      this.toArea = toArea;
+    }
+
+    public getId(): number {
+      return this.id;
+    }
+
+    public getName(): string {
+      return this.name;
+    }
+
+    public getFromArea(): string {
+      return this.fromArea;
+    }
+
+    public getToArea(): string {
+      return this.toArea;
+    }
+  }
 
   class Ekipage {
     private id: string;
@@ -47,10 +81,16 @@ export default function Home() {
     }
   }
 
+export default function Home() {
+  const STANDRD_FLM = 19.2;
+
   // STATE
   const [clickedButton, setClickedButton] = useState<Ekipage | null>(null);
   const [manualValue, setManualValue] = useState(15000);
   const [value, setValue] = useState("");
+  const [linesData, setLinesData] = useState<Line[]>([]);
+  const [loadingLines, setLoadingLines] = useState(false);
+  const [lineError, setLineError] = useState("");
 
   // FUNCTIONS
   function convertCapacityToPixels(capacity: number) {
@@ -88,10 +128,32 @@ export default function Home() {
 
   const lines: Array<Ekipage>[] = [linje1, linje2, linje3];
 
+  const loadLines = async () => {
+      try {
+        setLoadingLines(true);
+        setLineError("");
+
+        const response = await getIlogLines();
+        
+        const lines = (response.data ?? []).map((line) => new Line(line.id, line.name, line.fromArea, line.toArea));
+
+        setLinesData(lines);
+        
+      } catch (error) {
+        setLineError("Failed to load lines, try again");
+      } finally {
+        setLoadingLines(false);
+      }
+    };
+
+  useEffect(() => {
+    loadLines();
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
+      
       <Navigation currentPage="home" />
-
       <main className="flex-grow p-6 flex gap-6">
         <div className="flex-1 space-y-6">
           {/* LINE CARDS */}
@@ -120,6 +182,7 @@ export default function Home() {
         </div>
 
         <div className="w-80 space-y-6">
+
 
           {/* MANUAL INPUT */}
           <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
@@ -159,6 +222,25 @@ export default function Home() {
               <p><strong>Pris:</strong> {clickedButton.getPrice()}</p>
             </div>
           )}
+
+          <button onClick={loadLines}>Ladda linjer</button>
+
+          <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
+            <p className="mb-2 font-medium">
+              Linjer från API: {loadingLines ? "Laddar..." : lineError ? lineError : linesData.length > 0 ? "Laddat!" : "Inga linjer"}
+            </p>
+
+            {!loadingLines && !lineError && linesData.length > 0 && (
+              <ul className="mt-3 space-y-2 text-sm">
+                {linesData.map((line) => (
+                  <li key={line.getId()} className="border rounded p-2 bg-gray-50">
+                    <p><strong>{line.getName()}</strong></p>
+                    <p>ID: {line.getId()}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
 
       </main>
