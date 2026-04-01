@@ -105,6 +105,7 @@ Skapa en `.env.local`-fil i `web/`-katalogen och fyll i nycklarna. Du hittar URL
 Dessa är OK för att exponeras till frontend:
 
 - `NEXT_PUBLIC_SUPABASE_URL` - Supabase projekt-URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anon/public API-nyckel
 
 ### Backend (hemlig)
 

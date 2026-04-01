@@ -2,7 +2,7 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
-import { sendMessage, tokenCheck } from "@/lib/api";
+import { sendMessage, signUpProcedure } from "@/lib/api";
 import { Enums, Constants } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
@@ -67,8 +67,9 @@ export default function Admin() {
     setIsSigningUp(true);
     try {
       const supabase = getSupabaseBrowserClient();
-      const { data: existingUser } = await supabase.from('User').select('id').eq('email', signupEmail).maybeSingle();
-      if (existingUser) {
+      const userExistsResponse = await signUpProcedure(signupEmail);
+      console.log("User exists response:", userExistsResponse);
+      if (userExistsResponse.status) {
         setSignupResponse("E-mail är redan registrerad.");
         return;
       }
@@ -78,9 +79,11 @@ export default function Admin() {
       if (data.user) {
         await supabase.from('User').update({ role }).eq('id', data.user.id);
         setSignupResponse(`Skapade användare ${data.user.email}.`);
+      } else {
+        setSignupResponse("Kunde inte skapa användare");
       }
     } catch (error) {
-      setSignupResponse("Fel vid registrering: " + (error as Error).message);
+      setSignupResponse("Fel vid registrering: " + error);
     } finally {
       setIsSigningUp(false);
     }

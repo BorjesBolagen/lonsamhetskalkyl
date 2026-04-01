@@ -65,6 +65,53 @@ public/
 
 ## API-Endpoints
 
+### GET /api/ilog/equipages
+
+Hämtar ekipage från iLog via endpointen `/ilog-api-web/driver/equipages`.
+
+**Response (200):**
+
+```json
+{
+  "status": true,
+  "message": "Equipages fetched",
+  "data": []
+}
+```
+
+### GET /api/ilog/consignments?date=yyyyMMdd&equipageId=123
+
+Hämtar bokningar för ett ekipage och datum via iLog endpointen `/ilog-api-web/equipage/consignments`.
+
+**Response (200):**
+
+```json
+{
+  "status": true,
+  "message": "Consignments fetched",
+  "data": []
+}
+```
+
+### GET /api/ilog/consignment?consignmentId=123
+
+Hämtar detaljinformation för en bokning via iLog endpointen `/ilog-api-web/consignment`.
+
+Valfria query-parametrar:
+
+- `includeHistory=true|false` (default `false`)
+- `includeEvents=true|false` (default `false`)
+
+**Response (200):**
+
+```json
+{
+  "status": true,
+  "message": "Consignment fetched",
+  "data": {}
+}
+```
+
 ### POST /api/message
 
 Skapar ett nytt meddelande i Supabase.
@@ -108,5 +155,11 @@ Lokalt i `.env.local`:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
-SUPABASE_SERVICE_ROLE_KEY=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+ILOG_BASE_URL=...
+ILOG_USERNAME=...
+ILOG_TRANSPORTER_NUMBER=...
+ILOG_PASSWORD=...
 ```
+
+`SUPABASE_SERVICE_ROLE_KEY` ska endast användas i server-only kod och ska inte krävas för att starta frontend lokalt.
