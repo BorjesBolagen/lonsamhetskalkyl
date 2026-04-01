@@ -2,7 +2,6 @@
  * GET /api/ilog/equipages
  * 
  * Hämtar lista över ekipage (fordon/transport-enheter) från iLog.
- * Inkluderar id, namn, och avgångsort för att trafikledare kan sortera på område.
  * 
  * Frontend anropar denna via getIlogEquipages() för dropdowns och listor.
  * 
@@ -10,10 +9,10 @@
  *   - ?debugRaw=true → returnera rå JSON från iLog (utan mapping)
  *   
  * Response: { status, message, data: EquipageItem[] }
- *   Exempel: 
+ *   Exempel:
  *   [
- *     { id: 8943, name: "B06", departureLocation: "Gävle" },
- *     { id: 7862, name: "B07", departureLocation: "Gävle" }
+ *     { id: 8943, name: "B06" },
+ *     { id: 7862, name: "B07" }
  *   ]
  * 
  * Felhantering:

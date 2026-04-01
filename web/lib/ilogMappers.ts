@@ -18,6 +18,7 @@ import type {
   ConsignmentDetail,
   ConsignmentListItem,
   EquipageItem,
+  LineItem,
 } from "@/lib/ilogTypes";
 
 /**
@@ -99,40 +100,33 @@ const readNestedNumber = (
   return readNumber(nested, keys);
 };
 
-// Exempel på line.name: "Gävle - Nybro" eller "Gävle-Nybro" -> "Gävle"
-// Om line.name saknar separator returnerar vi hela strängen.
-const extractDepartureLocationFromLineName = (lineName: string): string => {
+
+// Delar linjenamn till from/to, t.ex. "Gavle - Nybro" eller "Gavle-Nybro".
+const parseLineAreas = (lineName: string): { fromArea: string; toArea: string } => {
   const trimmed = lineName.trim();
   if (!trimmed) {
-    return "";
+    return { fromArea: "", toArea: "" };
   }
 
-  // Tillåt både " - " och "-" som separator mellan avgång och destination.
-  const [firstPart] = trimmed.split(/\s*-\s*/);
-  return firstPart?.trim() ?? "";
+  const parts = trimmed
+    .split(/\s*-\s*/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  if (parts.length === 0) {
+    return { fromArea: "", toArea: "" };
+  }
+
+  if (parts.length === 1) {
+    return { fromArea: parts[0], toArea: "" };
+  }
+
+  return {
+    fromArea: parts[0],
+    toArea: parts.slice(1).join(" - "),
+  };
 };
 
-const readDepartureLocationFromLines = (row: Record<string, unknown>): string => {
-  const lines = row["lines"];
-  if (!Array.isArray(lines)) {
-    return "";
-  }
-
-  for (const line of lines) {
-    const lineRecord = asRecord(line);
-    const lineName = readString(lineRecord, ["name"]);
-    if (!lineName) {
-      continue;
-    }
-
-    const departure = extractDepartureLocationFromLineName(lineName);
-    if (departure) {
-      return departure;
-    }
-  }
-
-  return "";
-};
 
 /**
  * Extraherar vikt från iLog's estimatedProperties-fält.
@@ -246,16 +240,8 @@ const collectConsignmentCandidates = (
 /**
  * Mappning: iLog raw equipages → EquipageItem[]
  * 
- * Extraherar id, name (registreringsnummer) och avgångsort (base location).
+ * Extraherar id och name (registreringsnummer).
  * Filter bort items utan ID.
- * 
- * Avgångsort-fallback-chain:
- *   1. lines[].name (t.ex. "Gavle - Nybro" -> "Gavle")
- *   2. location.name / location.city
- *   3. base.name / base.city
- *   4. homeLocation.name
- *   5. zone.name
- *   6. Tom string om ingenting hittas
  */
 export const mapEquipages = (raw: unknown[]): EquipageItem[] => {
   return raw
@@ -271,18 +257,38 @@ export const mapEquipages = (raw: unknown[]): EquipageItem[] => {
         readString(row, ["name", "displayName", "regno", "regNo", "registrationNumber"]) ||
         `Equipage ${id}`;
 
-      // Försök hitta avgångsort/bas-stad från flera möjliga fält
-      const departureLocation =
-        readDepartureLocationFromLines(row) ||
-        readNestedString(row, "location", ["name", "city"]) ||
-        readNestedString(row, "base", ["name", "city"]) ||
-        readNestedString(row, "homeLocation", ["name"]) ||
-        readNestedString(row, "zone", ["name"]) ||
-        "";
-
-      return { id, name, departureLocation };
+      return { id, name };
     })
     .filter((item): item is EquipageItem => item !== null);
+};
+
+/**
+ * Mappning: iLog raw lines -> LineItem[]
+ *
+ * Visar alla tillgangliga linjer och extraherar from/to-omraden
+ * for enkel filtrering pa hemskarmen.
+ */
+export const mapLines = (raw: unknown[]): LineItem[] => {
+  return raw
+    .map((item) => {
+      const row = asRecord(item);
+      const id = readNumber(row, ["id"]);
+
+      if (id === null) {
+        return null;
+      }
+
+      const name = readString(row, ["name"]);
+      const { fromArea, toArea } = parseLineAreas(name);
+
+      return {
+        id,
+        name,
+        fromArea,
+        toArea,
+      };
+    })
+    .filter((item): item is LineItem => item !== null);
 };
 
 /**
