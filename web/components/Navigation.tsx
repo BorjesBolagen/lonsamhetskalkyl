@@ -1,17 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  navContainer,
-  navFlex,
-  navGroup,
-  navCenter,
-  navRight,
-  button,
-} from "@/styles/constants";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
-
-//Kommentar för att testa
 
 interface NavigationProps {
   currentPage?: string;
@@ -21,7 +11,6 @@ export default function Navigation({ currentPage }: NavigationProps) {
   const router = useRouter();
 
   const handleLogout = () => {
-
     try {
       const supabase = getSupabaseBrowserClient();
       supabase.auth.signOut();
@@ -30,8 +19,6 @@ export default function Navigation({ currentPage }: NavigationProps) {
     } catch (error) {
       console.error("Error signing out:", error);
     }
-
-    
   };
 
   const getLinkClasses = (isActive: boolean) =>
@@ -43,19 +30,22 @@ export default function Navigation({ currentPage }: NavigationProps) {
     <nav className="bg-[#307C44]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Left corner */}
-          <div className="flex items-center space-x-4">
+          
+          {/* VÄNSTER SIDA */}
+          <div className="flex-1 flex items-center justify-start space-x-4">
+            <span className="text-white font-medium bg-black/10 px-3 py-1.5 rounded-md text-sm border border-white/20">
+              Område: Linköping
+            </span>
             <Link
-              href="/settings"
-              className={getLinkClasses(currentPage === "settings")}
+              href="/notifications"
+              className={getLinkClasses(currentPage === "notifications")}
             >
-              Inställningar
+              Notifikationer
             </Link>
-            <span className="text-white font-medium">Område: Linköping</span>
           </div>
 
-          {/* Center navigation */}
-          <div className="flex space-x-4">
+          {/* MITTEN */}
+          <div className="flex-shrink-0 flex space-x-4">
             <Link
               href="/home"
               className={getLinkClasses(currentPage === "home")}
@@ -75,30 +65,24 @@ export default function Navigation({ currentPage }: NavigationProps) {
               Admin
             </Link>
           </div>
-          {/* Right corner */}
-          <div className="flex items-center space-x-4">
+
+          {/* HÖGER SIDA */}
+          <div className="flex-1 flex items-center justify-end space-x-4">
             <Link
-              href="/notifications"
-              className={getLinkClasses(currentPage === "notifications")}
+              href="/settings"
+              className={getLinkClasses(currentPage === "settings")}
             >
-              Notifikationer
-            </Link>
-          <div className="flex items-center space-x-4">
-            <Link
-              href="/account"
-              className={getLinkClasses(currentPage === "account")}
-            >
-              Konto
+              Mitt Konto
             </Link>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-white text-green-700 font-medium rounded-lg hover:bg-gray-100 transition-colors duration-200"
+              className="px-4 py-2 bg-white text-green-700 font-medium rounded-lg hover:bg-gray-100 transition-colors duration-200 shadow-sm"
             >
               Logga ut
             </button>
           </div>
+
         </div>
-      </div>
       </div>
     </nav>
   );
