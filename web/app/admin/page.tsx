@@ -2,7 +2,7 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
-import { sendMessage, signUpProcedure } from "@/lib/api";
+import { deleteUser, getCurrentlySignedInUser, getUser, sendMessage, setFilters, setThreshold, signUpProcedure } from "@/lib/api";
 import { Enums, Constants } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
@@ -62,48 +62,60 @@ export default function Admin() {
   };
 
   const handleSignup = async (e: React.FormEvent) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (!signupEmail.trim() || !signupPassword.trim() || role === "") return;
-  setIsSigningUp(true);
+    if (!signupEmail.trim() || !signupPassword.trim() || role === "") return;
+    setIsSigningUp(true);
 
-  try {
-    const supabase = getSupabaseBrowserClient();
+    try {
+      const supabase = getSupabaseBrowserClient();
 
-    // Check if email already exists
-    const APIsignUpResponse = await signUpProcedure(signupEmail);
-    if (!APIsignUpResponse.status) throw new Error(APIsignUpResponse.message);
-    
+      // Check if email already exists
+      const APIsignUpResponse = await signUpProcedure(signupEmail);
+      if (!APIsignUpResponse.status) throw new Error(APIsignUpResponse.message);
+      
 
-    // Supabase signup
-    const { data, error } = await supabase.auth.signUp({
-      email: signupEmail,
-      password: signupPassword,
-    });
+      // Supabase signup
+      const { data, error } = await supabase.auth.signUp({
+        email: signupEmail,
+        password: signupPassword,
+      });
 
-    if (error) throw error;
-    if (!data.user) throw new Error("Kunde inte skapa användare");
+      if (error) throw error;
+      if (!data.user) throw new Error("Kunde inte skapa användare");
 
-    // Update role in User table
-    const { error: updateError } = await supabase
-      .from("User")
-      .update({ role })
-      .eq("id", data.user.id);
+      // Update role in User table
+      const { error: updateError } = await supabase
+        .from("User")
+        .update({ role })
+        .eq("id", data.user.id);
 
-    if (updateError) throw updateError;
+      if (updateError) throw updateError;
 
-    // Success
-    setSignupResponse(`Skapade användare ${data.user.email}.`);
+      // Success
+      setSignupResponse(`Skapade användare ${data.user.email}. Ett verifieringsmail har skickats. Kom ihåg att kolla skräpposten.`);
 
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : String(error);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
 
-    setSignupResponse(`Fel vid registrering: ${message}`);
-  } finally {
-    setIsSigningUp(false);
+      setSignupResponse(`Fel vid registrering: ${message}`);
+    } finally {
+      setIsSigningUp(false);
+    }
+  };
+
+  const testFunction = async () => {
+    let icloud = "ab5e83de-9965-4a42-beb0-4456ce4cba40";
+    let gmail = "5313150f-c687-464f-8a0a-c647fad91b2e";
+    let borjes = "3f73d426-c05b-40b4-8737-a93d29b95db9";
+    try {
+      const reponse = await deleteUser(gmail);
+      console.log("Currently signed-in user:", reponse);
+    } catch (error) {
+      console.log("Error fetching currently signed-in user:", (error as Error).message);
+    }
   }
-};
 
   return (
     <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
@@ -121,7 +133,8 @@ export default function Admin() {
           <div className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-xl shadow-md">
             <h1 className="text-2xl font-bold text-[#446E30] mb-4 md:mb-0">Admin & Strategisk Analys</h1>
             <div className="flex flex-wrap gap-3 justify-center">
-              <button className="px-4 py-2 border-2 border-[#446E30] text-[#446E30] hover:bg-[#e8f1e9] font-semibold rounded transition-colors">
+              <button onClick={() => testFunction()}
+              className="px-4 py-2 border-2 border-[#446E30] text-[#446E30] hover:bg-[#e8f1e9] font-semibold rounded transition-colors">
                 Ladda upp CSV (Prognos)
               </button>
               <button 
