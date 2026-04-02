@@ -105,12 +105,11 @@ export default function Admin() {
     }
   };
 
+  // Temporör testfunktion som sitter på CSV knappen i admin.
   const testFunction = async () => {
-    let icloud = "ab5e83de-9965-4a42-beb0-4456ce4cba40";
-    let gmail = "5313150f-c687-464f-8a0a-c647fad91b2e";
-    let borjes = "3f73d426-c05b-40b4-8737-a93d29b95db9";
     try {
-      const reponse = await deleteUser(gmail);
+      // byt funktion för att testa
+      const reponse = await deleteUser("some-id");
       console.log("Currently signed-in user:", reponse);
     } catch (error) {
       console.log("Error fetching currently signed-in user:", (error as Error).message);
