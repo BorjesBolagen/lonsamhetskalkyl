@@ -2,6 +2,7 @@ import "server-only";
 import { Database } from "@/lib/supabaseServerSchema";
 
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from 'next/headers'
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; 
@@ -39,4 +40,15 @@ export async function getSupabaseServerClient() {
       },
     }
   )
+}
+
+/**
+ * Används bara om service role key krävs med höjda privilegier.
+ * 99% av fallen ska getSupabaseServerClient användas.
+ */
+export function getSupabaseAdminClient() {
+  return createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 }
