@@ -2,6 +2,7 @@ import type {
 	ConsignmentDetail,
 	ConsignmentListItem,
 	EquipageItem,
+	LineItem,
 } from "@/lib/ilogTypes";
 import type { User } from "@/lib/databaseTypes";
 
@@ -200,6 +201,19 @@ export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> 
 	}
 
 	return (await response.json()) as IlogResponse<EquipageItem[]>;
+};
+
+/**
+ * Hämtar alla iLog-linjer for aktuell grupp.
+ */
+export const getIlogLines = async (): Promise<IlogResponse<LineItem[]>> => {
+	const response = await fetch("/api/ilog/lines", { method: "GET" });
+
+	if (!response.ok) {
+		throw new Error("Request failed: " + (await response.text()));
+	}
+
+	return (await response.json()) as IlogResponse<LineItem[]>;
 };
 
 /**

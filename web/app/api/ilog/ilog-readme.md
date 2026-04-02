@@ -6,10 +6,9 @@ Frontend pratar med interna API-routes, och backend pratar med iLog.
 
 Klart i v1:
 - Central iLog-klient med Basic Auth, timeout och felhantering
-- Tre interna endpoints för equipages, consignments och consignment-detalj
+- Fyra interna endpoints för equipages, lines, consignments och consignment-detalj
 - Mapping från iLogs nested JSON till tydliga TypeScript-typer
 - Stöd för debugRaw=true för felsokning
-- departureLocation på equipages
 - Bortfiltrering av tomma consignment-rader
 - Förbättrad vikt-fallback (estimatedweight prioriteras)
 
@@ -24,6 +23,7 @@ Klart i v1:
 
 ## API-endpoints (interna)
 - GET /api/ilog/equipages
+- GET /api/ilog/lines
 - GET /api/ilog/consignments?date=yyyyMMdd&equipageId=123
 - GET /api/ilog/consignment?consignmentId=123
 
@@ -33,6 +33,7 @@ Tips:
 ## Exempel på användning i frontend
 Använd helper-funktionerna i web/lib/api.ts:
 - getIlogEquipages()
+- getIlogLines()
 - getIlogConsignments(date, equipageId)
 - getIlogConsignment(consignmentId)
 

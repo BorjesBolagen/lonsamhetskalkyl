@@ -56,7 +56,6 @@ const createAuthHeader = (): string => {
   const username = getRequiredEnv("ILOG_USERNAME");
   const transporterNumber = getRequiredEnv("ILOG_TRANSPORTER_NUMBER");
   const password = getRequiredEnv("ILOG_PASSWORD");
-
   const authString = `${username}/${transporterNumber}:${password}`;
   return `Basic ${Buffer.from(authString).toString("base64")}`;
 };

@@ -14,7 +14,16 @@
 export type EquipageItem = {
     id: number;
     name: string;
-    departureLocation: string;
+};
+
+/**
+ * En linje/zonrelation fran iLog (för visning och filtrering på hemskärm).
+ */
+export type LineItem = {
+    id: number;
+    name: string;
+    fromArea: string;
+    toArea: string;
 };
 
 /**
