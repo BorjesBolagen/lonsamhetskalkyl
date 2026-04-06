@@ -22,10 +22,10 @@ export default function Navigation({ currentPage }: NavigationProps) {
   };
 
 const getLinkClasses = (isActive: boolean) =>
-  `relative h-full flex items-center px-4 py-4 font-medium transition-colors duration-200 ${
+  `relative h-full flex items-center px-4 py-4 font-bold transition-colors duration-200 ${
     isActive
       ? "after:content-[''] after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-black"
-      : "text-black hover:bg-white/40 "
+      : "text-[#272829] hover:bg-white/40 "
   }`;
 
   return (
@@ -70,7 +70,7 @@ const getLinkClasses = (isActive: boolean) =>
             </Link>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-white/80 text-green-700 font-medium rounded-md hover:bg-white transition-colors duration-200 shadow-sm"            >
+              className="px-4 py-2 bg-white/80 text-black font-medium rounded-md hover:bg-white transition-colors duration-200 shadow-sm"            >
               Logga ut
             </button>
           </div>
