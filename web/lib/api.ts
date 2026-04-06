@@ -14,6 +14,36 @@ import type {
 } from "@/lib/returnTypes";
 import { Json } from "./supabaseServerSchema";
 
+type HistoricalImportResponse = {
+	columnsFound: number;
+	rowsFound: number;
+	insertedRows: number;
+};
+
+type HistoricalImportErrorData = {
+	errorCount?: number;
+	errors?: string[];
+};
+
+type HistoricalImportProgress = {
+	phase: "uploading" | "validating" | "inserting";
+	loadedBytes: number;
+	totalBytes: number;
+	processedRows?: number;
+	totalRows?: number;
+	percentage: number;
+};
+
+export class HistoricalImportError extends Error {
+	public readonly details: string[];
+
+	constructor(message: string, details: string[] = []) {
+		super(message);
+		this.name = "HistoricalImportError";
+		this.details = details;
+	}
+}
+
 
 
 export const sendMessage = async (message: string): Promise<MessageResponse> => {
@@ -257,4 +287,175 @@ export const getIlogConsignment = async (
 	}
 
 	return (await response.json()) as IlogResponse<ConsignmentDetail>;
+};
+
+/**
+ * Laddar upp en historisk kusk-CSV och triggar backend-import.
+ */
+export const importHistoricalCSV = async (
+	file: File,
+	onUploadProgress?: (progress: HistoricalImportProgress) => void,
+): Promise<BasicResponse<HistoricalImportResponse>> => {
+	return await new Promise((resolve, reject) => {
+		// Vi använder FormData för att skicka filen som multipart/form-data.
+		const formData = new FormData();
+		formData.append("file", file);
+
+		// XHR används i stället för fetch eftersom vi behöver:
+		// 1) verklig upload-progress
+		// 2) möjlighet att läsa streamad textrespons stegvis
+		const xhr = new XMLHttpRequest();
+		xhr.open("POST", "/api/historical");
+		// Specialheader som säger till backend att skicka NDJSON-progress.
+		xhr.setRequestHeader("x-import-progress", "1");
+		xhr.responseType = "text";
+
+		// Hjälpvariabler för att kunna parsa NDJSON inkrementellt.
+		// "parsedLength" håller reda på hur mycket av responseText vi redan läst.
+		let parsedLength = 0;
+		let buffered = "";
+		let streamResult: BasicResponse<HistoricalImportResponse> | null = null;
+		let streamError: HistoricalImportError | null = null;
+
+		const handleStreamLine = (line: string) => {
+			if (!line) {
+				return;
+			}
+
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(line);
+			} catch {
+				return;
+			}
+
+			if (typeof parsed !== "object" || parsed === null) {
+				return;
+			}
+
+			const payload = parsed as {
+				type?: string;
+				phase?: string;
+				percentage?: number;
+				processedRows?: number;
+				totalRows?: number;
+				result?: BasicResponse<HistoricalImportResponse>;
+				message?: string;
+				data?: HistoricalImportErrorData;
+			};
+
+			if (payload.type === "progress") {
+				// Backend skickar progress-event för validating/inserting.
+				// I dessa faser betraktas filen redan som 100% uppladdad.
+				const phase = payload.phase === "validating" ? "validating" : "inserting";
+				onUploadProgress?.({
+					phase,
+					loadedBytes: file.size,
+					totalBytes: file.size,
+					percentage: Math.max(0, Math.min(100, Math.round(payload.percentage ?? 0))),
+					processedRows:
+						typeof payload.processedRows === "number" ? payload.processedRows : undefined,
+					totalRows: typeof payload.totalRows === "number" ? payload.totalRows : undefined,
+				});
+				return;
+			}
+
+			if (payload.type === "result" && payload.result) {
+				// Slutresultat från backend (status + statistik).
+				streamResult = payload.result;
+				return;
+			}
+
+			if (payload.type === "error") {
+				// Streamat fel mappas till samma custom-error som övriga importfel.
+				const details = Array.isArray(payload.data?.errors)
+					? payload.data.errors.filter((entry): entry is string => typeof entry === "string")
+					: [];
+				streamError = new HistoricalImportError(
+					payload.message || "Import misslyckades",
+					details,
+				);
+			}
+		};
+
+		xhr.upload.onprogress = (event) => {
+			if (!event.lengthComputable || event.total <= 0) {
+				return;
+			}
+
+			// Ren nätverksuppladdning: hur många bytes browsern skickat till servern.
+			onUploadProgress?.({
+				phase: "uploading",
+				loadedBytes: event.loaded,
+				totalBytes: event.total,
+				percentage: Math.min(100, Math.round((event.loaded / event.total) * 100)),
+			});
+		};
+
+		xhr.onprogress = () => {
+			// Läs endast tillkommet textsegment sedan förra onprogress.
+			const chunk = xhr.responseText.slice(parsedLength);
+			parsedLength = xhr.responseText.length;
+			if (!chunk) {
+				return;
+			}
+
+			// NDJSON kan komma i ofullständiga bitar, därför buffer + rad-split.
+			buffered += chunk;
+			const lines = buffered.split("\n");
+			buffered = lines.pop() ?? "";
+
+			for (const line of lines) {
+				handleStreamLine(line.trim());
+			}
+		};
+
+		xhr.onerror = () => {
+			reject(new Error("Request failed"));
+		};
+
+		xhr.onload = () => {
+			// Om sista chunk saknar newline försöker vi ändå parsa den här.
+			if (buffered.trim()) {
+				handleStreamLine(buffered.trim());
+			}
+
+			if (streamError) {
+				reject(streamError);
+				return;
+			}
+
+			if (streamResult) {
+				resolve(streamResult);
+				return;
+			}
+
+			let result: BasicResponse<HistoricalImportResponse> & {
+				data?: HistoricalImportErrorData;
+			};
+
+			try {
+				// Fallback: om backend inte streamar event försöker vi läsa vanlig JSON-respons.
+				result = JSON.parse(xhr.responseText || "{}") as BasicResponse<HistoricalImportResponse> & {
+					data?: HistoricalImportErrorData;
+				};
+			} catch {
+				reject(new Error("Import misslyckades: ogiltigt serversvar"));
+				return;
+			}
+
+			if (xhr.status < 200 || xhr.status >= 300) {
+				const details = Array.isArray(result.data?.errors)
+					? result.data.errors.filter((entry): entry is string => typeof entry === "string")
+					: [];
+
+				reject(new HistoricalImportError(result.message || "Import misslyckades", details));
+				return;
+			}
+
+			resolve(result);
+		};
+
+		xhr.send(formData);
+	});
 };
