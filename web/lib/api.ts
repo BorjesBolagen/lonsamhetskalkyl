@@ -439,6 +439,19 @@ export const importHistoricalCSV = async (
 		};
 
 		xhr.onload = () => {
+			// Vissa miljöer (t.ex. produktion bakom proxy/CDN) kan buffra hela
+			// streamen och leverera allt först vid onload. Då har onprogress inte
+			// hunnit processa något, så vi tar hand om kvarvarande text här.
+			const remainingChunk = xhr.responseText.slice(parsedLength);
+			if (remainingChunk) {
+				buffered += remainingChunk;
+				const lines = buffered.split("\n");
+				buffered = lines.pop() ?? "";
+				for (const line of lines) {
+					handleStreamLine(line.trim());
+				}
+			}
+
 			// Om sista chunk saknar newline försöker vi ändå parsa den här.
 			if (buffered.trim()) {
 				handleStreamLine(buffered.trim());
@@ -464,7 +477,7 @@ export const importHistoricalCSV = async (
 					data?: HistoricalImportErrorData;
 				};
 			} catch {
-				reject(new Error("Import misslyckades: ogiltigt serversvar"));
+				reject(new Error(`Import misslyckades: ogiltigt serversvar (HTTP ${xhr.status})`));
 				return;
 			}
 
