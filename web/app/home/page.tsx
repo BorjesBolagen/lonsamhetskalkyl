@@ -93,7 +93,7 @@ export default function Home() {
   const STANDRD_FLM = 19.2;
 
   const AREA = {
-    linköping: true,
+    linkoping: true,
     vaxjo: false,
     sundsvall: true,
     jonkoping: false
@@ -126,13 +126,12 @@ export default function Home() {
     return 100;
   }
 
-  function areaInLine(lineName: string): boolean {
+    function areaInLine(lineName: string): boolean {
     return Object.entries(AREA).some(([area, isActive]) => {
       if (!isActive) return false;
 
     return lineName.toLowerCase().includes(area);
-  });
-}
+  })};
 
   // DATA
   const linje1: Ekipage[] = [];
