@@ -8,6 +8,8 @@ export const colors = {
   white: "#ffffff",
   black: "#000000",
   lightGray: "#f0f0f0",
+  logoGreen: "#007A33",
+  logoYellow: "#F5C400"
 };
 
 // Border-stil

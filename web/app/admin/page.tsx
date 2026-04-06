@@ -90,7 +90,7 @@ export default function Admin() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
+    <div className="min-h-screen flex flex-col bg-[#EEEEEE]">
       
       {/* Wrapper som tvingar navigationsbaren att alltid ligga FRAMFÖR alla modaler */}
       <div className="relative z-[60]">

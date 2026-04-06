@@ -39,7 +39,7 @@ export default function Settings() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
+    <div className="min-h-screen flex flex-col bg-[#EEEEEE]">
       
       {/* Wrapper för navigationsbaren så den ligger överst */}
       <div className="relative z-[60]">

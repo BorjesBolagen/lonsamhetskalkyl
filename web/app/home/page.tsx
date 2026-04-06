@@ -89,7 +89,7 @@ export default function Home() {
   const lines: Array<Ekipage>[] = [linje1, linje2, linje3];
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
+    <div className="min-h-screen flex flex-col bg-[#EEEEEE]">
       <Navigation currentPage="home" />
 
       <main className="flex-grow p-6 flex gap-6">
