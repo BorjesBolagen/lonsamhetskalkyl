@@ -191,17 +191,28 @@ export const deleteUser = async (id: string): Promise<BasicResponse<null>> => {
 }
 
 /**
- * Hämtar lista över ekipage (fordon/transport-enheter).
-*/
-export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> => {
-	const response = await fetch("/api/ilog/equipages", { method: "GET" });
+ * Hämtar alla iLog-zoner for aktuell grupp.
+ */
+export const getIlogZones = async (
+	date: string,
+	withEquipages: boolean = false
+): Promise<IlogResponse<ConsignmentListItem[]>> => {
+	const params = new URLSearchParams({
+		date,
+		withEquipages: String(withEquipages), // convert to "true"/"false"
+	});
+
+	const response = await fetch(`/api/ilog/zones?${params.toString()}`, {
+		method: "GET",
+	});
 
 	if (!response.ok) {
 		throw new Error("Request failed: " + (await response.text()));
 	}
 
-	return (await response.json()) as IlogResponse<EquipageItem[]>;
+	return (await response.json()) as IlogResponse<ConsignmentListItem[]>;
 };
+
 
 /**
  * Hämtar alla iLog-linjer for aktuell grupp.
@@ -214,6 +225,19 @@ export const getIlogLines = async (): Promise<IlogResponse<LineItem[]>> => {
 	}
 
 	return (await response.json()) as IlogResponse<LineItem[]>;
+};
+
+/**
+ * Hämtar lista över ekipage (fordon/transport-enheter).
+*/
+export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> => {
+	const response = await fetch("/api/ilog/equipages", { method: "GET" });
+
+	if (!response.ok) {
+		throw new Error("Request failed: " + (await response.text()));
+	}
+
+	return (await response.json()) as IlogResponse<EquipageItem[]>;
 };
 
 /**

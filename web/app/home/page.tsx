@@ -1,12 +1,18 @@
 "use client";
 
-import { getIlogLines } from "../../lib/api";
+import { getIlogLines, getIlogZones } from "../../lib/api";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useEffect, useState } from "react";
 import LineCard from "../../components/LineCard";
 import Card from "../../components/Card";
 
+import district from "../settings/page";
+
+/* TODO */
+// Få områden från databasen
+// Filtrera Linjer beroende på Området.
+// Hämta Ekipagage på Linjer
 class Line {
     private id: number;
     private name: string;
@@ -43,51 +49,67 @@ class Line {
     }
   }
 
-  class Ekipage {
-    private id: string;
-    private line: string;
-    private price: number;
-    private capacity: number;
-    private leveransstruktur: string;
+class Ekipage {
+  private id: string;
+  private line: string;
+  private price: number;
+  private capacity: number;
+  private leveransstruktur: string;
 
-    public constructor(
-      id: string,
-      line: string,
-      price: number,
-      capacity: number,
-      leveransstruktur: string
-    ) {
-      this.id = id;
-      this.line = line;
-      this.price = price;
-      this.capacity = capacity;
-      this.leveransstruktur = leveransstruktur;
-    }
-
-    public getId(): string {
-      return this.id;
-    }
-
-    public getLine(): string {
-      return this.line;
-    }
-
-    public getPrice(): number {
-      return this.price;
-    }
-
-    public getCapacity(): number {
-      return this.capacity;
-    }
+  public constructor(
+    id: string,
+    line: string,
+    price: number,
+    capacity: number,
+    leveransstruktur: string
+  ) {
+    this.id = id;
+    this.line = line;
+    this.price = price;
+    this.capacity = capacity;
+    this.leveransstruktur = leveransstruktur;
   }
+
+  public getId(): string {
+    return this.id;
+  }
+
+  public getLine(): string {
+    return this.line;
+  }
+
+  public getPrice(): number {
+    return this.price;
+  }
+
+  public getCapacity(): number {
+    return this.capacity;
+  }
+}
+  const OMRÅDEN: string[] =  ["Stockholm", "Linköping", "Default"]
+
 
 export default function Home() {
   const STANDRD_FLM = 19.2;
 
-  // STATE
+  const AREA = {
+    linköping: true,
+    vaxjo: false,
+    sundsvall: true,
+    jonkoping: false
+  };
+
+  /* STATES */
   const [clickedButton, setClickedButton] = useState<Ekipage | null>(null);
   const [manualValue, setManualValue] = useState(15000);
   const [value, setValue] = useState("");
+
+  // Zones 
+  const [zoneData, setZoneData] = useState<String[]>([]);
+  const [loadingZones, setLoadingZones] = useState(false);
+  const [zoneError, setZoneError] = useState("");
+
+  // Lines
   const [linesData, setLinesData] = useState<Line[]>([]);
   const [loadingLines, setLoadingLines] = useState(false);
   const [lineError, setLineError] = useState("");
@@ -103,6 +125,14 @@ export default function Home() {
     }
     return 100;
   }
+
+  function areaInLine(lineName: string): boolean {
+    return Object.entries(AREA).some(([area, isActive]) => {
+      if (!isActive) return false;
+
+    return lineName.toLowerCase().includes(area);
+  });
+}
 
   // DATA
   const linje1: Ekipage[] = [];
@@ -128,6 +158,33 @@ export default function Home() {
 
   const lines: Array<Ekipage>[] = [linje1, linje2, linje3];
 
+  const loadDistricts = async () => {
+    try {
+      
+    } catch (error) {
+      console.log(error);
+    }
+    // TODO: implement error catch
+  }
+  const loadZones = async () => {
+    // TODO: implement this, shit not working...
+    try {
+      setLoadingZones(true);
+      setZoneError("");
+
+      const response = await getIlogZones("20260406", false);
+
+      const zones = (response.data ?? []).map(z => z.receiver);
+      setZoneData(zones);
+
+      setZoneData(zones)
+    } catch (error) {
+      setZoneError("Failed to load zones, try again");
+    } finally {
+      setLoadingZones(false);
+    }
+  };
+
   const loadLines = async () => {
       try {
         setLoadingLines(true);
@@ -135,10 +192,13 @@ export default function Home() {
 
         const response = await getIlogLines();
         
-        const lines = (response.data ?? []).map((line) => new Line(line.id, line.name, line.fromArea, line.toArea));
+
+        const lines = (response.data ?? [])
+          .map(line => new Line(line.id, line.name, line.fromArea, line.toArea))
+          .filter(line => areaInLine(line.getName()));
+
 
         setLinesData(lines);
-        
       } catch (error) {
         setLineError("Failed to load lines, try again");
       } finally {
@@ -148,7 +208,9 @@ export default function Home() {
 
   useEffect(() => {
     loadLines();
+    //loadZones();
   }, []);
+
 
   return (
     <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
@@ -179,6 +241,7 @@ export default function Home() {
               ))}
             </LineCard>
           ))}
+
         </div>
 
         <div className="w-80 space-y-6">
@@ -223,6 +286,8 @@ export default function Home() {
             </div>
           )}
 
+
+          {/* Linjer från iLog*/}
           <button onClick={loadLines}>Ladda linjer</button>
 
           <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
@@ -233,18 +298,20 @@ export default function Home() {
             {!loadingLines && !lineError && linesData.length > 0 && (
               <ul className="mt-3 space-y-2 text-sm">
                 {linesData.map((line) => (
-                  <li key={line.getId()} className="border rounded p-2 bg-gray-50">
-                    <p><strong>{line.getName()}</strong></p>
-                    <p>ID: {line.getId()}</p>
-                  </li>
+                  <LineCard 
+                  key={line.getId()}
+                  title={line.getName()}>
+                    <li key={line.getId()} className="border rounded p-2 bg-gray-50">
+                      <p>ID: {line.getId()}</p>
+                    </li>
+                  </LineCard>
                 ))}
               </ul>
             )}
           </div>
+
         </div>
-
       </main>
-
       <Footer />
     </div>
   );
