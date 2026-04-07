@@ -1,15 +1,11 @@
 "use client";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { useRef, useState } from "react";
-import {
-  HistoricalImportError,
-  importHistoricalCSV,
-  sendMessage,
-  signUpProcedure,
-} from "@/lib/api";
+import { useState } from "react";
+import { sendMessage, signUpProcedure } from "@/lib/api";
 import { Enums, Constants } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
+import { useHistoricalImport } from "./useHistoricalImport";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 const mockTrafficLeaders = [
@@ -44,7 +40,6 @@ type TrafficLeader = (typeof mockTrafficLeaders)[number];
 export default function Admin() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isMessagePopupOpen, setIsMessagePopupOpen] = useState(false);
-  const [isCSVImportPopupOpen, setisCSVImportPopupOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<TrafficLeader | null>(null);
 
   const [adminMessage, setAdminMessage] = useState("");
@@ -57,17 +52,19 @@ export default function Admin() {
   const [signupPassword, setSignupPassword] = useState("");
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [signupResponse, setSignupResponse] = useState("");
-  const [isImportingCSV, setIsImportingCSV] = useState(false);
-  const [csvImportResponse, setCSVImportResponse] = useState("");
-  const [csvImportErrors, setCSVImportErrors] = useState<string[]>([]);
-  // UI-status för importflödet: vilken fas vi är i, hur långt servern kommit och vilken förklarande text användaren ska se.
-  const [csvImportStage, setCSVImportStage] = useState("");
-  const [csvImportProgress, setCSVImportProgress] = useState(0);
-  const [csvImportProgressText, setCSVImportProgressText] = useState("");
-  // Progressbaren visas endast när servern faktiskt bearbetar data (inte vid ren filuppladdning).
-  const [showCSVServerProgress, setShowCSVServerProgress] = useState(false);
-  // Dold filinput triggas från en stylad knapp för bättre UX.
-  const csvInputRef = useRef<HTMLInputElement | null>(null);
+  const {
+    csvInputRef,
+    isCSVImportPopupOpen,
+    isImportingCSV,
+    csvImportStage,
+    csvImportProgress,
+    showCSVServerProgress,
+    csvOutputText,
+    openCSVImportPopup,
+    closeCSVImportPopup,
+    handleCSVUploadClick,
+    handleCSVSelected,
+  } = useHistoricalImport();
 
   // State för att visa/dölja lösenordet när admin skapar en ny användare
   const [showSignupPassword, setShowSignupPassword] = useState(false);
@@ -169,137 +166,6 @@ export default function Admin() {
       setIsSigningUp(false);
     }
   };
-
-  const handleCSVUploadClick = () => {
-    // Öppnar systemets filväljare via den dolda inputen.
-    csvInputRef.current?.click();
-  };
-
-  const openCSVImportPopup = () => {
-    // Varje gång popupen öppnas nollställs tidigare importresultat.
-    setCSVImportResponse("");
-    setCSVImportErrors([]);
-    setCSVImportStage("");
-    setCSVImportProgress(0);
-    setCSVImportProgressText("");
-    setShowCSVServerProgress(false);
-    setisCSVImportPopupOpen(true);
-  };
-
-  const closeCSVImportPopup = () => {
-    // Samma reset vid stängning så att nästa importstart alltid sker från rent läge.
-    setisCSVImportPopupOpen(false);
-    setIsImportingCSV(false);
-    setCSVImportResponse("");
-    setCSVImportErrors([]);
-    setCSVImportStage("");
-    setCSVImportProgress(0);
-    setCSVImportProgressText("");
-    setShowCSVServerProgress(false);
-  };
-
-  const handleCSVSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Enkel klientvalidering innan vi börjar belasta backend.
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      setCSVImportResponse("Fel: välj en giltig .csv-fil.");
-      setCSVImportErrors([]);
-      e.target.value = "";
-      return;
-    }
-
-    setIsImportingCSV(true);
-    setCSVImportResponse("");
-    setCSVImportErrors([]);
-    setCSVImportProgress(0);
-    setCSVImportProgressText("");
-    setShowCSVServerProgress(false);
-    setCSVImportStage("Läser filen...");
-
-    try {
-      setCSVImportStage("Skickar till servern...");
-      const result = await importHistoricalCSV(file, (progress) => {
-        // Fas 1: filen laddas upp till API-routen.
-        // Ingen serverprogressbar här, eftersom servern ännu inte validerar/sparar rader.
-        if (progress.phase === "uploading") {
-          setCSVImportStage("Laddar upp filen...");
-          setCSVImportProgress(0);
-          setCSVImportProgressText("");
-          return;
-        }
-
-        const processedRows = progress.processedRows ?? 0;
-        const totalRows = progress.totalRows ?? 0;
-        // Så snart vi får "validating" eller "inserting" vet vi att serverfasen är igång.
-        setShowCSVServerProgress(true);
-
-        if (progress.phase === "validating") {
-          // Fas 2: validering får bara 0-5% av baren.
-          // Idén är att valideringen ska synas men inte dominera upplevelsen.
-          const serverPhaseProgress = Math.round(
-            (progress.percentage / 100) * 5,
-          );
-          setCSVImportProgress(serverPhaseProgress);
-          setCSVImportStage("Validerar rader på servern...");
-          setCSVImportProgressText(
-            `${processedRows} av ${totalRows} rader validerade`,
-          );
-          return;
-        }
-
-        // Fas 3: databasinsättning får 5-100% av baren.
-        // Denna del tar normalt längst tid och ska därför få huvuddelen av progressutrymmet.
-        const insertPhaseProgress =
-          5 + Math.round((progress.percentage / 100) * 95);
-        setCSVImportProgress(insertPhaseProgress);
-        setCSVImportStage("Sparar rader i databasen...");
-        setCSVImportProgressText(
-          `${processedRows} av ${totalRows} rader sparade`,
-        );
-      });
-      setShowCSVServerProgress(true);
-      setCSVImportProgress(100);
-      // Sluttext i progressrutan.
-      setCSVImportProgressText("Import slutförd");
-      const stats = result.data;
-
-      if (!stats) {
-        setCSVImportResponse(
-          "Import slutförd, men ingen statistik returnerades.",
-        );
-      } else {
-        setCSVImportResponse(
-          `Import klar. Rader i fil: ${stats.rowsFound}, sparade rader: ${stats.insertedRows}.`,
-        );
-      }
-      setCSVImportErrors([]);
-    } catch (error) {
-      setCSVImportStage("Importen misslyckades.");
-      const message = error instanceof Error ? error.message : "Oväntat fel";
-      setCSVImportResponse(`Import misslyckades: ${message}`);
-
-      if (error instanceof HistoricalImportError) {
-        setCSVImportErrors(error.details);
-      } else {
-        setCSVImportErrors([]);
-      }
-    } finally {
-      setIsImportingCSV(false);
-      // Tillåter att samma fil väljs igen efter en körning.
-      e.target.value = "";
-    }
-  };
-
-  const csvOutputText = csvImportResponse
-    ? [
-        csvImportResponse,
-        ...(csvImportErrors.length > 0
-          ? ["", "Detaljer:", ...csvImportErrors]
-          : []),
-      ].join("\n")
-    : "";
 
   return (
     <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
@@ -566,23 +432,21 @@ export default function Admin() {
 
               {showCSVServerProgress && (
                 <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 space-y-3">
-                  <div className="flex items-center gap-3 text-sm text-gray-700">
-                    {/* Spinner visas enbart medan importen pågår aktivt. */}
-                    {isImportingCSV && (
-                      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#446E30] border-t-transparent" />
-                    )}
-                    <span>{csvImportStage || "Redo att importera."}</span>
+                  <div className="flex items-center justify-between text-sm text-gray-700">
+                    <div className="flex items-center gap-3">
+                      {isImportingCSV && (
+                        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#446E30] border-t-transparent" />
+                      )}
+                      <span>{csvImportStage || "Redo att importera."}</span>
+                    </div>
+                    <span className="font-medium">{csvImportProgress}%</span>
                   </div>
-                  <div className="space-y-1">
+                  <div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
                       <div
                         className="h-full rounded-full bg-[#446E30] transition-all duration-150 ease-out"
                         style={{ width: `${csvImportProgress}%` }}
                       />
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>{csvImportProgressText}</span>
-                      <span>{csvImportProgress}%</span>
                     </div>
                   </div>
                 </div>

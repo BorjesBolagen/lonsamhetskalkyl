@@ -160,6 +160,65 @@ export type Database = {
           },
         ]
       }
+      import_jobs: {
+        Row: {
+          admin_id: string
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          inserted_row_count: number | null
+          rows_failed: number | null
+          rows_processed: number | null
+          rows_total: number | null
+          rows_valid: number | null
+          status: string
+          storage_path: string | null
+          updated_at: string | null
+          validation_errors: string[] | null
+        }
+        Insert: {
+          admin_id: string
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          inserted_row_count?: number | null
+          rows_failed?: number | null
+          rows_processed?: number | null
+          rows_total?: number | null
+          rows_valid?: number | null
+          status?: string
+          storage_path?: string | null
+          updated_at?: string | null
+          validation_errors?: string[] | null
+        }
+        Update: {
+          admin_id?: string
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          inserted_row_count?: number | null
+          rows_failed?: number | null
+          rows_processed?: number | null
+          rows_total?: number | null
+          rows_valid?: number | null
+          status?: string
+          storage_path?: string | null
+          updated_at?: string | null
+          validation_errors?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_jobs_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "User"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           created_at: string
