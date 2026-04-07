@@ -2,80 +2,22 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { getCurrentlySignedInUser, setFilters } from "../../lib/api";
+import {
+  AREA_KEYS,
+  AREA_OPTIONS,
+  AreaState,
+  DEFAULT_AREAS,
+  parseAreaState,
+} from "../../lib/areas";
 import { Json } from "../../lib/supabaseServerSchema";
 import { useEffect, useState } from "react";
 
-const AREA_OPTIONS = {
-  linkoping: "Linköping",
-  vaxjo: "Växjö",
-  sundsvall: "Sundsvall",
-  jonkoping: "Jönköping",
-  stockholm: "Stockholm",
-  goteborg: "Göteborg",
-  malmo: "Malmö",
-} as const;
-
-type DistrictKey = keyof typeof AREA_OPTIONS;
-type DistrictState = Record<DistrictKey, boolean>;
 type ThemeMode = "light" | "dark";
-
-const DEFAULT_DISTRICTS: DistrictState = {
-  linkoping: false,
-  vaxjo: false,
-  sundsvall: false,
-  jonkoping: false,
-  stockholm: false,
-  goteborg: false,
-  malmo: false,
-};
 
 const DEFAULT_THEME: ThemeMode = "light";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseDistricts(filters: unknown): DistrictState {
-  const fromAreas =
-    isPlainObject(filters) && isPlainObject(filters.areas)
-      ? filters.areas
-      : null;
-  const source = fromAreas ?? (isPlainObject(filters) ? filters : null);
-
-  if (!source) {
-    return DEFAULT_DISTRICTS;
-  }
-
-  return {
-    linkoping:
-      typeof source.linkoping === "boolean"
-        ? source.linkoping
-        : DEFAULT_DISTRICTS.linkoping,
-    vaxjo:
-      typeof source.vaxjo === "boolean"
-        ? source.vaxjo
-        : DEFAULT_DISTRICTS.vaxjo,
-    sundsvall:
-      typeof source.sundsvall === "boolean"
-        ? source.sundsvall
-        : DEFAULT_DISTRICTS.sundsvall,
-    jonkoping:
-      typeof source.jonkoping === "boolean"
-        ? source.jonkoping
-        : DEFAULT_DISTRICTS.jonkoping,
-    stockholm:
-      typeof source.stockholm === "boolean"
-        ? source.stockholm
-        : DEFAULT_DISTRICTS.stockholm,
-    goteborg:
-      typeof source.goteborg === "boolean"
-        ? source.goteborg
-        : DEFAULT_DISTRICTS.goteborg,
-    malmo:
-      typeof source.malmo === "boolean"
-        ? source.malmo
-        : DEFAULT_DISTRICTS.malmo,
-  };
 }
 
 function parseTheme(filters: unknown): ThemeMode {
@@ -117,10 +59,11 @@ export default function Settings() {
   } | null>(null);
 
   // States för områden
-  const [districts, setDistricts] = useState<DistrictState>(DEFAULT_DISTRICTS);
+  const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
   const [theme, setTheme] = useState<ThemeMode>(DEFAULT_THEME);
 
   useEffect(() => {
+    // Profile info + saved filter/theme preferences from Supabase.
     async function loadCurrentUser() {
       try {
         setIsLoadingProfile(true);
@@ -150,7 +93,7 @@ export default function Settings() {
           setStoredFilters({});
         }
 
-        setDistricts(parseDistricts(user.filters));
+        setDistricts(parseAreaState(user.filters));
         setTheme(parseTheme(user.filters));
       } catch (error) {
         setFiltersStatus({
@@ -165,7 +108,7 @@ export default function Settings() {
     loadCurrentUser();
   }, []);
 
-  const handleSaveDistricts = async () => {
+  const handleSaveSettings = async () => {
     if (!userId) {
       setFiltersStatus({
         type: "error",
@@ -178,6 +121,7 @@ export default function Settings() {
       setIsSavingFilters(true);
       setFiltersStatus(null);
 
+      // Keep other filter fields and only overwrite areas + theme from this form.
       const nextFilters: Record<string, unknown> = {
         ...storedFilters,
         areas: districts,
@@ -186,11 +130,11 @@ export default function Settings() {
 
       await setFilters(userId, nextFilters as Json);
       setStoredFilters(nextFilters);
-      setFiltersStatus({ type: "success", message: "Områdesfilter sparade." });
+      setFiltersStatus({ type: "success", message: "Inställningar sparade." });
     } catch (error) {
       setFiltersStatus({
         type: "error",
-        message: "Kunde inte spara områdesfilter.",
+        message: "Kunde inte spara inställningar.",
       });
     } finally {
       setIsSavingFilters(false);
@@ -348,12 +292,10 @@ export default function Settings() {
                     </p>
                   )}
                   <div className="flex flex-col space-y-4">
-                    {Object.keys(districts).map((dist) => {
-                      const distKey = dist as DistrictKey;
-
+                    {AREA_KEYS.map((distKey) => {
                       return (
                         <label
-                          key={dist}
+                          key={distKey}
                           className="flex items-center justify-between cursor-pointer border-b border-gray-200 pb-2 w-full hover:bg-gray-50 transition-colors px-2 rounded"
                         >
                           <span className="font-bold text-lg text-gray-700">
@@ -380,24 +322,6 @@ export default function Settings() {
                         </label>
                       );
                     })}
-                  </div>
-
-                  <div className="mt-5 flex items-center gap-4">
-                    <button
-                      onClick={handleSaveDistricts}
-                      disabled={isLoadingProfile || isSavingFilters}
-                      className="bg-[#75C07A] hover:bg-green-800 disabled:bg-gray-400 text-white font-bold py-2 px-5 rounded-lg transition-colors duration-300"
-                    >
-                      {isSavingFilters ? "Sparar..." : "Spara områden"}
-                    </button>
-
-                    {filtersStatus && (
-                      <span
-                        className={`text-sm font-medium ${filtersStatus.type === "success" ? "text-green-700" : "text-red-700"}`}
-                      >
-                        {filtersStatus.message}
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -428,10 +352,24 @@ export default function Settings() {
                       Dark
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Valt tema sparas i filters och kan användas när dark mode
-                    implementeras.
-                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-gray-200 flex flex-col gap-3">
+                  <button
+                    onClick={handleSaveSettings}
+                    disabled={isLoadingProfile || isSavingFilters}
+                    className="w-full bg-[#75C07A] hover:bg-green-800 disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md"
+                  >
+                    {isSavingFilters ? "Sparar..." : "Spara inställningar"}
+                  </button>
+
+                  {filtersStatus && (
+                    <span
+                      className={`text-sm font-medium ${filtersStatus.type === "success" ? "text-green-700" : "text-red-700"}`}
+                    >
+                      {filtersStatus.message}
+                    </span>
+                  )}
                 </div>
               </div>
             )}

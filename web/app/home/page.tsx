@@ -1,61 +1,25 @@
 "use client";
 
-import { getIlogLines, getIlogZones } from "../../lib/api";
+import { getCurrentlySignedInUser, getIlogLines } from "../../lib/api";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useEffect, useState } from "react";
 import LineCard from "../../components/LineCard";
 import Card from "../../components/Card";
+import {
+  AREA_OPTIONS,
+  AreaKey,
+  AreaState,
+  DEFAULT_AREAS,
+  parseAreaState,
+} from "../../lib/areas";
 
-
-/* Försöka med datainhämtning */ 
-import { createClient, SupabaseClient } from "@supabase/supabase-js"
-
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-);
-
-/* TODO */
-// Få områden från databasen
-// Filtrera Linjer beroende på Området.
-// Hämta Ekipagage på Linjer
-
-class Line {
-  private id: number;
-  private name: string;
-  private fromArea: string;
-  private toArea: string;
-
-  public constructor (
-    id: number,
-    name: string,
-    fromArea: string,
-    toArea: string
-
-  ) {
-    this.id = id;
-    this.name = name;
-    this.fromArea = fromArea;
-    this.toArea = toArea;
-  }
-
-  public getId(): number {
-    return this.id;
-  }
-
-  public getName(): string {
-    return this.name;
-  }
-
-  public getFromArea(): string {
-    return this.fromArea;
-  }
-
-  public getToArea(): string {
-    return this.toArea;
-  }
-}
+type IlogLine = {
+  id: number;
+  name: string;
+  fromArea: string;
+  toArea: string;
+};
 
 class Ekipage {
   private id: string;
@@ -69,7 +33,7 @@ class Ekipage {
     line: string,
     price: number,
     capacity: number,
-    leveransstruktur: string
+    leveransstruktur: string,
   ) {
     this.id = id;
     this.line = line;
@@ -94,35 +58,29 @@ class Ekipage {
     return this.capacity;
   }
 }
-  const OMRÅDEN: string[] =  ["Stockholm", "Linköping", "Default"]
 
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+}
 
 export default function Home() {
   const STANDRD_FLM = 19.2;
 
-  const AREA = {
-    linkoping: true,
-    vaxjo: false,
-    sundsvall: true,
-    jonkoping: false
-  };
-
-  /* STATES */
   const [clickedButton, setClickedButton] = useState<Ekipage | null>(null);
   const [manualValue, setManualValue] = useState(15000);
   const [value, setValue] = useState("");
 
-  // Zones 
-  const [zoneData, setZoneData] = useState<String[]>([]);
-  const [loadingZones, setLoadingZones] = useState(false);
-  const [zoneError, setZoneError] = useState("");
+  const [selectedAreas, setSelectedAreas] = useState<AreaState>(DEFAULT_AREAS);
+  const [areasLoaded, setAreasLoaded] = useState(false);
 
-  // Lines
-  const [linesData, setLinesData] = useState<Line[]>([]);
+  const [linesData, setLinesData] = useState<IlogLine[]>([]);
   const [loadingLines, setLoadingLines] = useState(false);
   const [lineError, setLineError] = useState("");
+  const [hasLoadedLines, setHasLoadedLines] = useState(false);
 
-  // FUNCTIONS
   function convertCapacityToPixels(capacity: number) {
     return (capacity / STANDRD_FLM) * 100;
   }
@@ -134,87 +92,136 @@ export default function Home() {
     return 100;
   }
 
-    function areaInLine(lineName: string): boolean {
-    return Object.entries(AREA).some(([area, isActive]) => {
-      if (!isActive) return false;
+  function lineMatchesSelectedAreas(line: IlogLine): boolean {
+    const activeAreas = Object.entries(selectedAreas).filter(
+      ([, isActive]) => isActive,
+    );
 
-    return lineName.toLowerCase().includes(area);
-  })};
+    if (activeAreas.length === 0) {
+      return false;
+    }
 
-  // DATA
-  const linje1: Ekipage[] = [];
-  const linje2: Ekipage[] = [];
-  const linje3: Ekipage[] = [];
+    const fromArea = normalizeText(line.fromArea);
+    return activeAreas.some(([areaKey]) => {
+      const areaLabel = normalizeText(AREA_OPTIONS[areaKey as AreaKey]);
+      return fromArea.includes(areaLabel);
+    });
+  }
 
-  const Ekipage1 = new Ekipage("L20", "Linköping - Stockholm", 12000, 12.4, "null");
-  const Ekipage2 = new Ekipage("L21", "Linköping - Stockholm", 13000, 19.2, "null");
-  const Ekipage3 = new Ekipage("L22", "Linköping - Stockholm", 18500, 19.2, "null");
+  const staticLine1: Ekipage[] = [];
+  const staticLine2: Ekipage[] = [];
+  const staticLine3: Ekipage[] = [];
+
+  const Ekipage1 = new Ekipage(
+    "L20",
+    "Linköping - Stockholm",
+    12000,
+    12.4,
+    "null",
+  );
+  const Ekipage2 = new Ekipage(
+    "L21",
+    "Linköping - Stockholm",
+    13000,
+    19.2,
+    "null",
+  );
+  const Ekipage3 = new Ekipage(
+    "L22",
+    "Linköping - Stockholm",
+    18500,
+    19.2,
+    "null",
+  );
 
   const Ekipage4 = new Ekipage("L23", "Linköping - Malmö", 22300, 6.1, "null");
   const Ekipage5 = new Ekipage("L24", "Linköping - Malmö", 9800, 15.6, "null");
   const Ekipage6 = new Ekipage("L25", "Linköping - Malmö", 14200, 5.3, "null");
 
-  const Ekipage7 = new Ekipage("L26", "Linköping - Jönköping", 7600, 10.9, "null");
-  const Ekipage8 = new Ekipage("L27", "Linköping - Jönköping", 5400, 8.2, "null");
-  const Ekipage9 = new Ekipage("L28", "Linköping - Jönköping", 19900, 5.4, "null");
-  const Ekipage10 = new Ekipage("L29", "Linköping - Jönköping", 2000, 15.8, "null");
+  const Ekipage7 = new Ekipage(
+    "L26",
+    "Linköping - Jönköping",
+    7600,
+    10.9,
+    "null",
+  );
+  const Ekipage8 = new Ekipage(
+    "L27",
+    "Linköping - Jönköping",
+    5400,
+    8.2,
+    "null",
+  );
+  const Ekipage9 = new Ekipage(
+    "L28",
+    "Linköping - Jönköping",
+    19900,
+    5.4,
+    "null",
+  );
+  const Ekipage10 = new Ekipage(
+    "L29",
+    "Linköping - Jönköping",
+    2000,
+    15.8,
+    "null",
+  );
 
-  linje1.push(Ekipage1, Ekipage2, Ekipage3);
-  linje2.push(Ekipage4, Ekipage5, Ekipage6);
-  linje3.push(Ekipage7, Ekipage8, Ekipage9, Ekipage10);
+  staticLine1.push(Ekipage1, Ekipage2, Ekipage3);
+  staticLine2.push(Ekipage4, Ekipage5, Ekipage6);
+  staticLine3.push(Ekipage7, Ekipage8, Ekipage9, Ekipage10);
 
-  const lines: Array<Ekipage>[] = [linje1, linje2, linje3];
-
-  const getData = async () => {
-    try {
-      const { data, error } = await supabase.from("messages").select("message");
-      console.log(data, error);
-      console.log(supabase.auth)
-    } catch (error) {
-      console.log(error);
-    }
-  }
-
-  const loadLines = async () => {
-      try {
-        setLoadingLines(true);
-        setLineError("");
-
-        const response = await getIlogLines();
-        
-        const lines = (response.data ?? [])
-          .map(line => new Line(line.id, line.name, line.fromArea, line.toArea))
-          .filter(line => areaInLine(line.getName()));
-
-
-        setLinesData(lines);
-      } catch (error) {
-        setLineError("Failed to load lines, try again");
-      } finally {
-        setLoadingLines(false);
-      }
-    };
+  const staticLines: Array<Ekipage>[] = [staticLine1, staticLine2, staticLine3];
 
   useEffect(() => {
-    loadLines();
-    getData();
-    //loadZones();
+    // Load user's saved area filters once so fetch button uses persisted settings.
+    async function loadCurrentUserSettings() {
+      try {
+        const response = await getCurrentlySignedInUser();
+        const user = response.data;
+
+        if (user) {
+          setSelectedAreas(parseAreaState(user.filters));
+        } else {
+          setSelectedAreas(DEFAULT_AREAS);
+        }
+      } catch (error) {
+        setSelectedAreas(DEFAULT_AREAS);
+      } finally {
+        setAreasLoaded(true);
+      }
+    }
+
+    loadCurrentUserSettings();
   }, []);
 
+  const loadLines = async () => {
+    try {
+      setLoadingLines(true);
+      setLineError("");
+      setHasLoadedLines(true);
+
+      const response = await getIlogLines();
+      // Filter only by origin area (fromArea), not destination.
+      const filteredLines = (response.data ?? []).filter((line: IlogLine) =>
+        lineMatchesSelectedAreas(line),
+      );
+
+      setLinesData(filteredLines);
+    } catch (error) {
+      setLineError("Kunde inte hämta filtrerade linjer, försök igen.");
+    } finally {
+      setLoadingLines(false);
+    }
+  };
 
   return (
-    
     <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
-      
       <Navigation currentPage="home" />
       <main className="flex-grow p-6 flex gap-6">
         <div className="flex-1 space-y-6">
-          {/* LINE CARDS */}
-          {lines.map((line) => (
-            <LineCard
-              key={line[0].getId()}
-              title={line[0].getLine()}
-            >
+          {staticLines.map((line) => (
+            <LineCard key={line[0].getId()} title={line[0].getLine()}>
               {line.map((ekipage) => (
                 <Card
                   key={ekipage.getId()}
@@ -232,17 +239,11 @@ export default function Home() {
               ))}
             </LineCard>
           ))}
-
         </div>
 
-        <div className="w-80 space-y-6">
-
-
-          {/* MANUAL INPUT */}
+        <div className="w-[40rem] space-y-6">
           <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-            <p className="mb-2 font-medium">
-              Manuellt värde: {manualValue}
-            </p>
+            <p className="mb-2 font-medium">Manuellt värde: {manualValue}</p>
 
             <form
               onSubmit={(e) => {
@@ -264,43 +265,76 @@ export default function Home() {
             </form>
           </div>
 
-          {/* INFO PANEL */}
           {clickedButton && (
             <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-              <h2 className="text-xl font-bold mb-4 border-b pb-2">
-                Detaljer
-              </h2>
+              <h2 className="text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
 
-              <p><strong>ID:</strong> {clickedButton.getId()}</p>
-              <p><strong>Linje:</strong> {clickedButton.getLine()}</p>
-              <p><strong>Pris:</strong> {clickedButton.getPrice()}</p>
+              <p>
+                <strong>ID:</strong> {clickedButton.getId()}
+              </p>
+              <p>
+                <strong>Linje:</strong> {clickedButton.getLine()}
+              </p>
+              <p>
+                <strong>Pris:</strong> {clickedButton.getPrice()}
+              </p>
             </div>
           )}
 
+          <div className="bg-white rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
+            <div>
+              <p className="font-medium text-gray-800">Aktuella linjer</p>
+              {!areasLoaded && (
+                <p className="text-sm text-gray-600 mt-1">
+                  Laddar dina sparade områden...
+                </p>
+              )}
+            </div>
 
-          {/* Linjer från iLog*/}
-          <button onClick={loadLines}>Ladda linjer</button>
+            <button
+              onClick={loadLines}
+              disabled={!areasLoaded || loadingLines}
+              className="w-full bg-[#75C07A] text-white px-4 py-3 rounded hover:bg-green-800 disabled:bg-gray-400 transition font-semibold"
+            >
+              {loadingLines
+                ? "Hämtar filtrerade linjer..."
+                : "Hämta filtrerade linjer"}
+            </button>
 
-          <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-            <p className="mb-2 font-medium">
-              Linjer från API: {loadingLines ? "Laddar..." : lineError ? lineError : linesData.length > 0 ? "Laddat!" : "Inga linjer"}
-            </p>
+            <div className="text-sm text-gray-700">
+              {!areasLoaded ? (
+                <p>Vänta tills inställningarna har laddats.</p>
+              ) : lineError ? (
+                <p className="text-red-700">{lineError}</p>
+              ) : !hasLoadedLines ? (
+                <p>Klicka på knappen för att ladda linjerna.</p>
+              ) : linesData.length > 0 ? (
+                <p>{linesData.length} filtrerade linjer hittades.</p>
+              ) : (
+                <p>Inga linjer matchade dina valda områden.</p>
+              )}
+            </div>
 
             {!loadingLines && !lineError && linesData.length > 0 && (
-              <ul className="mt-3 space-y-2 text-sm">
+              <div className="space-y-3">
                 {linesData.map((line) => (
-                  <LineCard 
-                  key={line.getId()}
-                  title={line.getName()}>
-                    <li key={line.getId()} className="border rounded p-2 bg-gray-50">
-                      <p>ID: {line.getId()}</p>
-                    </li>
+                  <LineCard key={line.id} title={line.name}>
+                    <div className="text-sm text-gray-700 space-y-1">
+                      <p>
+                        <strong>ID:</strong> {line.id}
+                      </p>
+                      <p>
+                        <strong>Från:</strong> {line.fromArea}
+                      </p>
+                      <p>
+                        <strong>Till:</strong> {line.toArea}
+                      </p>
+                    </div>
                   </LineCard>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
-
         </div>
       </main>
       <Footer />

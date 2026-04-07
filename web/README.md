@@ -52,6 +52,7 @@ components/
 
 lib/
 ├── api.ts                  # API-hjälpfunktioner (sendMessage)
+├── areas.ts                # Gemensam områdeskonfig (val i settings + filtrering i home)
 ├── supabaseServer.ts       # Supabase server-klient
 ├── readme.md               # Lib-dokumentation
 
@@ -62,6 +63,13 @@ styles/
 public/
 └── static files            # Publika assets
 ```
+
+## Områdesfilter (settings + home)
+
+- Områdesalternativ och default-värden hanteras centralt i `lib/areas.ts`.
+- Lägg till nya områden i `AREA_OPTIONS` och `DEFAULT_AREAS` i samma fil.
+- `settings` läser och sparar `filters.areas` via den delade modellen.
+- `home` hämtar linjer och filtrerar endast på linjens `fromArea` (startområde).
 
 ## API-Endpoints
 
