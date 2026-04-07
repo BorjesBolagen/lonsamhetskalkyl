@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -47,10 +47,29 @@ export type Database = {
         }
         Relationships: []
       }
+      calculation_medelse: {
+        Row: {
+          km_bucket: number
+          kndnto_medelse: number
+          vklfgrv: number
+        }
+        Insert: {
+          km_bucket: number
+          kndnto_medelse: number
+          vklfgrv: number
+        }
+        Update: {
+          km_bucket?: number
+          kndnto_medelse?: number
+          vklfgrv?: number
+        }
+        Relationships: []
+      }
       calculation_trappsteg: {
         Row: {
           forh_se_kundvis: number | null
           forh_se_radvis: number | null
+          km: number | null
           kndnto_medelse: number | null
           kndntofgrv: number
           kundnamn: string
@@ -60,6 +79,7 @@ export type Database = {
         Insert: {
           forh_se_kundvis?: number | null
           forh_se_radvis?: number | null
+          km?: number | null
           kndnto_medelse?: number | null
           kndntofgrv: number
           kundnamn: string
@@ -69,6 +89,7 @@ export type Database = {
         Update: {
           forh_se_kundvis?: number | null
           forh_se_radvis?: number | null
+          km?: number | null
           kndnto_medelse?: number | null
           kndntofgrv?: number
           kundnamn?: string
@@ -209,15 +230,7 @@ export type Database = {
           updated_at?: string | null
           validation_errors?: string[] | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "import_jobs_admin_id_fkey"
-            columns: ["admin_id"]
-            isOneToOne: false
-            referencedRelation: "User"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       messages: {
         Row: {
@@ -295,29 +308,32 @@ export type Database = {
       }
       User: {
         Row: {
-          areas: Json | null
           email: string
           email_verified: boolean | null
           filters: Json | null
+          first_name: string | null
           id: string
+          last_name: string | null
           role: Database["public"]["Enums"]["User_specialization_types"] | null
           threshold: number | null
         }
         Insert: {
-          areas?: Json | null
           email: string
           email_verified?: boolean | null
           filters?: Json | null
+          first_name?: string | null
           id?: string
+          last_name?: string | null
           role?: Database["public"]["Enums"]["User_specialization_types"] | null
           threshold?: number | null
         }
         Update: {
-          areas?: Json | null
           email?: string
           email_verified?: boolean | null
           filters?: Json | null
+          first_name?: string | null
           id?: string
+          last_name?: string | null
           role?: Database["public"]["Enums"]["User_specialization_types"] | null
           threshold?: number | null
         }

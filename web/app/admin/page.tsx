@@ -3,7 +3,11 @@ import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
 import { sendMessage, signUpProcedure } from "@/lib/api";
-import { Enums, Constants } from "@/lib/supabaseServerSchema";
+import {
+  Enums,
+  Constants,
+  TablesUpdate,
+} from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
 
@@ -48,6 +52,8 @@ export default function Admin() {
 
   type UserRole = Enums<"User_specialization_types">;
   const [role, setRole] = useState<UserRole | "">("");
+  const [signupFirstName, setSignupFirstName] = useState("");
+  const [signupLastName, setSignupLastName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [isSigningUp, setIsSigningUp] = useState(false);
@@ -127,7 +133,15 @@ export default function Admin() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!signupEmail.trim() || !signupPassword.trim() || role === "") return;
+    if (
+      !signupFirstName.trim() ||
+      !signupLastName.trim() ||
+      !signupEmail.trim() ||
+      !signupPassword.trim() ||
+      role === ""
+    ) {
+      return;
+    }
     setIsSigningUp(true);
 
     try {
@@ -146,10 +160,30 @@ export default function Admin() {
       if (error) throw error;
       if (!data.user) throw new Error("Kunde inte skapa användare");
 
-      // Update role in User table
+      const defaultFilters = {
+        areas: {
+          linkoping: false,
+          vaxjo: false,
+          sundsvall: false,
+          jonkoping: false,
+          stockholm: false,
+          goteborg: false,
+          malmo: false,
+        },
+        theme: "light",
+      };
+
+      const userUpdate: TablesUpdate<"User"> = {
+        role,
+        first_name: signupFirstName.trim(),
+        last_name: signupLastName.trim(),
+        filters: defaultFilters,
+      };
+
+      // Update role and profile information in User table
       const { error: updateError } = await supabase
         .from("User")
-        .update({ role })
+        .update(userUpdate)
         .eq("id", data.user.id);
 
       if (updateError) throw updateError;
@@ -158,6 +192,11 @@ export default function Admin() {
       setSignupResponse(
         `Skapade användare ${data.user.email}. Ett verifieringsmail har skickats. Kom ihåg att kolla skräpposten.`,
       );
+      setSignupFirstName("");
+      setSignupLastName("");
+      setSignupEmail("");
+      setSignupPassword("");
+      setRole("");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
@@ -327,6 +366,27 @@ export default function Admin() {
               Skapa ny användare
             </h3>
             <form onSubmit={handleSignup} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col bg-gray-50 p-3 rounded-lg shadow-sm">
+                  <input
+                    type="text"
+                    placeholder="Förnamn"
+                    value={signupFirstName}
+                    onChange={(e) => setSignupFirstName(e.target.value)}
+                    className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                  />
+                </div>
+                <div className="flex flex-col bg-gray-50 p-3 rounded-lg shadow-sm">
+                  <input
+                    type="text"
+                    placeholder="Efternamn"
+                    value={signupLastName}
+                    onChange={(e) => setSignupLastName(e.target.value)}
+                    className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                  />
+                </div>
+              </div>
+
               <div className="flex flex-col bg-gray-50 p-3 rounded-lg shadow-sm">
                 <input
                   type="email"
