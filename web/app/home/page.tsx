@@ -7,47 +7,55 @@ import { useEffect, useState } from "react";
 import LineCard from "../../components/LineCard";
 import Card from "../../components/Card";
 
-import district from "../settings/page";
+
+/* Försöka med datainhämtning */ 
+import { createClient, SupabaseClient } from "@supabase/supabase-js"
+
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+);
 
 /* TODO */
 // Få områden från databasen
 // Filtrera Linjer beroende på Området.
 // Hämta Ekipagage på Linjer
+
 class Line {
-    private id: number;
-    private name: string;
-    private fromArea: string;
-    private toArea: string;
+  private id: number;
+  private name: string;
+  private fromArea: string;
+  private toArea: string;
 
-    public constructor (
-      id: number,
-      name: string,
-      fromArea: string,
-      toArea: string
+  public constructor (
+    id: number,
+    name: string,
+    fromArea: string,
+    toArea: string
 
-    ) {
-      this.id = id;
-      this.name = name;
-      this.fromArea = fromArea;
-      this.toArea = toArea;
-    }
-
-    public getId(): number {
-      return this.id;
-    }
-
-    public getName(): string {
-      return this.name;
-    }
-
-    public getFromArea(): string {
-      return this.fromArea;
-    }
-
-    public getToArea(): string {
-      return this.toArea;
-    }
+  ) {
+    this.id = id;
+    this.name = name;
+    this.fromArea = fromArea;
+    this.toArea = toArea;
   }
+
+  public getId(): number {
+    return this.id;
+  }
+
+  public getName(): string {
+    return this.name;
+  }
+
+  public getFromArea(): string {
+    return this.fromArea;
+  }
+
+  public getToArea(): string {
+    return this.toArea;
+  }
+}
 
 class Ekipage {
   private id: string;
@@ -157,32 +165,15 @@ export default function Home() {
 
   const lines: Array<Ekipage>[] = [linje1, linje2, linje3];
 
-  const loadDistricts = async () => {
+  const getData = async () => {
     try {
-      
+      const { data, error } = await supabase.from("messages").select("message");
+      console.log(data, error);
+      console.log(supabase.auth)
     } catch (error) {
       console.log(error);
     }
-    // TODO: implement error catch
   }
-  const loadZones = async () => {
-    // TODO: implement this, shit not working...
-    try {
-      setLoadingZones(true);
-      setZoneError("");
-
-      const response = await getIlogZones("20260406", false);
-
-      const zones = (response.data ?? []).map(z => z.receiver);
-      setZoneData(zones);
-
-      setZoneData(zones)
-    } catch (error) {
-      setZoneError("Failed to load zones, try again");
-    } finally {
-      setLoadingZones(false);
-    }
-  };
 
   const loadLines = async () => {
       try {
@@ -191,7 +182,6 @@ export default function Home() {
 
         const response = await getIlogLines();
         
-
         const lines = (response.data ?? [])
           .map(line => new Line(line.id, line.name, line.fromArea, line.toArea))
           .filter(line => areaInLine(line.getName()));
@@ -207,11 +197,13 @@ export default function Home() {
 
   useEffect(() => {
     loadLines();
+    getData();
     //loadZones();
   }, []);
 
 
   return (
+    
     <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
       
       <Navigation currentPage="home" />
