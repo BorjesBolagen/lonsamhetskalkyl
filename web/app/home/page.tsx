@@ -8,83 +8,81 @@ import LineCard from "../../components/LineCard";
 import Card from "../../components/Card";
 
 class Line {
-    private id: number;
-    private name: string;
-    private fromArea: string;
-    private toArea: string;
+  private id: number;
+  private name: string;
+  private fromArea: string;
+  private toArea: string;
 
-    public constructor (
-      id: number,
-      name: string,
-      fromArea: string,
-      toArea: string
-
-    ) {
-      this.id = id;
-      this.name = name;
-      this.fromArea = fromArea;
-      this.toArea = toArea;
-    }
-
-    public getId(): number {
-      return this.id;
-    }
-
-    public getName(): string {
-      return this.name;
-    }
-
-    public getFromArea(): string {
-      return this.fromArea;
-    }
-
-    public getToArea(): string {
-      return this.toArea;
-    }
+  public constructor(
+    id: number,
+    name: string,
+    fromArea: string,
+    toArea: string
+  ) {
+    this.id = id;
+    this.name = name;
+    this.fromArea = fromArea;
+    this.toArea = toArea;
   }
 
-  class Ekipage {
-    private id: string;
-    private line: string;
-    private price: number;
-    private capacity: number;
-    private leveransstruktur: string;
-
-    public constructor(
-      id: string,
-      line: string,
-      price: number,
-      capacity: number,
-      leveransstruktur: string
-    ) {
-      this.id = id;
-      this.line = line;
-      this.price = price;
-      this.capacity = capacity;
-      this.leveransstruktur = leveransstruktur;
-    }
-
-    public getId(): string {
-      return this.id;
-    }
-
-    public getLine(): string {
-      return this.line;
-    }
-
-    public getPrice(): number {
-      return this.price;
-    }
-
-    public getCapacity(): number {
-      return this.capacity;
-    }
+  public getId(): number {
+    return this.id;
   }
+
+  public getName(): string {
+    return this.name;
+  }
+
+  public getFromArea(): string {
+    return this.fromArea;
+  }
+
+  public getToArea(): string {
+    return this.toArea;
+  }
+}
+
+class Ekipage {
+  private id: string;
+  private line: string;
+  private price: number;
+  private capacity: number;
+  private leveransstruktur: string;
+
+  public constructor(
+    id: string,
+    line: string,
+    price: number,
+    capacity: number,
+    leveransstruktur: string
+  ) {
+    this.id = id;
+    this.line = line;
+    this.price = price;
+    this.capacity = capacity;
+    this.leveransstruktur = leveransstruktur;
+  }
+
+  public getId(): string {
+    return this.id;
+  }
+
+  public getLine(): string {
+    return this.line;
+  }
+
+  public getPrice(): number {
+    return this.price;
+  }
+
+  public getCapacity(): number {
+    return this.capacity;
+  }
+}
 
 export default function Home() {
   const STANDRD_FLM = 19.2;
 
-  // STATE
   const [clickedButton, setClickedButton] = useState<Ekipage | null>(null);
   const [manualValue, setManualValue] = useState(15000);
   const [value, setValue] = useState("");
@@ -92,7 +90,6 @@ export default function Home() {
   const [loadingLines, setLoadingLines] = useState(false);
   const [lineError, setLineError] = useState("");
 
-  // FUNCTIONS
   function convertCapacityToPixels(capacity: number) {
     return (capacity / STANDRD_FLM) * 100;
   }
@@ -104,7 +101,6 @@ export default function Home() {
     return 100;
   }
 
-  // DATA
   const linje1: Ekipage[] = [];
   const linje2: Ekipage[] = [];
   const linje3: Ekipage[] = [];
@@ -129,39 +125,43 @@ export default function Home() {
   const lines: Array<Ekipage>[] = [linje1, linje2, linje3];
 
   const loadLines = async () => {
-      try {
-        setLoadingLines(true);
-        setLineError("");
+    try {
+      setLoadingLines(true);
+      setLineError("");
 
-        const response = await getIlogLines();
-        
-        const lines = (response.data ?? []).map((line) => new Line(line.id, line.name, line.fromArea, line.toArea));
+      const response = await getIlogLines();
+      const lines = (response.data ?? []).map(
+        (line) => new Line(line.id, line.name, line.fromArea, line.toArea)
+      );
 
-        setLinesData(lines);
-        
-      } catch (error) {
-        setLineError("Failed to load lines, try again");
-      } finally {
-        setLoadingLines(false);
-      }
-    };
+      setLinesData(lines);
+    } catch (error) {
+      setLineError("Failed to load lines, try again");
+    } finally {
+      setLoadingLines(false);
+    }
+  };
 
   useEffect(() => {
     loadLines();
+
+    const savedThreshold = localStorage.getItem("profitabilityThreshold");
+    if (savedThreshold) {
+      const parsed = Number(savedThreshold);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        setManualValue(parsed);
+      }
+    }
   }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
-      
       <Navigation currentPage="home" />
+
       <main className="flex-grow p-6 flex gap-6">
         <div className="flex-1 space-y-6">
-          {/* LINE CARDS */}
           {lines.map((line) => (
-            <LineCard
-              key={line[0].getId()}
-              title={line[0].getLine()}
-            >
+            <LineCard key={line[0].getId()} title={line[0].getLine()}>
               {line.map((ekipage) => (
                 <Card
                   key={ekipage.getId()}
@@ -182,22 +182,28 @@ export default function Home() {
         </div>
 
         <div className="w-80 space-y-6">
-
-
-          {/* MANUAL INPUT */}
           <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
             <p className="mb-2 font-medium">
-              Manuellt värde: {manualValue}
+              Manuellt tröskelvärde: {manualValue}
             </p>
 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                setManualValue(Number(value));
+                const parsedValue = Number(value);
+
+                if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+                  return;
+                }
+
+                setManualValue(parsedValue);
+                localStorage.setItem("profitabilityThreshold", String(parsedValue));
+                setValue("");
               }}
               className="flex gap-2"
             >
               <input
+                value={value}
                 onChange={(e) => setValue(e.target.value)}
                 className="border-2 border-gray-300 rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
               />
@@ -210,12 +216,9 @@ export default function Home() {
             </form>
           </div>
 
-          {/* INFO PANEL */}
           {clickedButton && (
             <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-              <h2 className="text-xl font-bold mb-4 border-b pb-2">
-                Detaljer
-              </h2>
+              <h2 className="text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
 
               <p><strong>ID:</strong> {clickedButton.getId()}</p>
               <p><strong>Linje:</strong> {clickedButton.getLine()}</p>
@@ -227,7 +230,7 @@ export default function Home() {
 
           <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
             <p className="mb-2 font-medium">
-              Linjer från API: {loadingLines ? "Laddar..." : lineError ? lineError : linesData.length > 0 ? "Laddat!" : "Inga linjer"}
+              Linjer från API:{" "} {loadingLines ? "Laddar..." : lineError ? lineError : linesData.length > 0 ? "Laddat!" : "Inga linjer"}
             </p>
 
             {!loadingLines && !lineError && linesData.length > 0 && (
@@ -242,7 +245,6 @@ export default function Home() {
             )}
           </div>
         </div>
-
       </main>
 
       <Footer />
