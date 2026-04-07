@@ -25,11 +25,11 @@ const getLinkClasses = (isActive: boolean) =>
   `relative h-full flex items-center px-4 py-4 font-bold transition-colors duration-200 ${
     isActive
       ? "after:content-[''] after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-black"
-      : "text-[#272829] hover:bg-white/40 "
+      : "text-[#272829] hover:bg-black/10 "
   }`;
 
   return (
-    <nav className="bg-[#F5C400] shadow-sm">
+    <nav className="bg-[#FFFFFF] shadow-sm">
       <div className="max-w-8xl mx-auto px-2 sm:px-2 lg:px-6">
         <div className="flex items-center justify-between h-14">
           {/* LEFT SIDE */}
@@ -57,20 +57,20 @@ const getLinkClasses = (isActive: boolean) =>
           {/* RIGHT SIDE */}
           <div className="flex-1 flex items-center justify-end space-x-4">
             <Link
-              href="/settings"
-              className={getLinkClasses(currentPage === "settings")}
-            >
-              Mitt Konto
-            </Link>
-            <Link
               href="/notifications"
               className={getLinkClasses(currentPage === "notifications")}
             >
               Notifikationer
             </Link>
+            <Link
+              href="/settings"
+              className={getLinkClasses(currentPage === "settings")}
+            >
+              Mitt Konto
+            </Link>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-white/80 text-black font-medium rounded-md hover:bg-white transition-colors duration-200 shadow-sm"            >
+              className="px-4 py-2 bg-[#FFFFFF]/100 text-black font-bold cursor-pointer border-1 border-[#C0C0C0] rounded-md hover:bg-black/10 transition-colors duration-150 shadow-md"            >
               Logga ut
             </button>
           </div>
