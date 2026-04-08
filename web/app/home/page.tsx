@@ -108,9 +108,6 @@ export default function Home() {
     });
   }
 
-  const staticLine1: Ekipage[] = [];
-  const staticLine2: Ekipage[] = [];
-  const staticLine3: Ekipage[] = [];
 
   const Ekipage1 = new Ekipage(
     "L20",
@@ -133,45 +130,6 @@ export default function Home() {
     19.2,
     "null",
   );
-
-  const Ekipage4 = new Ekipage("L23", "Linköping - Malmö", 22300, 6.1, "null");
-  const Ekipage5 = new Ekipage("L24", "Linköping - Malmö", 9800, 15.6, "null");
-  const Ekipage6 = new Ekipage("L25", "Linköping - Malmö", 14200, 5.3, "null");
-
-  const Ekipage7 = new Ekipage(
-    "L26",
-    "Linköping - Jönköping",
-    7600,
-    10.9,
-    "null",
-  );
-  const Ekipage8 = new Ekipage(
-    "L27",
-    "Linköping - Jönköping",
-    5400,
-    8.2,
-    "null",
-  );
-  const Ekipage9 = new Ekipage(
-    "L28",
-    "Linköping - Jönköping",
-    19900,
-    5.4,
-    "null",
-  );
-  const Ekipage10 = new Ekipage(
-    "L29",
-    "Linköping - Jönköping",
-    2000,
-    15.8,
-    "null",
-  );
-
-  staticLine1.push(Ekipage1, Ekipage2, Ekipage3);
-  staticLine2.push(Ekipage4, Ekipage5, Ekipage6);
-  staticLine3.push(Ekipage7, Ekipage8, Ekipage9, Ekipage10);
-
-  const staticLines: Array<Ekipage>[] = [staticLine1, staticLine2, staticLine3];
 
   useEffect(() => {
     // Load user's saved area filters once so fetch button uses persisted settings.
@@ -216,34 +174,74 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
+    <div className="min-h-screen flex flex-col bg-[#121212]">
       <Navigation currentPage="home" />
-      <main className="flex-grow p-6 flex gap-6">
-        <div className="flex-1 space-y-6">
-          {staticLines.map((line) => (
-            <LineCard key={line[0].getId()} title={line[0].getLine()}>
-              {line.map((ekipage) => (
-                <Card
-                  key={ekipage.getId()}
-                  title={ekipage.getId()}
-                  capacity={convertCapacityToPixels(ekipage.getCapacity())}
-                  price={convertProfitToPixels(ekipage.getPrice())}
-                >
-                  <button
-                    onClick={() => setClickedButton(ekipage)}
-                    className="bg-[#75C07A] text-white px-2 py-1 rounded hover:bg-green-800 transition text-sm"
-                  >
-                    Info
-                  </button>
-                </Card>
-              ))}
-            </LineCard>
-          ))}
-        </div>
-
-        <div className="w-[40rem] space-y-6">
-          <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-            <p className="mb-2 font-medium">Manuellt värde: {manualValue}</p>
+      <main className="flex-grow p-6 flex gap-10">
+        <div>
+          {!loadingLines && !lineError && linesData.length > 0 && (
+                <div className="space-y-3">
+                  {linesData.map((line) => (
+                    <LineCard key={line.id} title={line.name}>
+                      <div className="text-sm text-gray-300 space-y-1">
+                        <div className="flex">
+                          <Card
+                            key={Ekipage1.getId()}
+                            title={Ekipage1.getId()}
+                            capacity={convertCapacityToPixels(Ekipage1.getCapacity())}
+                            price={convertProfitToPixels(Ekipage1.getPrice())}
+                          >
+                            <button
+                              onClick={() => setClickedButton(Ekipage1)}
+                            >
+                              Info
+                            </button>
+                          </Card>
+                          <Card
+                            key={Ekipage2.getId()}
+                            title={Ekipage2.getId()}
+                            capacity={convertCapacityToPixels(Ekipage2.getCapacity())}
+                            price={convertProfitToPixels(Ekipage2.getPrice())}
+                          >
+                            <button
+                              onClick={() => setClickedButton(Ekipage2)}
+                              className=""
+                            >
+                              Info
+                            </button>
+                          </Card>
+                          <Card
+                            key={Ekipage3.getId()}
+                            title={Ekipage3.getId()}
+                            capacity={convertCapacityToPixels(Ekipage3.getCapacity())}
+                            price={convertProfitToPixels(Ekipage3.getPrice())}
+                          >
+                            <button
+                              onClick={() => setClickedButton(Ekipage3)}
+                              className=""
+                            >
+                              Info
+                            </button>
+                          </Card>
+                        </div>
+                        
+                        <p>
+                          <strong>ID:</strong> {line.id}
+                        </p>
+                        <p>
+                          <strong>Från:</strong> {line.fromArea}
+                        </p>
+                        <p>
+                          <strong>Till:</strong> {line.toArea}
+                        </p>
+                      </div>
+                    </LineCard>
+                  ))}
+                </div>
+              )}
+          </div>
+        <div className="w-[40rem] space-y-6 ml-auto">
+          <div className="bg-[#000000] rounded-xl shadow-md p-6 max-w-md">
+            <p className="text-gray-300 mb-2 font-medium">Manuellt värde: {manualValue}</p>
 
             <form
               onSubmit={(e) => {
@@ -254,11 +252,11 @@ export default function Home() {
             >
               <input
                 onChange={(e) => setValue(e.target.value)}
-                className="border-2 border-gray-300 rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
+                className="text-gray-300 border-2 border-gray-300 rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
               />
               <button
                 type="submit"
-                className="bg-[#75C07A] text-white px-4 py-2 rounded hover:bg-green-800 transition"
+                className="bg-[#75C07A] text-black px-4 py-2 rounded hover:bg-green-800 transition"
               >
                 Spara
               </button>
@@ -266,26 +264,27 @@ export default function Home() {
           </div>
 
           {clickedButton && (
-            <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-              <h2 className="text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
-
-              <p>
-                <strong>ID:</strong> {clickedButton.getId()}
-              </p>
-              <p>
-                <strong>Linje:</strong> {clickedButton.getLine()}
-              </p>
-              <p>
-                <strong>Pris:</strong> {clickedButton.getPrice()}
-              </p>
+            <div className="bg-[#000000] rounded-xl shadow-md p-6 max-w-md">
+              <h2 className="text-gray-300 text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
+              <div className="text-gray-300">
+                <p>
+                  <strong>ID:</strong> {clickedButton.getId()}
+                </p>
+                <p>
+                  <strong >Linje:</strong> {clickedButton.getLine()}
+                </p>
+                <p>
+                  <strong>Pris:</strong> {clickedButton.getPrice()}
+                </p>
+              </div>
             </div>
           )}
 
-          <div className="bg-white rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
+          <div className="bg-[#000000] rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
             <div>
-              <p className="font-medium text-gray-800">Aktuella linjer</p>
+              <p className="font-medium text-gray-300">Aktuella linjer</p>
               {!areasLoaded && (
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-gray-300 mt-1">
                   Laddar dina sparade områden...
                 </p>
               )}
@@ -294,18 +293,18 @@ export default function Home() {
             <button
               onClick={loadLines}
               disabled={!areasLoaded || loadingLines}
-              className="w-full bg-[#75C07A] text-white px-4 py-3 rounded hover:bg-green-800 disabled:bg-gray-400 transition font-semibold"
+              className="w-full bg-[#BB86FC] text-white px-4 py-3 rounded hover:bg-purple-300 disabled:bg-gray-400 transition font-semibold"
             >
               {loadingLines
                 ? "Hämtar filtrerade linjer..."
                 : "Hämta filtrerade linjer"}
             </button>
 
-            <div className="text-sm text-gray-700">
+            <div className="text-sm text-gray-300">
               {!areasLoaded ? (
                 <p>Vänta tills inställningarna har laddats.</p>
               ) : lineError ? (
-                <p className="text-red-700">{lineError}</p>
+                <p className="text-red-300">{lineError}</p>
               ) : !hasLoadedLines ? (
                 <p>Klicka på knappen för att ladda linjerna.</p>
               ) : linesData.length > 0 ? (
@@ -315,25 +314,7 @@ export default function Home() {
               )}
             </div>
 
-            {!loadingLines && !lineError && linesData.length > 0 && (
-              <div className="space-y-3">
-                {linesData.map((line) => (
-                  <LineCard key={line.id} title={line.name}>
-                    <div className="text-sm text-gray-700 space-y-1">
-                      <p>
-                        <strong>ID:</strong> {line.id}
-                      </p>
-                      <p>
-                        <strong>Från:</strong> {line.fromArea}
-                      </p>
-                      <p>
-                        <strong>Till:</strong> {line.toArea}
-                      </p>
-                    </div>
-                  </LineCard>
-                ))}
-              </div>
-            )}
+            
           </div>
         </div>
       </main>
