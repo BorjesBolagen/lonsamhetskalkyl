@@ -3,6 +3,7 @@ import type {
 	ConsignmentListItem,
 	EquipageItem,
 	LineItem,
+	ZoneTreeNode,
 } from "@/lib/ilogTypes";
 import type { User } from "@/lib/databaseTypes";
 
@@ -196,28 +197,6 @@ export const deleteUser = async (id: string): Promise<BasicResponse<null>> => {
 	return (await response.json()) as BasicResponse<null>;
 }
 
-/**
- * Hämtar alla iLog-zoner for aktuell grupp.
- */
-export const getIlogZones = async (
-	date: string,
-	withEquipages: boolean = false
-): Promise<IlogResponse<ConsignmentListItem[]>> => {
-	const params = new URLSearchParams({
-		date,
-		withEquipages: String(withEquipages), // convert to "true"/"false"
-	});
-
-	const response = await fetch(`/api/ilog/zones?${params.toString()}`, {
-		method: "GET",
-	});
-
-	if (!response.ok) {
-		throw new Error("Request failed: " + (await response.text()));
-	}
-
-	return (await response.json()) as IlogResponse<ConsignmentListItem[]>;
-};
 
 
 /**
@@ -287,6 +266,52 @@ export const getIlogConsignment = async (
 	}
 
 	return (await response.json()) as IlogResponse<ConsignmentDetail>;
+};
+
+/**
+ * Hämtar alla iLog-zoner for aktuell grupp.
+ */
+export const getIlogZones = async (
+	date: string,
+	withEquipages: boolean = true
+): Promise<IlogResponse<ZoneTreeNode[]>> => {
+	const params = new URLSearchParams({
+		date,
+		withEquipages: String(withEquipages), // convert to "true"/"false"
+	});
+
+	const response = await fetch(`/api/ilog/zones?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		throw new Error("Request failed: " + (await response.text()));
+	}
+
+	return (await response.json()) as IlogResponse<ZoneTreeNode[]>;
+};
+
+/**
+ * Hämtar alla iLog-distribution-zoner for aktuell grupp.
+ */
+export const getIlogDistributionZones = async (
+	date: string,
+	withEquipages: boolean = true
+): Promise<IlogResponse<ZoneTreeNode[]>> => {
+	const params = new URLSearchParams({
+		date,
+		withEquipages: String(withEquipages),
+	});
+
+	const response = await fetch(`/api/ilog/distribution-zones?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		throw new Error("Request failed: " + (await response.text()));
+	}
+
+	return (await response.json()) as IlogResponse<ZoneTreeNode[]>;
 };
 
 /**

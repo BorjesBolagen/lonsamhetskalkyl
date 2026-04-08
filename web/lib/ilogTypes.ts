@@ -24,6 +24,22 @@ export type LineItem = {
     name: string;
     fromArea: string;
     toArea: string;
+    mine: boolean | null;
+    type: string;
+    publicId: number | null;
+};
+
+/**
+ * Trädnod för iLog-zoner/distribution-zoner.
+ */
+export type ZoneTreeNode = {
+    id: number | null;
+    name: string;
+    type: string;
+    mine: boolean | null;
+    publicId: number | null;
+    equipages: EquipageItem[];
+    children: ZoneTreeNode[];
 };
 
 /**

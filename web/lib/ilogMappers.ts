@@ -19,6 +19,7 @@ import type {
   ConsignmentListItem,
   EquipageItem,
   LineItem,
+  ZoneTreeNode,
 } from "@/lib/ilogTypes";
 
 /**
@@ -286,9 +287,93 @@ export const mapLines = (raw: unknown[]): LineItem[] => {
         name,
         fromArea,
         toArea,
+        mine: typeof row.mine === "boolean" ? row.mine : null,
+        type: readString(row, ["type"]),
+        publicId: readNumber(row, ["publicId"]),
       };
     })
     .filter((item): item is LineItem => item !== null);
+};
+
+const ZONE_CHILD_KEYS = [
+  "children",
+  "zones",
+  "zoneFilters",
+  "zonefilters",
+  "zoneGroups",
+  "zonegroups",
+  "distributionZones",
+  "items",
+  "nodes",
+] as const;
+
+const mapZoneNode = (value: unknown): ZoneTreeNode | null => {
+  const row = asRecord(value);
+
+  if (Object.keys(row).length === 0) {
+    return null;
+  }
+
+  const id = readNumber(row, ["id"]);
+  const name = readString(row, ["name"]);
+  const type = readString(row, ["type"]);
+  const publicId = readNumber(row, ["publicId"]);
+  const mine = typeof row.mine === "boolean" ? row.mine : null;
+
+  const equipagesRaw = Array.isArray(row.equipages) ? row.equipages : [];
+  const equipages = mapEquipages(equipagesRaw);
+
+  const children: ZoneTreeNode[] = [];
+
+  for (const key of ZONE_CHILD_KEYS) {
+    const childRaw = row[key];
+    if (!Array.isArray(childRaw)) {
+      continue;
+    }
+
+    for (const child of childRaw) {
+      const mapped = mapZoneNode(child);
+      if (mapped !== null) {
+        children.push(mapped);
+      }
+    }
+  }
+
+  const hasNodeSignal =
+    id !== null ||
+    name.length > 0 ||
+    type.length > 0 ||
+    publicId !== null ||
+    equipages.length > 0 ||
+    children.length > 0;
+
+  if (!hasNodeSignal) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    type,
+    mine,
+    publicId,
+    equipages,
+    children,
+  };
+};
+
+/**
+ * Mappning: iLog raw zones/distributionZones → ZoneTreeNode[]
+ */
+export const mapZones = (raw: unknown): ZoneTreeNode[] => {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => mapZoneNode(item))
+      .filter((item): item is ZoneTreeNode => item !== null);
+  }
+
+  const single = mapZoneNode(raw);
+  return single ? [single] : [];
 };
 
 /**
