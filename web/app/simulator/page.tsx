@@ -3,19 +3,10 @@
 import { useEffect, useState } from "react";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-
-type CalculationResponse = {
-  success: boolean;
-  value?: {
-    step_used: number;
-    taxeprel: string;
-    vklfgrv: number;
-    estimated_revenue: number;
-    explanation: string;
-  };
-  error?: string;
-  detail?: string | Array<{ msg?: string; [key: string]: any }>;
-};
+import {
+	calculateSimulationProfitability,
+	type SimulationProfitabilityResponse,
+} from "@/lib/api";
 
 type FormState = {
   kundnamn: string;
@@ -32,7 +23,7 @@ export default function ProfitCalculatorPage() {
     vikt: "",
   });
 
-  const [result, setResult] = useState<CalculationResponse | null>(null);
+  const [result, setResult] = useState<SimulationProfitabilityResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [isAnimating, setIsAnimating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -100,42 +91,25 @@ export default function ProfitCalculatorPage() {
         return;
       }
 
-      const payload = {
-        kundnamn: form.kundnamn.trim(),
-        start: form.start.trim(),
-        slut: form.slut.trim(),
-        chargeable_weight: parsedWeight,
-      };
+      const data = await calculateSimulationProfitability(
+      form.kundnamn.trim(),
+      form.start.trim(),
+      form.slut.trim(),
+      parsedWeight
+       );
 
-      const res = await fetch("/api/profitability", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+			if (!data.success) {
+				const detailText = Array.isArray(data.detail)
+					? data.detail
+							.map((d) => (typeof d?.msg === "string" ? d.msg : JSON.stringify(d)))
+							.join(", ")
+					: typeof data.detail === "string"
+					? data.detail
+					: "";
 
-      const contentType = res.headers.get("content-type") || "";
-
-      if (!contentType.includes("application/json")) {
-        const text = await res.text();
-        console.error("Non-JSON response:", text);
-        setErrorMsg("API:t returnerade inte JSON.");
-        return;
-      }
-
-      const data: CalculationResponse = await res.json();
-
-      if (!res.ok || !data.success) {
-        const detailText = Array.isArray(data.detail)
-          ? data.detail.map((d: any) => d?.msg || JSON.stringify(d)).join(", ")
-          : typeof data.detail === "string"
-          ? data.detail
-          : "";
-
-        setErrorMsg(data.error || detailText || "Beräkningen misslyckades.");
-        return;
-      }
+				setErrorMsg(data.error || detailText || "Beräkningen misslyckades.");
+				return;
+			}
 
       setResult(data);
       setIsAnimating(true);
