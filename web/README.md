@@ -52,6 +52,7 @@ components/
 
 lib/
 ├── api.ts                  # API-hjälpfunktioner (sendMessage)
+├── areas.ts                # Gemensam områdeskonfig (val i settings + filtrering i home)
 ├── supabaseServer.ts       # Supabase server-klient
 ├── readme.md               # Lib-dokumentation
 
@@ -63,7 +64,34 @@ public/
 └── static files            # Publika assets
 ```
 
+## Områdesfilter (settings + home)
+
+- Områdesalternativ och default-värden hanteras centralt i `lib/areas.ts`.
+- Lägg till nya områden i `AREA_OPTIONS` och `DEFAULT_AREAS` i samma fil.
+- `settings` läser och sparar `filters.areas` via den delade modellen.
+- `home` hämtar linjer och filtrerar endast på linjens `fromArea` (startområde).
+
 ## API-Endpoints
+
+### POST /api/import-historical
+
+Action-baserad endpoint för historisk CSV-import.
+
+**Action 1: create-upload-session**
+Skapar en import-session och genererar en signerad upload-URL för CSV-filen.
+
+**Action 2: start-import**
+Startar importprocessen för en uppladdad CSV-fil baserat på ett `jobId`.
+
+### Felkoder för historisk import
+
+- `400 Bad Request`: Ogiltig request, saknat `filename`/`jobId`, okänd `action`, fel CSV-format, saknade obligatoriska kolumner, eller valideringsfel i rader.
+- `401 Unauthorized`: Ingen giltig inloggning/session kunde verifieras.
+- `403 Forbidden`: Inloggad användare saknar admin-roll.
+- `404 Not Found`: Import-jobbet hittades inte (fel `jobId` eller jobb tillhör annan admin).
+- `500 Internal Server Error`: Serverfel, t.ex. Storage-nedladdning misslyckades, databasskrivning misslyckades eller saknad serverkonfiguration (`SUPABASE_SERVICE_ROLE_KEY`).
+
+Observera: CSV-filen i Storage raderas alltid efter importförsök (både vid lyckad import och fel).
 
 ### GET /api/ilog/equipages
 

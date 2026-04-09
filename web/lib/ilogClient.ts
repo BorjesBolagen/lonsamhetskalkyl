@@ -56,7 +56,6 @@ const createAuthHeader = (): string => {
   const username = getRequiredEnv("ILOG_USERNAME");
   const transporterNumber = getRequiredEnv("ILOG_TRANSPORTER_NUMBER");
   const password = getRequiredEnv("ILOG_PASSWORD");
-
   const authString = `${username}/${transporterNumber}:${password}`;
   return `Basic ${Buffer.from(authString).toString("base64")}`;
 };
@@ -118,9 +117,13 @@ export const ilogGet = async <T>(path: string, query?: QueryParams): Promise<T> 
   }
 
   // Icke-2xx status = något gick fel.
+  const responseText = await response.text();
+
   if (!response.ok) {
     throw new IlogHttpError(
-      `iLog API responded with status ${response.status}`,
+      responseText
+        ? `iLog API responded with status ${response.status}: ${responseText}`
+        : `iLog API responded with status ${response.status}`,
       // Mappar 401 från extern tjänst till 502 internt,
       // eftersom frontend pratar med vår API, inte direkt med iLog.
       // 401 från iLog = felaktig/saknad auth → vi presenterar det som iLog är ned.
@@ -132,7 +135,7 @@ export const ilogGet = async <T>(path: string, query?: QueryParams): Promise<T> 
 
   try {
     // Försöker tolka svaret som JSON.
-    data = (await response.json()) as IlogEnvelope<T>;
+    data = JSON.parse(responseText) as IlogEnvelope<T>;
   } catch {
     throw new IlogHttpError("iLog API returned invalid JSON", 502);
   }
