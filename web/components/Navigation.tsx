@@ -10,10 +10,10 @@ interface NavigationProps {
 export default function Navigation({ currentPage }: NavigationProps) {
   const router = useRouter();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     try {
       const supabase = getSupabaseBrowserClient();
-      supabase.auth.signOut();
+      await supabase.auth.signOut();
       console.log("User signed out successfully");
       router.push("/login");
     } catch (error) {
@@ -76,6 +76,7 @@ export default function Navigation({ currentPage }: NavigationProps) {
             </Link>
             <button
               onClick={handleLogout}
+              data-testid="logout-button"
               className="px-4 py-2 bg-white text-green-700 font-medium rounded-lg hover:bg-gray-100 transition-colors duration-200 shadow-sm"
             >
               Logga ut

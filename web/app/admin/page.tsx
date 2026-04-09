@@ -109,7 +109,7 @@ export default function Admin() {
   const testFunction = async () => {
     try {
       // byt funktion för att testa
-      const reponse = await deleteUser("some-id");
+      const reponse = await getCurrentlySignedInUser();
       console.log("Currently signed-in user:", reponse);
     } catch (error) {
       console.log("Error fetching currently signed-in user:", (error as Error).message);

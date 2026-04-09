@@ -29,9 +29,11 @@ export async function getCurrentUser(supabase: SupabaseServerClient): Promise<Ba
     .from("User")
     .select("*")
     .eq("id", user.id)
-    .single();
+    .maybeSingle()
+  
+  if (userError) throw new Error("Oväntat fel: " + userError.message + ". " + userError.details);
 
-  if (userError) throw new Error("Oväntat fel: " + userError.message);
+  if (!userData) throw new Error("Kunde inte hämta inloggad användare");
 
   return { status: true, message: "Användare hämtad", data: userData };
 }
