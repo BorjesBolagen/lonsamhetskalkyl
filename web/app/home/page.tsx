@@ -174,7 +174,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#EEEEEE]">
+    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="home" />
       <main className="flex-grow p-6 flex gap-10">
         <div>
@@ -240,7 +240,7 @@ export default function Home() {
               )}
           </div>
         <div className="w-[40rem] space-y-6 ml-auto">
-          <div className="bg-[#000000] rounded-xl shadow-md p-6 max-w-md">
+          <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 max-w-md">
             <p className="text-gray-300 mb-2 font-medium">Manuellt värde: {manualValue}</p>
 
             <form
@@ -264,7 +264,7 @@ export default function Home() {
           </div>
 
           {clickedButton && (
-            <div className="bg-[#000000] rounded-xl shadow-md p-6 max-w-md">
+            <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 max-w-md">
               <h2 className="text-gray-300 text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
               <div className="text-gray-300">
                 <p>
@@ -280,7 +280,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className="bg-[#000000] rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
+          <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
             <div>
               <p className="font-medium text-gray-300">Aktuella linjer</p>
               {!areasLoaded && (
@@ -318,7 +318,7 @@ export default function Home() {
           </div>
         </div>
       </main>
-      <Footer />
+      <Footer/>
     </div>
   );
 }

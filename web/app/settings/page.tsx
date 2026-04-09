@@ -14,6 +14,17 @@ import { useEffect, useState } from "react";
 
 type ThemeMode = "light" | "dark";
 
+function setTheme(mode: "light" | "dark") {
+  const root = document.documentElement;
+
+  if (mode === "dark") {
+    root.classList.add("dark");
+  } else {
+    root.classList.remove("dark");
+  }
+}
+
+
 const DEFAULT_THEME: ThemeMode = "light";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -182,7 +193,7 @@ export default function Settings() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#EEEEEE]">
+    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       
       {/* Wrapper för navigationsbaren så den ligger överst */}
       <div className="relative z-[60]">

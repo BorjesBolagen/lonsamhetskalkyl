@@ -50,7 +50,7 @@ export default function ProfitCalculatorPage() {
  
   };
   return (
-    <div className="min-h-screen flex flex-col bg-[#EEEEEE]">
+    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="simulator" />
 
       <main className="flex-grow flex flex-col lg:flex-row justify-center p-6 gap-6">

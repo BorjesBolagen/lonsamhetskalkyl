@@ -17,7 +17,7 @@ export default function ProfitCalculatorPage() {
     setNotifications(updated);
   };
   return (
-    <div className="min-h-screen flex flex-col bg-[#EEEEEE]">
+    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="notifications" />
 
       {/* Main content */}

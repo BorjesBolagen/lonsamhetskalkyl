@@ -207,7 +207,7 @@ export default function Admin() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#EEEEEE]">
+    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       
       {/* Wrapper som tvingar navigationsbaren att alltid ligga FRAMFÖR alla modaler */}
       <div className="relative z-[60]">
@@ -218,7 +218,7 @@ export default function Admin() {
         <div className="space-y-6 text-gray-800 font-sans w-full max-w-6xl">
           {/* SIDHUVUD & ACTION-KNAPPAR */}
           <div className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-xl shadow-md">
-            <h1 className="text-2xl font-bold text-[#446E30] mb-4 md:mb-0">
+            <h1 className="text-2xl font-bold text-[var(--text-heading)] mb-4 md:mb-0">
               Admin & Strategisk Analys
             </h1>
             <div className="flex flex-wrap gap-3 justify-center">
