@@ -21,31 +21,19 @@ export default function Navigation({ currentPage }: NavigationProps) {
     }
   };
 
-  const getLinkClasses = (isActive: boolean) =>
-    `px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-      isActive ? "bg-black text-white" : "text-white hover:bg-black/20"
-    }`;
+const getLinkClasses = (isActive: boolean) =>
+  `relative h-full flex items-center px-4 py-4 font-bold transition-colors duration-200 ${
+    isActive
+      ? "after:content-[''] after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-[var(--text-primary)]"
+      : "text-[var(--text-heading)] hover:bg-[var(--text-primary)]/10"
+  }`;
 
   return (
-    <nav className="bg-[#307C44]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          
-          {/* VÄNSTER SIDA */}
+    <nav className="bg-[var(--navbar)] text-[var(--text-primary)] shadow-sm">
+      <div className="max-w-8xl mx-auto px-2 sm:px-2 lg:px-6">
+        <div className="flex items-center justify-between h-14">
+          {/* LEFT SIDE */}
           <div className="flex-1 flex items-center justify-start space-x-4">
-            <span className="text-white font-medium bg-black/10 px-3 py-1.5 rounded-md text-sm border border-white/20">
-              Område: Linköping
-            </span>
-            <Link
-              href="/notifications"
-              className={getLinkClasses(currentPage === "notifications")}
-            >
-              Notifikationer
-            </Link>
-          </div>
-
-          {/* MITTEN */}
-          <div className="flex-shrink-0 flex space-x-4">
             <Link
               href="/home"
               className={getLinkClasses(currentPage === "home")}
@@ -66,8 +54,14 @@ export default function Navigation({ currentPage }: NavigationProps) {
             </Link>
           </div>
 
-          {/* HÖGER SIDA */}
+          {/* RIGHT SIDE */}
           <div className="flex-1 flex items-center justify-end space-x-4">
+            <Link
+              href="/notifications"
+              className={getLinkClasses(currentPage === "notifications")}
+            >
+              Notifikationer
+            </Link>
             <Link
               href="/settings"
               className={getLinkClasses(currentPage === "settings")}
@@ -76,9 +70,7 @@ export default function Navigation({ currentPage }: NavigationProps) {
             </Link>
             <button
               onClick={handleLogout}
-              data-testid="logout-button"
-              className="px-4 py-2 bg-white text-green-700 font-medium rounded-lg hover:bg-gray-100 transition-colors duration-200 shadow-sm"
-            >
+              className="px-4 py-2 bg-[#FFFFFF]/100 text-black font-bold cursor-pointer border-1 border-[#C0C0C0] rounded-md hover:bg-black/10 transition-colors duration-150 shadow-md"            >
               Logga ut
             </button>
           </div>

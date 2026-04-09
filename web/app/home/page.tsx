@@ -1,46 +1,25 @@
 "use client";
 
-import { getIlogLines } from "../../lib/api";
+import { getCurrentlySignedInUser, getIlogLines } from "../../lib/api";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useEffect, useState } from "react";
 import LineCard from "../../components/LineCard";
 import Card from "../../components/Card";
+import {
+  AREA_OPTIONS,
+  AreaKey,
+  AreaState,
+  DEFAULT_AREAS,
+  parseAreaState,
+} from "../../lib/areas";
 
-class Line {
-  private id: number;
-  private name: string;
-  private fromArea: string;
-  private toArea: string;
-
-  public constructor(
-    id: number,
-    name: string,
-    fromArea: string,
-    toArea: string
-  ) {
-    this.id = id;
-    this.name = name;
-    this.fromArea = fromArea;
-    this.toArea = toArea;
-  }
-
-  public getId(): number {
-    return this.id;
-  }
-
-  public getName(): string {
-    return this.name;
-  }
-
-  public getFromArea(): string {
-    return this.fromArea;
-  }
-
-  public getToArea(): string {
-    return this.toArea;
-  }
-}
+type IlogLine = {
+  id: number;
+  name: string;
+  fromArea: string;
+  toArea: string;
+};
 
 class Ekipage {
   private id: string;
@@ -54,7 +33,7 @@ class Ekipage {
     line: string,
     price: number,
     capacity: number,
-    leveransstruktur: string
+    leveransstruktur: string,
   ) {
     this.id = id;
     this.line = line;
@@ -80,15 +59,28 @@ class Ekipage {
   }
 }
 
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+}
+
+
 export default function Home() {
   const STANDRD_FLM = 19.2;
 
   const [clickedButton, setClickedButton] = useState<Ekipage | null>(null);
   const [manualValue, setManualValue] = useState(15000);
   const [value, setValue] = useState("");
-  const [linesData, setLinesData] = useState<Line[]>([]);
+
+  const [selectedAreas, setSelectedAreas] = useState<AreaState>(DEFAULT_AREAS);
+  const [areasLoaded, setAreasLoaded] = useState(false);
+
+  const [linesData, setLinesData] = useState<IlogLine[]>([]);
   const [loadingLines, setLoadingLines] = useState(false);
   const [lineError, setLineError] = useState("");
+  const [hasLoadedLines, setHasLoadedLines] = useState(false);
 
   function convertCapacityToPixels(capacity: number) {
     return (capacity / STANDRD_FLM) * 100;
@@ -101,90 +93,159 @@ export default function Home() {
     return 100;
   }
 
-  const linje1: Ekipage[] = [];
-  const linje2: Ekipage[] = [];
-  const linje3: Ekipage[] = [];
+  function lineMatchesSelectedAreas(line: IlogLine): boolean {
+    const activeAreas = Object.entries(selectedAreas).filter(
+      ([, isActive]) => isActive,
+    );
 
-  const Ekipage1 = new Ekipage("L20", "Linköping - Stockholm", 12000, 12.4, "null");
-  const Ekipage2 = new Ekipage("L21", "Linköping - Stockholm", 13000, 19.2, "null");
-  const Ekipage3 = new Ekipage("L22", "Linköping - Stockholm", 18500, 19.2, "null");
+    if (activeAreas.length === 0) {
+      return false;
+    }
 
-  const Ekipage4 = new Ekipage("L23", "Linköping - Malmö", 22300, 6.1, "null");
-  const Ekipage5 = new Ekipage("L24", "Linköping - Malmö", 9800, 15.6, "null");
-  const Ekipage6 = new Ekipage("L25", "Linköping - Malmö", 14200, 5.3, "null");
+    const fromArea = normalizeText(line.fromArea);
+    return activeAreas.some(([areaKey]) => {
+      const areaLabel = normalizeText(AREA_OPTIONS[areaKey as AreaKey]);
+      return fromArea.includes(areaLabel);
+    });
+  }
 
-  const Ekipage7 = new Ekipage("L26", "Linköping - Jönköping", 7600, 10.9, "null");
-  const Ekipage8 = new Ekipage("L27", "Linköping - Jönköping", 5400, 8.2, "null");
-  const Ekipage9 = new Ekipage("L28", "Linköping - Jönköping", 19900, 5.4, "null");
-  const Ekipage10 = new Ekipage("L29", "Linköping - Jönköping", 2000, 15.8, "null");
 
-  linje1.push(Ekipage1, Ekipage2, Ekipage3);
-  linje2.push(Ekipage4, Ekipage5, Ekipage6);
-  linje3.push(Ekipage7, Ekipage8, Ekipage9, Ekipage10);
+  const Ekipage1 = new Ekipage(
+    "L20",
+    "Linköping - Stockholm",
+    12000,
+    12.4,
+    "null",
+  );
+  const Ekipage2 = new Ekipage(
+    "L21",
+    "Linköping - Stockholm",
+    13000,
+    19.2,
+    "null",
+  );
+  const Ekipage3 = new Ekipage(
+    "L22",
+    "Linköping - Stockholm",
+    18500,
+    19.2,
+    "null",
+  );
 
-  const lines: Array<Ekipage>[] = [linje1, linje2, linje3];
+  useEffect(() => {
+    // Load user's saved area filters once so fetch button uses persisted settings.
+    async function loadCurrentUserSettings() {
+      try {
+        const response = await getCurrentlySignedInUser();
+        const user = response.data;
+        
+        if (user) {
+          setSelectedAreas(parseAreaState(user.filters));
+        } else {
+          setSelectedAreas(DEFAULT_AREAS);
+        }
+      } catch (error) {
+        setSelectedAreas(DEFAULT_AREAS);
+      } finally {
+        setAreasLoaded(true);
+      }
+    }
+
+    loadCurrentUserSettings();
+  }, []);
 
   const loadLines = async () => {
     try {
       setLoadingLines(true);
       setLineError("");
+      setHasLoadedLines(true);
 
       const response = await getIlogLines();
-      const lines = (response.data ?? []).map(
-        (line) => new Line(line.id, line.name, line.fromArea, line.toArea)
+      // Filter only by origin area (fromArea), not destination.
+      const filteredLines = (response.data ?? []).filter((line: IlogLine) =>
+        lineMatchesSelectedAreas(line),
       );
 
-      setLinesData(lines);
+      setLinesData(filteredLines);
     } catch (error) {
-      setLineError("Failed to load lines, try again");
+      setLineError("Kunde inte hämta filtrerade linjer, försök igen.");
     } finally {
       setLoadingLines(false);
     }
   };
 
-  useEffect(() => {
-    loadLines();
-
-    const savedThreshold = localStorage.getItem("profitabilityThreshold");
-    if (savedThreshold) {
-      const parsed = Number(savedThreshold);
-      if (Number.isFinite(parsed) && parsed >= 0) {
-        setManualValue(parsed);
-      }
-    }
-  }, []);
-
+  
   return (
-    <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
+    <div className="">
+    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="home" />
-
-      <main className="flex-grow p-6 flex gap-6">
-        <div className="flex-1 space-y-6">
-          {lines.map((line) => (
-            <LineCard key={line[0].getId()} title={line[0].getLine()}>
-              {line.map((ekipage) => (
-                <Card
-                  key={ekipage.getId()}
-                  title={ekipage.getId()}
-                  capacity={convertCapacityToPixels(ekipage.getCapacity())}
-                  price={convertProfitToPixels(ekipage.getPrice())}
-                >
-                  <button
-                    onClick={() => setClickedButton(ekipage)}
-                    className="bg-[#75C07A] text-white px-2 py-1 rounded hover:bg-green-800 transition text-sm"
-                  >
-                    Info
-                  </button>
-                </Card>
-              ))}
-            </LineCard>
-          ))}
-        </div>
-
-        <div className="w-80 space-y-6">
-          <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-            <p className="mb-2 font-medium">
-              Manuellt tröskelvärde: {manualValue}
+      <main className="flex-grow p-6 flex gap-10">
+        <div>
+          {!loadingLines && !lineError && linesData.length > 0 && (
+                <div className="space-y-3">
+                  {linesData.map((line) => (
+                    <LineCard key={line.id} title={line.name}>
+                      <div className="text-sm text-[var--(text-primary)] space-y-1">
+                        <div className="flex">
+                          <Card
+                            key={Ekipage1.getId()}
+                            title={Ekipage1.getId()}
+                            capacity={convertCapacityToPixels(Ekipage1.getCapacity())}
+                            price={convertProfitToPixels(Ekipage1.getPrice())}
+                          >
+                            <button
+                              onClick={() => setClickedButton(Ekipage1)}
+                            >
+                              Info
+                            </button>
+                          </Card>
+                          <Card
+                            key={Ekipage2.getId()}
+                            title={Ekipage2.getId()}
+                            capacity={convertCapacityToPixels(Ekipage2.getCapacity())}
+                            price={convertProfitToPixels(Ekipage2.getPrice())}
+                          >
+                            <button
+                              onClick={() => setClickedButton(Ekipage2)}
+                              className=""
+                            >
+                              Info
+                            </button>
+                          </Card>
+                          <Card
+                            key={Ekipage3.getId()}
+                            title={Ekipage3.getId()}
+                            capacity={convertCapacityToPixels(Ekipage3.getCapacity())}
+                            price={convertProfitToPixels(Ekipage3.getPrice())}
+                          >
+                            <button
+                              onClick={() => setClickedButton(Ekipage3)}
+                              className=""
+                            >
+                              Info
+                            </button>
+                          </Card>
+                        </div>
+                        
+                        <p className="text-[var(--text-primary)]">
+                          <strong>ID:</strong> {line.id}
+                        </p>
+                        <p className="text-[var(--text-primary)]">
+                          <strong>Från:</strong> {line.fromArea}
+                        </p>
+                        <p className="text-[var(--text-primary)]">
+                          <strong>Till:</strong> {line.toArea}
+                        </p>
+                      </div>
+                    </LineCard>
+                  ))}
+                </div>
+              )}
+          </div>
+        <div className="w-[40rem] space-y-6 ml-auto">
+          <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 max-w-md">
+            <p className="text-[var(--text-primary)] mb-2 font-medium">
+              Manuellt värde: {manualValue}
             </p>
 
             <form
@@ -205,11 +266,11 @@ export default function Home() {
               <input
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                className="border-2 border-gray-300 rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
+                className="text-[var(--text-primary)] border-2 border-[var(--border-primary)] rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
               />
               <button
                 type="submit"
-                className="bg-[#75C07A] text-white px-4 py-2 rounded hover:bg-green-800 transition"
+                className="bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-2 rounded hover:bg-[var(--primary-button-hover)] transition"
               >
                 Spara
               </button>
@@ -217,37 +278,62 @@ export default function Home() {
           </div>
 
           {clickedButton && (
-            <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-              <h2 className="text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
-
-              <p><strong>ID:</strong> {clickedButton.getId()}</p>
-              <p><strong>Linje:</strong> {clickedButton.getLine()}</p>
-              <p><strong>Pris:</strong> {clickedButton.getPrice()}</p>
+            <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 max-w-md">
+              <h2 className="text-[var(--text-primary)] text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
+              <div>
+                <p className="text-[var(--text-primary)]">
+                  <strong>ID:</strong> {clickedButton.getId()}
+                </p>
+                <p className="text-[var(--text-primary)]">
+                  <strong >Linje:</strong> {clickedButton.getLine()}
+                </p>
+                <p className="text-[var(--text-primary)]">
+                  <strong>Pris:</strong> {clickedButton.getPrice()}
+                </p>
+              </div>
             </div>
           )}
 
-          <button onClick={loadLines}>Ladda linjer</button>
+          <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
+            <div>
+              <p className="font-medium text-[var(--text-primary)]">Aktuella linjer</p>
+              {!areasLoaded && (
+                <p className="text-sm text-[var(--text-primary)] mt-1">
+                  Laddar dina sparade områden...
+                </p>
+              )}
+            </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 max-w-md">
-            <p className="mb-2 font-medium">
-              Linjer från API:{" "} {loadingLines ? "Laddar..." : lineError ? lineError : linesData.length > 0 ? "Laddat!" : "Inga linjer"}
-            </p>
+            <button
+              onClick={loadLines}
+              disabled={!areasLoaded || loadingLines}
+              className="w-full bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-3 rounded hover:bg-[var(--primary-button-hover)] disabled:bg-gray-400 transition font-semibold"
+            >
+              {loadingLines
+                ? "Hämtar filtrerade linjer..."
+                : "Hämta filtrerade linjer"}
+            </button>
 
-            {!loadingLines && !lineError && linesData.length > 0 && (
-              <ul className="mt-3 space-y-2 text-sm">
-                {linesData.map((line) => (
-                  <li key={line.getId()} className="border rounded p-2 bg-gray-50">
-                    <p><strong>{line.getName()}</strong></p>
-                    <p>ID: {line.getId()}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="text-sm text-[var(--primary-text)]">
+              {!areasLoaded ? (
+                <p className="text-[var(--text-primary)]">Vänta tills inställningarna har laddats.</p>
+              ) : lineError ? (
+                <p className="text-[var(--error)]">{lineError}</p>
+              ) : !hasLoadedLines ? (
+                <p className="text-[var(--text-primary)]">Klicka på knappen för att ladda linjerna.</p>
+              ) : linesData.length > 0 ? (
+                <p className="text-[var(--text-primary)]">{linesData.length} filtrerade linjer hittades.</p>
+              ) : (
+                <p>Inga linjer matchade dina valda områden.</p>
+              )}
+            </div>
+
+            
           </div>
         </div>
       </main>
-
-      <Footer />
+      <Footer/>
     </div>
+  </div>
   );
 }

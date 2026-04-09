@@ -129,3 +129,13 @@ Supabase hanteras **alltid server-side** via:
 
 - [web/lib/supabaseServer.ts](web/lib/supabaseServer.ts) - Server-only Supabase-klient
 - [web/app/api/message/route.ts](web/app/api/message/route.ts) - Exempel på API-route som sparar till DB
+
+## Historisk CSV-import
+
+Historisk import använder nu en samlad endpoint:
+
+- [web/app/api/import-historical/route.ts](web/app/api/import-historical/route.ts)
+
+Detaljerad dokumentation av request/response och alla felkoder finns i:
+
+- [web/README.md](web/README.md)

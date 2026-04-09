@@ -129,8 +129,9 @@ export default function ProfitCalculatorPage() {
     estimatedRevenue !== null ? estimatedRevenue >= threshold : null;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
-      <Navigation currentPage="simulator" />
+    <div className="">
+      <div className="min-h-screen flex flex-col bg-[var(--bg)]">
+        <Navigation currentPage="simulator" />
 
       <main className="flex-grow flex flex-col lg:flex-row justify-center p-6 gap-6">
         <div className="bg-white max-w-md w-full rounded-xl shadow-md p-8 space-y-6">
@@ -229,7 +230,8 @@ export default function ProfitCalculatorPage() {
         </div>
       </main>
 
-      <Footer />
+        <Footer />
+      </div>
     </div>
   );
 }

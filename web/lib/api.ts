@@ -3,6 +3,7 @@ import type {
 	ConsignmentListItem,
 	EquipageItem,
 	LineItem,
+	ZoneTreeNode,
 } from "@/lib/ilogTypes";
 import type { User } from "@/lib/databaseTypes";
 
@@ -13,6 +14,14 @@ import type {
 	TokenResponse
 } from "@/lib/returnTypes";
 import { Json } from "./supabaseServerSchema";
+
+type HistoricalImportResponse = {
+	columnsFound: number;
+	rowsFound: number;
+	insertedRows: number;
+};
+
+
 
 export const sendMessage = async (message: string): Promise<MessageResponse> => {
 	const sentAt = new Date().toLocaleTimeString("sv-SE", {
@@ -188,18 +197,7 @@ export const deleteUser = async (id: string): Promise<BasicResponse<null>> => {
 	return (await response.json()) as BasicResponse<null>;
 }
 
-/**
- * Hämtar lista över ekipage (fordon/transport-enheter).
-*/
-export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> => {
-	const response = await fetch("/api/ilog/equipages", { method: "GET" });
 
-	if (!response.ok) {
-		throw new Error("Request failed: " + (await response.text()));
-	}
-
-	return (await response.json()) as IlogResponse<EquipageItem[]>;
-};
 
 /**
  * Hämtar alla iLog-linjer for aktuell grupp.
@@ -212,6 +210,19 @@ export const getIlogLines = async (): Promise<IlogResponse<LineItem[]>> => {
 	}
 
 	return (await response.json()) as IlogResponse<LineItem[]>;
+};
+
+/**
+ * Hämtar lista över ekipage (fordon/transport-enheter).
+*/
+export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> => {
+	const response = await fetch("/api/ilog/equipages", { method: "GET" });
+
+	if (!response.ok) {
+		throw new Error("Request failed: " + (await response.text()));
+	}
+
+	return (await response.json()) as IlogResponse<EquipageItem[]>;
 };
 
 /**
@@ -301,3 +312,133 @@ export const calculateSimulationProfitability = async (
 
 	return (await response.json()) as SimulationProfitabilityResponse;
 };
+/**
+ * Hämtar alla iLog-zoner for aktuell grupp.
+ */
+export const getIlogZones = async (
+	date: string,
+	withEquipages: boolean = true
+): Promise<IlogResponse<ZoneTreeNode[]>> => {
+	const params = new URLSearchParams({
+		date,
+		withEquipages: String(withEquipages), // convert to "true"/"false"
+	});
+
+	const response = await fetch(`/api/ilog/zones?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		throw new Error("Request failed: " + (await response.text()));
+	}
+
+	return (await response.json()) as IlogResponse<ZoneTreeNode[]>;
+};
+
+/**
+ * Hämtar alla iLog-distribution-zoner for aktuell grupp.
+ */
+export const getIlogDistributionZones = async (
+	date: string,
+	withEquipages: boolean = true
+): Promise<IlogResponse<ZoneTreeNode[]>> => {
+	const params = new URLSearchParams({
+		date,
+		withEquipages: String(withEquipages),
+	});
+
+	const response = await fetch(`/api/ilog/distribution-zones?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		throw new Error("Request failed: " + (await response.text()));
+	}
+
+	return (await response.json()) as IlogResponse<ZoneTreeNode[]>;
+};
+
+/**
+ * Hämtar signerad upload-URL och jobId för historisk import.
+ */
+export const createHistoricalImportSession = async (filename: string): Promise<{
+	jobId: string;
+	uploadUrl: string;
+	storagePath: string;
+}> => {
+	const response = await fetch('/api/import-historical', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ action: 'create-upload-session', filename }),
+	});
+
+	if (!response.ok) {
+		const error = await response.json() as { error?: string };
+		throw new Error(error.error || 'Kunde inte skapa upload-session');
+	}
+
+	return (await response.json()) as { jobId: string; uploadUrl: string; storagePath: string };
+};
+
+/**
+ * Laddar upp CSV-fil direkt till Supabase Storage via signerad URL.
+ */
+export const uploadHistoricalCsvToStorage = async (
+	uploadUrl: string,
+	file: File,
+	onProgress?: (percent: number) => void,
+): Promise<void> => {
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+
+		xhr.upload.addEventListener('progress', (event) => {
+			if (event.lengthComputable) {
+				const percent = Math.round((event.loaded / event.total) * 100);
+				onProgress?.(percent);
+			}
+		});
+
+		xhr.addEventListener('load', () => {
+			if (xhr.status >= 200 && xhr.status < 300) {
+				resolve();
+			} else {
+				reject(new Error(`Upload misslyckades: HTTP ${xhr.status}`));
+			}
+		});
+
+		xhr.addEventListener('error', () => reject(new Error('Upload-fel')));
+		xhr.addEventListener('abort', () => reject(new Error('Upload avbruten')));
+
+		xhr.open('PUT', uploadUrl);
+		// Content-Type måste matcha fil-typen
+		xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+		xhr.send(file);
+	});
+};
+
+/**
+ * Startar historisk import från tidigare uppladdad CSV i Storage.
+ */
+export const runHistoricalImport = async (jobId: string): Promise<{
+	jobId: string;
+	status: string;
+	result: HistoricalImportResponse;
+}> => {
+	const response = await fetch('/api/import-historical', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ action: 'start-import', jobId }),
+	});
+
+	if (!response.ok) {
+		const error = await response.json() as { error?: string };
+		throw new Error(error.error || 'Kunde inte starta import');
+	}
+
+	return (await response.json()) as {
+		jobId: string;
+		status: string;
+		result: HistoricalImportResponse;
+	};
+};
+
