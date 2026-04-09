@@ -7,7 +7,7 @@ export default function Pricebar({ progress }: Property) {
   const hue = (progress / 100) * 120;
 
   return (
-    <div className="w-full h-2 bg-gray-900 rounded-full overflow-hidden mb-2">
+    <div className="w-full h-2 bg-[var(--primary-element)] rounded-full overflow-hidden mb-2">
       <div
         className="h-full transition-all duration-300"
         style={{

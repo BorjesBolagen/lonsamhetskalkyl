@@ -24,12 +24,12 @@ export default function Navigation({ currentPage }: NavigationProps) {
 const getLinkClasses = (isActive: boolean) =>
   `relative h-full flex items-center px-4 py-4 font-bold transition-colors duration-200 ${
     isActive
-      ? "after:content-[''] after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-black"
-      : "text-[#272829] hover:bg-black/10 "
+      ? "after:content-[''] after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-[var(--text-primary)]"
+      : "text-[var(--text-heading)] hover:bg-[var(--text-primary)]/10"
   }`;
 
   return (
-    <nav className="bg-[#FFFFFF] shadow-sm">
+    <nav className="bg-[var(--navbar)] text-[var(--text-primary)] shadow-sm">
       <div className="max-w-8xl mx-auto px-2 sm:px-2 lg:px-6">
         <div className="flex items-center justify-between h-14">
           {/* LEFT SIDE */}

@@ -16,23 +16,23 @@ export default function Card({
   price,
 }: CardProps) {
   return (
-    <div className="bg-[#585858] rounded-xl shadow-sm p-2 w-36 flex flex-col items-center hover:shadow-md transition">
+    <div className="bg-[var(--secondary-element)] rounded-xl shadow-sm p-2 w-36 flex flex-col items-center hover:shadow-md transition">
 
       {/* Titel */}
-      <div className="bg-gray-800 text-gray-300 text-sm font-semibold px-3 py-2 rounded-md mb-3 w-full text-center">
+      <div className="bg-[var(--card-titel)] text-[var(--text-secondary)] text-sm font-semibold px-3 py-2 rounded-md mb-3 w-full text-center">
         {title}
       </div>
 
       {/* FLM */}
-      <p className="text-xs text-gray-300">FLM</p>
+      <p className="text-xs text-[var(--text-secondary)]">FLM</p>
       <FLMbar progress={capacity} />
 
       {/* Pris */}
-      <p className="text-xs text-gray-900 mt-1">Pris</p>
+      <p className="text-xs text-[var(--text-secondary)] mt-1">Pris</p>
       <Pricebar progress={price} />
 
       {/* Button */}
-      <div className="bg-[#242424] mt-2 w-full text-center text-white px-2 py-1 rounded hover:bg-gray-500 transition text-sm">
+      <div className="bg-[var(--primary-button)] mt-2 w-full text-center text-[var(--text-secondary)] px-2 py-1 rounded hover:bg-gray-500 transition text-sm">
         {children}
       </div>
     </div>

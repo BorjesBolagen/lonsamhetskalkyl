@@ -66,6 +66,7 @@ function normalizeText(value: string): string {
     .replace(/\p{Diacritic}/gu, "");
 }
 
+
 export default function Home() {
   const STANDRD_FLM = 19.2;
 
@@ -137,7 +138,7 @@ export default function Home() {
       try {
         const response = await getCurrentlySignedInUser();
         const user = response.data;
-
+        
         if (user) {
           setSelectedAreas(parseAreaState(user.filters));
         } else {
@@ -173,7 +174,9 @@ export default function Home() {
     }
   };
 
+  
   return (
+    <div className="">
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="home" />
       <main className="flex-grow p-6 flex gap-10">
@@ -182,7 +185,7 @@ export default function Home() {
                 <div className="space-y-3">
                   {linesData.map((line) => (
                     <LineCard key={line.id} title={line.name}>
-                      <div className="text-sm text-gray-300 space-y-1">
+                      <div className="text-sm text-[var--(text-primary)] space-y-1">
                         <div className="flex">
                           <Card
                             key={Ekipage1.getId()}
@@ -224,13 +227,13 @@ export default function Home() {
                           </Card>
                         </div>
                         
-                        <p>
+                        <p className="text-[var(--text-primary)]">
                           <strong>ID:</strong> {line.id}
                         </p>
-                        <p>
+                        <p className="text-[var(--text-primary)]">
                           <strong>Från:</strong> {line.fromArea}
                         </p>
-                        <p>
+                        <p className="text-[var(--text-primary)]">
                           <strong>Till:</strong> {line.toArea}
                         </p>
                       </div>
@@ -241,7 +244,9 @@ export default function Home() {
           </div>
         <div className="w-[40rem] space-y-6 ml-auto">
           <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 max-w-md">
-            <p className="text-gray-300 mb-2 font-medium">Manuellt värde: {manualValue}</p>
+            <p className="text-[var(--text-primary)] mb-2 font-medium">
+              Manuellt värde: {manualValue}
+            </p>
 
             <form
               onSubmit={(e) => {
@@ -252,11 +257,11 @@ export default function Home() {
             >
               <input
                 onChange={(e) => setValue(e.target.value)}
-                className="text-gray-300 border-2 border-gray-300 rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
+                className="text-[var(--text-primary)] border-2 border-[var(--border-primary)] rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
               />
               <button
                 type="submit"
-                className="bg-[#75C07A] text-black px-4 py-2 rounded hover:bg-green-800 transition"
+                className="bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-2 rounded hover:bg-[var(--primary-button-hover)] transition"
               >
                 Spara
               </button>
@@ -265,15 +270,15 @@ export default function Home() {
 
           {clickedButton && (
             <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 max-w-md">
-              <h2 className="text-gray-300 text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
-              <div className="text-gray-300">
-                <p>
+              <h2 className="text-[var(--text-primary)] text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
+              <div>
+                <p className="text-[var(--text-primary)]">
                   <strong>ID:</strong> {clickedButton.getId()}
                 </p>
-                <p>
+                <p className="text-[var(--text-primary)]">
                   <strong >Linje:</strong> {clickedButton.getLine()}
                 </p>
-                <p>
+                <p className="text-[var(--text-primary)]">
                   <strong>Pris:</strong> {clickedButton.getPrice()}
                 </p>
               </div>
@@ -282,9 +287,9 @@ export default function Home() {
 
           <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
             <div>
-              <p className="font-medium text-gray-300">Aktuella linjer</p>
+              <p className="font-medium text-[var(--text-primary)]">Aktuella linjer</p>
               {!areasLoaded && (
-                <p className="text-sm text-gray-300 mt-1">
+                <p className="text-sm text-[var(--text-primary)] mt-1">
                   Laddar dina sparade områden...
                 </p>
               )}
@@ -293,22 +298,22 @@ export default function Home() {
             <button
               onClick={loadLines}
               disabled={!areasLoaded || loadingLines}
-              className="w-full bg-[#BB86FC] text-white px-4 py-3 rounded hover:bg-purple-300 disabled:bg-gray-400 transition font-semibold"
+              className="w-full bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-3 rounded hover:bg-[var(--primary-button-hover)] disabled:bg-gray-400 transition font-semibold"
             >
               {loadingLines
                 ? "Hämtar filtrerade linjer..."
                 : "Hämta filtrerade linjer"}
             </button>
 
-            <div className="text-sm text-gray-300">
+            <div className="text-sm text-[var(--primary-text)]">
               {!areasLoaded ? (
-                <p>Vänta tills inställningarna har laddats.</p>
+                <p className="text-[var(--text-primary)]">Vänta tills inställningarna har laddats.</p>
               ) : lineError ? (
-                <p className="text-red-300">{lineError}</p>
+                <p className="text-[var(--error)]">{lineError}</p>
               ) : !hasLoadedLines ? (
-                <p>Klicka på knappen för att ladda linjerna.</p>
+                <p className="text-[var(--text-primary)]">Klicka på knappen för att ladda linjerna.</p>
               ) : linesData.length > 0 ? (
-                <p>{linesData.length} filtrerade linjer hittades.</p>
+                <p className="text-[var(--text-primary)]">{linesData.length} filtrerade linjer hittades.</p>
               ) : (
                 <p>Inga linjer matchade dina valda områden.</p>
               )}
@@ -320,5 +325,6 @@ export default function Home() {
       </main>
       <Footer/>
     </div>
+  </div>
   );
 }
