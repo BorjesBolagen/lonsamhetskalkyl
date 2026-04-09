@@ -207,14 +207,9 @@ export default function Admin() {
   };
 
   return (
-<<<<<<< HEAD
     <div className="min-h-screen flex flex-col bg-[#EEEEEE]">
       
       {/* Wrapper som tvingar navigationsbaren att alltid ligga FRAMFÖR alla modaler */}
-=======
-    <div className="min-h-screen flex flex-col bg-[#C6E2D8]">
-      {/* Wrapper som tvingar navigationsbaren att alltid ligga FRAMFÖR alla Popuper */}
->>>>>>> main
       <div className="relative z-[60]">
         <Navigation currentPage="admin" />
       </div>
