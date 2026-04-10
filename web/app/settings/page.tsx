@@ -24,6 +24,10 @@ function setTheme(mode: "light" | "dark") {
   }
 }
 
+const applyTheme = (newTheme: "light" | "dark") => {
+  localStorage.setItem("theme", newTheme);
+  document.documentElement.classList.toggle("dark", newTheme === "dark");
+};
 
 const DEFAULT_THEME: ThemeMode = "light";
 
@@ -72,6 +76,11 @@ export default function Settings() {
   // States för områden
   const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
   const [theme, setTheme] = useState<ThemeMode>(DEFAULT_THEME);
+
+  useEffect(() => {
+    // For dark/lightmode
+    applyTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     // Profile info + saved filter/theme preferences from Supabase.
@@ -202,8 +211,8 @@ export default function Settings() {
 
       <main className="flex-grow flex flex-col p-6 items-center">
         {/* Yttre container, max-w-lg gör lådan lagom snäv (inget onödigt vitt utrymme) */}
-        <div className="font-sans text-gray-800 w-full max-w-lg">
-          <h1 className="text-4xl font-serif font-bold text-gray-800 mb-8 text-center">
+        <div className="font-sans text-[var(--text-secondary)] w-full max-w-lg">
+          <h1 className="text-4xl text-[var(--text-primary)] font-bold text-center mb-8">
             Mitt Konto
           </h1>
 
@@ -214,8 +223,8 @@ export default function Settings() {
               onClick={() => setActiveTab("konto")}
               className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
                 activeTab === "konto"
-                  ? "bg-white text-black border-[#446E30]"
-                  : "bg-transparent text-gray-600 border-transparent hover:bg-white/50"
+                  ? "bg-[var(--primary-element)] border-[#446E30]"
+                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
               }`}
             >
               <svg
@@ -240,8 +249,8 @@ export default function Settings() {
               onClick={() => setActiveTab("losenord")}
               className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
                 activeTab === "losenord"
-                  ? "bg-white text-black border-[#446E30]"
-                  : "bg-transparent text-gray-600 border-transparent hover:bg-white/50"
+                  ? "bg-[var(--primary-element)] border-[#446E30]"
+                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
               }`}
             >
               <svg
@@ -262,7 +271,7 @@ export default function Settings() {
           </div>
 
           {/* HUVUDINNEHÅLL */}
-          <section className="bg-white rounded-xl shadow-md p-8 sm:p-10 min-h-[450px]">
+          <section className="bg-[var(--primary-element)] rounded-xl shadow-md p-8 sm:p-10 min-h-[450px]">
             {/* INNEHÅLL: KONTO (Kombinerad info och inställningar) */}
             {activeTab === "konto" && (
               <div className="space-y-10 w-full mx-auto">
@@ -271,22 +280,22 @@ export default function Settings() {
                   <h3 className="font-bold text-xl mb-4 border-b-2 border-green-500 pb-2">
                     Din Profil
                   </h3>
-                  <div className="bg-gray-50 p-5 rounded-lg border border-gray-100 space-y-3">
+                  <div className="bg-[var(--secondary-element)] p-5 rounded-lg border border-gray-100 space-y-3">
                     <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-                      <span className="font-bold text-gray-500">
+                      <span className="text-[var(--text-primary)] font-bold">
                         Användare:
                       </span>
-                      <span className="text-gray-800 font-medium">
+                      <span className="font-medium">
                         {displayName}
                       </span>
                     </div>
                     <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-                      <span className="font-bold text-gray-500">E-post:</span>
-                      <span className="text-gray-800 font-medium">{email}</span>
+                      <span className="text-[var(--text-primary)] font-bold">E-post:</span>
+                      <span className="font-medium">{email}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-gray-500">Roll:</span>
-                      <span className="bg-[#e5efe6] text-[#446E30] px-3 py-1 rounded-full text-sm font-bold">
+                      <span className="text-[var(--text-primary)] font-bold">Roll:</span>
+                      <span className="bg-[var(--primary-element)] text-[var(--text-primary)] px-3 py-1 rounded-full text-sm font-bold">
                         {role}
                       </span>
                     </div>
@@ -310,7 +319,7 @@ export default function Settings() {
                           key={distKey}
                           className="flex items-center justify-between cursor-pointer border-b border-gray-200 pb-2 w-full hover:bg-gray-50 transition-colors px-2 rounded"
                         >
-                          <span className="font-bold text-lg text-gray-700">
+                          <span className="font-bold text-lg">
                             {AREA_OPTIONS[distKey]}
                           </span>
                           <div className="relative flex items-center">
@@ -388,7 +397,7 @@ export default function Settings() {
 
             {/* INNEHÅLL: LÖSENORD */}
             {activeTab === "losenord" && (
-              <div className="w-full mx-auto">
+              <div className="w-full mx-auto text-[var(--text-primary)]">
                 <h3 className="font-bold text-xl mb-6 text-center border-b-2 border-green-500 pb-2">
                   Byt lösenord
                 </h3>
@@ -396,8 +405,8 @@ export default function Settings() {
                   className="space-y-6"
                   onSubmit={(e) => e.preventDefault()}
                 >
-                  <div className="flex flex-col bg-gray-50 p-4 rounded-lg shadow-sm">
-                    <label className="mb-2 text-sm font-bold text-gray-700">
+                  <div className="bg-[var(--secondary-element)] flex flex-col p-4 rounded-lg shadow-sm">
+                    <label className="mb-2 text-sm font-bold">
                       Nuvarande lösenord
                     </label>
                     <div className="relative">
@@ -412,15 +421,15 @@ export default function Settings() {
                         onClick={() =>
                           setShowCurrentPassword(!showCurrentPassword)
                         }
-                        className="absolute right-3 top-3.5 text-gray-500 hover:text-black transition-colors"
+                        className="absolute right-3 top-3.5 hover:text-[var(--text-secondary)] transition-colors"
                       >
                         {showCurrentPassword ? <EyeSlashIcon /> : <EyeIcon />}
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex flex-col bg-gray-50 p-4 rounded-lg shadow-sm">
-                    <label className="mb-2 text-sm font-bold text-gray-700">
+                  <div className="bg-[var(--secondary-element)] flex flex-col p-4 rounded-lg shadow-sm">
+                    <label className="mb-2 text-sm font-bold">
                       Nytt lösenord
                     </label>
                     <div className="relative">
@@ -433,15 +442,15 @@ export default function Settings() {
                       <button
                         type="button"
                         onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-3 top-3.5 text-gray-500 hover:text-black transition-colors"
+                        className="absolute right-3 top-3.5 hover:text-black transition-colors"
                       >
                         {showNewPassword ? <EyeSlashIcon /> : <EyeIcon />}
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex flex-col bg-gray-50 p-4 rounded-lg shadow-sm">
-                    <label className="mb-2 text-sm font-bold text-gray-700">
+                  <div className="bg-[var(--secondary-element)] flex flex-col p-4 rounded-lg shadow-sm">
+                    <label className="mb-2 text-sm font-bold">
                       Repetera nytt lösenord
                     </label>
                     <div className="relative">

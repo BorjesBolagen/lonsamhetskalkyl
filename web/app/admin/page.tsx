@@ -215,9 +215,9 @@ export default function Admin() {
       </div>
 
       <main className="flex-grow p-6 flex justify-center">
-        <div className="space-y-6 text-gray-800 font-sans w-full max-w-6xl">
+        <div className="space-y-6 text-[var(--text-primary)] font-sans w-full max-w-6xl">
           {/* SIDHUVUD & ACTION-KNAPPAR */}
-          <div className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-xl shadow-md">
+          <div className="flex flex-col md:flex-row justify-between items-center bg-[var(--primary-element)] p-6 rounded-xl shadow-md">
             <h1 className="text-2xl font-bold text-[var(--text-heading)] mb-4 md:mb-0">
               Admin & Strategisk Analys
             </h1>
@@ -245,23 +245,23 @@ export default function Admin() {
 
           {/* INFO rutor */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-[#7ec58a]">
+            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md border-t-4 border-[#7ec58a]">
               <p className="text-sm text-gray-500 font-medium">
                 Fyllnadsgrad Totalt
               </p>
               <p className="text-3xl font-bold mt-1">88%</p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-[#446E30]">
+            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md border-t-4 border-[#446E30]">
               <p className="text-sm text-gray-500 font-medium">
                 Snitt Intäkt / FLM
               </p>
               <p className="text-3xl font-bold mt-1">184 kr</p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-gray-400">
+            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md border-t-4 border-gray-400">
               <p className="text-sm text-gray-500 font-medium">Aktiva Bilar</p>
               <p className="text-3xl font-bold mt-1">32 st</p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-gray-400">
+            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md border-t-4 border-gray-400">
               <p className="text-sm text-gray-500 font-medium">
                 Körningar idag
               </p>
@@ -271,11 +271,11 @@ export default function Admin() {
 
           {/* GRAFER (Placeholders) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-xl shadow-md flex flex-col">
+            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md flex flex-col">
               <h3 className="font-bold mb-4 border-b-2 border-green-500 pb-2">
                 Fyllnadsgrad per Distrikt
               </h3>
-              <div className="flex-grow bg-gray-50 border-2 border-gray-200 rounded flex flex-col justify-end p-4 min-h-[12rem]">
+              <div className="flex-grow bg-[var(--secondary-element)] border-2 border-gray-200 rounded flex flex-col justify-end p-4 min-h-[12rem]">
                 <div className="flex items-end justify-around h-full border-b-2 border-gray-300 pb-1">
                   <div
                     className="w-12 sm:w-16 bg-[#7ec58a] h-[80%] rounded-t-sm hover:opacity-80 transition-opacity"
@@ -303,25 +303,25 @@ export default function Admin() {
                 </div>
               </div>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-md flex flex-col">
+            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md flex flex-col">
               <h3 className="font-bold mb-4 border-b-2 border-green-500 pb-2">
                 Intäkt per FLM
               </h3>
-              <div className="flex-grow bg-gray-50 border-2 border-gray-200 rounded flex items-center justify-center text-gray-400 min-h-[12rem]">
+              <div className="flex-grow bg-[var(--secondary-element)] border-2 border-gray-200 rounded flex items-center justify-center text-gray-400 min-h-[12rem]">
                 [ Här ska en graf visas senare ]
               </div>
             </div>
           </div>
 
           {/* TRAFIKLEDARLISTA */}
-          <div className="bg-white p-6 rounded-xl shadow-md overflow-hidden">
+          <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md overflow-hidden">
             <h3 className="font-bold text-lg mb-4 border-b-2 border-green-500 pb-2">
               Trafikledare
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 border-y-2 border-gray-200">
+                  <tr className="bg-[var(--secondary-element)] border-y-2 border-gray-200">
                     <th className="p-4 font-semibold">Namn / Email</th>
                     <th className="p-4 font-semibold">Distrikt</th>
                     <th className="p-4 font-semibold">Snitt Intäkt/FLM</th>
@@ -335,9 +335,9 @@ export default function Admin() {
                       className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
                       onClick={() => setSelectedUser(user)}
                     >
-                      <td className="p-4 text-[#446E30] font-bold">
+                      <td className="p-4 font-bold">
                         {user.name} <br />
-                        <span className="text-sm font-normal text-gray-500">
+                        <span className="text-sm font-normal text-[var(--text-secondary)]">
                           {user.email}
                         </span>
                       </td>
@@ -356,7 +356,7 @@ export default function Admin() {
       {/* POPUP: LÄGG TILL ANVÄNDARE */}
       {isAddUserOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-md relative text-gray-800">
+          <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)]">
             <button
               onClick={() => setIsAddUserOpen(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-black text-xl"
@@ -368,7 +368,7 @@ export default function Admin() {
             </h3>
             <form onSubmit={handleSignup} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex flex-col bg-gray-50 p-3 rounded-lg shadow-sm">
+                <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
                   <input
                     type="text"
                     placeholder="Förnamn"
@@ -377,7 +377,7 @@ export default function Admin() {
                     className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                   />
                 </div>
-                <div className="flex flex-col bg-gray-50 p-3 rounded-lg shadow-sm">
+                <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
                   <input
                     type="text"
                     placeholder="Efternamn"
@@ -388,7 +388,7 @@ export default function Admin() {
                 </div>
               </div>
 
-              <div className="flex flex-col bg-gray-50 p-3 rounded-lg shadow-sm">
+              <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
                 <input
                   type="email"
                   placeholder="E-mail"
@@ -399,7 +399,7 @@ export default function Admin() {
               </div>
 
               {/* Uppdaterat fält för lösenord med ögon-ikonen */}
-              <div className="flex flex-col bg-gray-50 p-3 rounded-lg shadow-sm">
+              <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
                 <div className="relative">
                   <input
                     type={showSignupPassword ? "text" : "password"}
@@ -418,7 +418,7 @@ export default function Admin() {
                 </div>
               </div>
 
-              <div className="flex flex-col bg-gray-50 p-3 rounded-lg shadow-sm">
+              <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value as UserRole)}
