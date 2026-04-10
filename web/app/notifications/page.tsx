@@ -22,31 +22,26 @@ export default function ProfitCalculatorPage() {
 
       {/* Main content */}
       <main className="flex-grow flex flex-col lg:flex-row justify-center p-6 gap-8">
-        {/* Info left*/}
-      <div className="bg-[#E3F1EC] max-w-md w-full rounded-xl shadow-md p-6 space-y-4 self-start">
-        <p className="text-gray-900">
-          Här kan du se dina notifikationer och meddelanden.
-        </p>
-      </div>
-        {/* Notifications right */}
-        <div className="bg-white max-w-4xl w-full rounded-xl shadow-md p-8 space-y-6">
+
+        {/* Notifications */}
+        <div className="bg-[var(--primary-element)] max-w-4xl w-full rounded-xl shadow-md p-8 space-y-6">
           {/* Title */}
-          <h1 className="text-3xl font-bold text-center text-gray-800 mb-6 border-b-2 border-green-700 pb-2 flex items-center justify-center space-x-2">
+          <h1 className="text-3xl font-bold text-center text-[var(--text-primary)] mb-6 border-b-2 border-green-700 pb-2 flex items-center justify-center space-x-2">
             <span>🔔</span>
             <span>Notifikationer</span>
           </h1>
 
-          <ul className="space-y-4">
+          <ul className="space-y-4 text-[var(--text-primary)]">
             {notifications.map((note, index) => (
                <li
                 key={index}
-                className="p-4 bg-green-50 rounded-lg shadow-sm flex justify-between items-center"
+                className="p-4 bg-[var(--notification-color)] rounded-lg shadow-sm flex justify-between items-center"
               >
               <span>{note}</span>
               {/* Remove button */}
               <button
                 onClick={() => removeNotification(index)}
-                className="text-sm text-white px-3 py-1 rounded hover:bg-gray-600"
+                className="text-sm text-[var(--text-primary)] px-3 py-1 rounded hover:bg-gray-600"
               >
                 🗑️
               </button>

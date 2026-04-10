@@ -230,13 +230,13 @@ export default function Admin() {
               </button>
               <button
                 onClick={() => setIsAddUserOpen(true)}
-                className="px-4 py-2 bg-[#75C07A] hover:bg-green-800 text-white font-semibold rounded shadow transition-colors duration-300"
+                className="px-4 py-2 bg-[#75C07A] hover:bg-green-800 text-[var(--text-primary)] font-semibold rounded shadow transition-colors duration-300"
               >
                 + Lägg till Användare
               </button>
               <button
                 onClick={() => setIsMessagePopupOpen(true)}
-                className="px-4 py-2 bg-[#446E30] hover:bg-[#365926] text-white font-semibold rounded shadow transition-colors duration-300"
+                className="px-4 py-2 bg-[#446E30] hover:bg-[#365926] text-[var(--text-primary)] font-semibold rounded shadow transition-colors duration-300"
               >
                 ✉ Skicka Meddelande
               </button>
@@ -291,13 +291,13 @@ export default function Admin() {
                   ></div>
                 </div>
                 <div className="flex justify-around mt-3">
-                  <span className="text-xs sm:text-sm font-bold text-gray-600 w-12 sm:w-16 text-center">
+                  <span className="text-xs sm:text-sm font-bold text-[var(--text-secondary)] w-12 sm:w-16 text-center">
                     Växjö
                   </span>
-                  <span className="text-xs sm:text-sm font-bold text-gray-600 w-12 sm:w-16 text-center">
+                  <span className="text-xs sm:text-sm font-bold text-[var(--text-secondary)] w-12 sm:w-16 text-center">
                     Linköping
                   </span>
-                  <span className="text-xs sm:text-sm font-bold text-gray-600 w-12 sm:w-16 text-center">
+                  <span className="text-xs sm:text-sm font-bold text-[var(--text-secondary)] w-12 sm:w-16 text-center">
                     Jönköping
                   </span>
                 </div>
@@ -332,7 +332,7 @@ export default function Admin() {
                   {mockTrafficLeaders.map((user) => (
                     <tr
                       key={user.id}
-                      className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="border-b border-gray-100 hover:bg-[var(--secondary-element)]-50 cursor-pointer transition-colors"
                       onClick={() => setSelectedUser(user)}
                     >
                       <td className="p-4 font-bold">
@@ -359,7 +359,7 @@ export default function Admin() {
           <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)]">
             <button
               onClick={() => setIsAddUserOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-black text-xl"
+              className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
             >
               ✖
             </button>
@@ -411,7 +411,7 @@ export default function Admin() {
                   <button
                     type="button"
                     onClick={() => setShowSignupPassword(!showSignupPassword)}
-                    className="absolute right-3 top-2.5 text-gray-500 hover:text-black transition-colors"
+                    className="absolute right-3 top-2.5 text-[var(--text-secondary)] hover:text-black transition-colors"
                   >
                     {showSignupPassword ? <EyeSlashIcon /> : <EyeIcon />}
                   </button>
@@ -437,13 +437,13 @@ export default function Admin() {
               <button
                 type="submit"
                 disabled={isSigningUp}
-                className="w-full mt-4 bg-[#75C07A] text-white p-3 rounded font-bold hover:bg-green-800 transition-colors duration-300 disabled:opacity-50"
+                className="w-full mt-4 bg-[#75C07A] text-[var(--text-primary)] p-3 rounded font-bold hover:bg-green-800 transition-colors duration-300 disabled:opacity-50"
               >
                 {isSigningUp ? "Registrerar..." : "Registrera"}
               </button>
             </form>
             {signupResponse && (
-              <p className="mt-4 p-3 bg-gray-100 border-l-4 border-[#75C07A] text-sm rounded">
+              <p className="mt-4 p-3 bg-[var(--secondary-element)]-100 border-l-4 border-[#75C07A] text-sm rounded">
                 {signupResponse}
               </p>
             )}
@@ -454,10 +454,10 @@ export default function Admin() {
       {/* POPUP: IMPORTERA HISTORISK CSV */}
       {isCSVImportPopupOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-xl relative text-gray-800">
+          <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-xl relative text-[var(--text-secondary)]">
             <button
               onClick={closeCSVImportPopup}
-              className="absolute top-4 right-4 text-gray-400 hover:text-black text-xl"
+              className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
             >
               ✖
             </button>
@@ -465,7 +465,7 @@ export default function Admin() {
               Importera historisk kusk-data
             </h3>
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-[var(--text-secondary)]">
                 Välj en .csv-fil med historiska kusk-rader. Importen kör en full
                 kontroll, och eventuella fel visas i rutan nedan.
               </p>
@@ -475,7 +475,7 @@ export default function Admin() {
                   type="button"
                   onClick={handleCSVUploadClick}
                   disabled={isImportingCSV}
-                  className="px-6 py-2 bg-[#446E30] hover:bg-[#365926] text-white font-semibold rounded shadow transition-colors duration-300 disabled:opacity-50"
+                  className="px-6 py-2 bg-[#446E30] hover:bg-[#365926] text-[var(--text-primary)] font-semibold rounded shadow transition-colors duration-300 disabled:opacity-50"
                 >
                   {isImportingCSV
                     ? "Importerar CSV..."
@@ -492,8 +492,8 @@ export default function Admin() {
               />
 
               {showCSVServerProgress && (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 space-y-3">
-                  <div className="flex items-center justify-between text-sm text-gray-700">
+                <div className="rounded-lg border border-gray-200 bg-[var(--secondary-element)]-50 px-4 py-3 space-y-3">
+                  <div className="flex items-center justify-between text-sm text-[var(--text-secondary)]">
                     <div className="flex items-center gap-3">
                       {isImportingCSV && (
                         <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#446E30] border-t-transparent" />
@@ -503,7 +503,7 @@ export default function Admin() {
                     <span className="font-medium">{csvImportProgress}%</span>
                   </div>
                   <div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--secondary-element)]-200">
                       <div
                         className="h-full rounded-full bg-[#446E30] transition-all duration-150 ease-out"
                         style={{ width: `${csvImportProgress}%` }}
@@ -515,7 +515,7 @@ export default function Admin() {
               <textarea
                 value={csvOutputText}
                 readOnly
-                className="w-full h-44 p-3 border-2 border-gray-300 rounded bg-white text-sm"
+                className="w-full h-44 p-3 border-2 border-gray-300 rounded bg-[var(--primary-element)] text-sm"
               />
             </div>
           </div>
@@ -525,10 +525,10 @@ export default function Admin() {
       {/* SKICKA MEDDELANDE */}
       {isMessagePopupOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-md relative text-gray-800">
+          <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-secondary)]">
             <button
               onClick={() => setIsMessagePopupOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-black text-xl"
+              className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
             >
               ✖
             </button>
@@ -536,7 +536,7 @@ export default function Admin() {
               Skicka info till alla
             </h3>
             <form onSubmit={handleSendMessage} className="space-y-4">
-              <div className="flex flex-col bg-gray-50 p-3 rounded-lg shadow-sm">
+              <div className="flex flex-col bg-[var(--secondary-element)]-50 p-3 rounded-lg shadow-sm">
                 <textarea
                   value={adminMessage}
                   onChange={(e) => setAdminMessage(e.target.value)}
@@ -547,13 +547,13 @@ export default function Admin() {
               <button
                 type="submit"
                 disabled={isSendingMessage}
-                className="w-full bg-[#446E30] text-white p-3 rounded font-bold hover:bg-[#365926] transition-colors duration-300 disabled:opacity-50"
+                className="w-full bg-[#446E30] text-[var(--text-primary)] p-3 rounded font-bold hover:bg-[#365926] transition-colors duration-300 disabled:opacity-50"
               >
                 {isSendingMessage ? "Skickar..." : "Skicka"}
               </button>
             </form>
             {adminResponse && (
-              <p className="mt-4 p-3 bg-gray-100 border-l-4 border-[#446E30] text-sm rounded">
+              <p className="mt-4 p-3 bg-[var(--secondary-element)]-100 border-l-4 border-[#446E30] text-sm rounded">
                 {adminResponse}
               </p>
             )}
@@ -564,16 +564,16 @@ export default function Admin() {
       {/* ANVÄNDARDETALJER */}
       {selectedUser && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-sm relative border-t-8 border-[#446E30] text-gray-800">
+          <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-sm relative border-t-8 border-[#446E30] text-[var(--text-secondary)]">
             <button
               onClick={() => setSelectedUser(null)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-black text-xl"
+              className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
             >
               ✖
             </button>
             <h3 className="font-bold text-2xl mb-1">{selectedUser.name}</h3>
-            <p className="text-gray-500 mb-6">{selectedUser.email}</p>
-            <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
+            <p className="text-[var(--text-secondary)] mb-6">{selectedUser.email}</p>
+            <div className="space-y-3 bg-[var(--secondary-element)]-50 p-4 rounded-lg">
               <p className="flex justify-between">
                 <strong>Distrikt:</strong> <span>{selectedUser.district}</span>
               </p>
@@ -590,7 +590,7 @@ export default function Admin() {
             </div>
             <button
               onClick={() => setSelectedUser(null)}
-              className="mt-8 w-full border-2 border-gray-300 font-bold p-3 rounded hover:bg-gray-100 transition-colors"
+              className="mt-8 w-full border-2 border-gray-300 font-bold p-3 rounded hover:bg-[var(--secondary-element)]-100 transition-colors"
             >
               Stäng
             </button>

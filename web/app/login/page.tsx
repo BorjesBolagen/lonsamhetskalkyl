@@ -74,6 +74,7 @@ export default function Login() {
             <span className="text-gray-500 mr-3">✉</span>
             <input
               type="text"
+              data-testid="email-input"
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -86,6 +87,7 @@ export default function Login() {
             <span className="text-gray-500 mr-3">🔒</span>
             <input
               type="password"
+              data-testid="password-input"
               placeholder="Lösenord"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -96,7 +98,7 @@ export default function Login() {
 
           <div className="flex items-center justify-between text-xs text-gray-600">
             <label className="flex items-center cursor-pointer">
-              <input type="checkbox" checked = {rememberMe} onChange={(e) => setRememerMe(e.target.checked)} className="mr-2 accent-[#76a57d]"  />
+              <input type="checkbox" data-testid="remember-me" checked = {rememberMe} onChange={(e) => setRememerMe(e.target.checked)} className="mr-2 accent-[#76a57d]"  />
               Kom ihåg mig
             </label>
             <a href="#" className="underline hover:text-black transition-colors">
@@ -105,11 +107,12 @@ export default function Login() {
           </div>
 
           {errorMsg && (
-            <p className="text-red-500 text-sm text-center font-medium">{errorMsg}</p>
+            <p data-testid="error-message" className="text-red-500 text-sm text-center font-medium">{errorMsg}</p>
           )}
 
           <button
             type="submit"
+            data-testid="login-button"
             disabled={isLoading}
             className="w-full bg-[#7ec58a] hover:bg-[#6db579] text-white font-bold py-3 px-4 rounded-full shadow-md transition-all transform active:scale-95 uppercase tracking-widest text-sm"
           >

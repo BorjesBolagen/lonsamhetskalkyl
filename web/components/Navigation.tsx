@@ -10,10 +10,10 @@ interface NavigationProps {
 export default function Navigation({ currentPage }: NavigationProps) {
   const router = useRouter();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     try {
       const supabase = getSupabaseBrowserClient();
-      supabase.auth.signOut();
+      await supabase.auth.signOut();
       console.log("User signed out successfully");
       router.push("/login");
     } catch (error) {

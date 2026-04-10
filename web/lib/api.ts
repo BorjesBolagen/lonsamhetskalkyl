@@ -268,6 +268,50 @@ export const getIlogConsignment = async (
 	return (await response.json()) as IlogResponse<ConsignmentDetail>;
 };
 
+
+export type SimulationProfitabilityValue = {
+	step_used: number;
+	taxeprel: string;
+	vklfgrv: number;
+	estimated_revenue: number;
+	explanation: string;
+};
+
+export type SimulationProfitabilityResponse = {
+	success: boolean;
+	value?: SimulationProfitabilityValue;
+	error?: string;
+	detail?: string | Array<{ msg?: string; [key: string]: unknown }>;
+};
+
+/**
+ * Kör simulatorns lönsamhetsberäkning via backend-route.
+ */
+export const calculateSimulationProfitability = async (
+	kundnamn: string,
+	start: string,
+	slut: string,
+	chargeableWeight: number
+): Promise<SimulationProfitabilityResponse> => {
+	const response = await fetch("/api/profitability_simulation", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			kundnamn,
+			start,
+			slut,
+			chargeable_weight: chargeableWeight,
+		}),
+	});
+
+	const contentType = response.headers.get("content-type") || "";
+
+	if (!contentType.includes("application/json")) {
+		throw new Error("API:t returnerade inte JSON.");
+	}
+
+	return (await response.json()) as SimulationProfitabilityResponse;
+};
 /**
  * Hämtar alla iLog-zoner for aktuell grupp.
  */
