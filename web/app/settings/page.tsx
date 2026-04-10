@@ -202,8 +202,8 @@ export default function Settings() {
 
       <main className="flex-grow flex flex-col p-6 items-center">
         {/* Yttre container, max-w-lg gör lådan lagom snäv (inget onödigt vitt utrymme) */}
-        <div className="font-sans text-gray-800 w-full max-w-lg">
-          <h1 className="text-4xl font-serif font-bold text-gray-800 mb-8 text-center">
+        <div className="font-sans text-[var(--text-primary)] w-full max-w-lg">
+          <h1 className="text-4xl font-serif font-bold text-[var(--text-primary)] mb-8 text-center">
             Mitt Konto
           </h1>
 
@@ -214,8 +214,8 @@ export default function Settings() {
               onClick={() => setActiveTab("konto")}
               className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
                 activeTab === "konto"
-                  ? "bg-white text-black border-[#446E30]"
-                  : "bg-transparent text-gray-600 border-transparent hover:bg-white/50"
+                  ? "bg-[var(--primary-element)] text-[var(--text-primary)] border-[#446E30]"
+                  : "bg-transparent bg-[var(--text-secondary)] border-transparent hover:bg-white/50"
               }`}
             >
               <svg
@@ -240,8 +240,8 @@ export default function Settings() {
               onClick={() => setActiveTab("losenord")}
               className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
                 activeTab === "losenord"
-                  ? "bg-white text-black border-[#446E30]"
-                  : "bg-transparent text-gray-600 border-transparent hover:bg-white/50"
+                  ? "bg-[var(--primary-element)] text-[var(--text-primary)] border-[#446E30]"
+                  : "bg-transparent bg-[var(--text-secondary)] border-transparent hover:bg-[var(--primary-element)]/50"
               }`}
             >
               <svg
@@ -262,31 +262,31 @@ export default function Settings() {
           </div>
 
           {/* HUVUDINNEHÅLL */}
-          <section className="bg-white rounded-xl shadow-md p-8 sm:p-10 min-h-[450px]">
+          <section className="bg-[var(--primary-element)] rounded-xl shadow-md p-8 sm:p-10 min-h-[450px]">
             {/* INNEHÅLL: KONTO (Kombinerad info och inställningar) */}
             {activeTab === "konto" && (
               <div className="space-y-10 w-full mx-auto">
                 {/* DEL 1: Kontoinformation (Read-only) */}
                 <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-green-500 pb-2">
+                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
                     Din Profil
                   </h3>
-                  <div className="bg-gray-50 p-5 rounded-lg border border-gray-100 space-y-3">
-                    <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-                      <span className="font-bold text-gray-500">
+                  <div className="bg-[var(--secondary-element)] p-5 rounded-lg border border-[var(--bg)] space-y-3">
+                    <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
+                      <span className="font-bold text-[var(--text-secondary)]">
                         Användare:
                       </span>
-                      <span className="text-gray-800 font-medium">
+                      <span className="text-[var(--text-secondary)] font-medium">
                         {displayName}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-                      <span className="font-bold text-gray-500">E-post:</span>
-                      <span className="text-gray-800 font-medium">{email}</span>
+                    <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
+                      <span className="font-bold text-[var(--text-secondary)]">E-post:</span>
+                      <span className="text-[var(--text-secondary)] font-medium">{email}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-gray-500">Roll:</span>
-                      <span className="bg-[#e5efe6] text-[#446E30] px-3 py-1 rounded-full text-sm font-bold">
+                      <span className="font-bold text-[var(--text-secondary)]">Roll:</span>
+                      <span className="bg-[var(--primary-color-background)] text-[var(--primary-color)] px-3 py-1 rounded-full text-sm font-bold">
                         {role}
                       </span>
                     </div>
@@ -295,11 +295,11 @@ export default function Settings() {
 
                 {/* DEL 2: Områden (Interaktiv) */}
                 <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-green-500 pb-2">
+                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
                     Filtrera dina områden
                   </h3>
                   {isLoadingProfile && (
-                    <p className="text-sm text-gray-600 mb-3">
+                    <p className="text-sm bg-[var(--text-secondary)] mb-3">
                       Laddar sparade inställningar...
                     </p>
                   )}
@@ -308,9 +308,9 @@ export default function Settings() {
                       return (
                         <label
                           key={distKey}
-                          className="flex items-center justify-between cursor-pointer border-b border-gray-200 pb-2 w-full hover:bg-gray-50 transition-colors px-2 rounded"
+                          className="flex items-center justify-between cursor-pointer border-b border-[var(--seperating-gray)] pb-2 w-full hover:bg-[var(--text-hover)] transition-colors px-2 rounded"
                         >
-                          <span className="font-bold text-lg text-gray-700">
+                          <span className="font-bold text-lg text-[var(--text-secondary)]">
                             {AREA_OPTIONS[distKey]}
                           </span>
                           <div className="relative flex items-center">
@@ -323,10 +323,10 @@ export default function Settings() {
                                   [distKey]: !districts[distKey],
                                 })
                               }
-                              className="w-6 h-6 appearance-none border-2 border-gray-400 bg-white checked:bg-white rounded-sm cursor-pointer"
+                              className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
                             />
                             {districts[distKey] && (
-                              <span className="absolute inset-0 flex items-center justify-center text-black pointer-events-none pb-1 font-bold text-lg">
+                              <span className="absolute inset-0 flex items-center justify-center text-[var(--text-primary)] pointer-events-none pb-1 font-bold text-lg">
                                 x
                               </span>
                             )}
@@ -339,7 +339,7 @@ export default function Settings() {
 
                 {/* DEL 3: Tema (Interaktiv) */}
                 <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-green-500 pb-2">
+                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
                     Tema
                   </h3>
                   <div className="flex space-x-4">
@@ -347,8 +347,8 @@ export default function Settings() {
                       onClick={() => setTheme("light")}
                       className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
                         theme === "light"
-                          ? "bg-[#7ec58a] text-black border-[#6ab076]"
-                          : "bg-white text-gray-700 border-gray-300"
+                          ? "bg-[var(--primary-color)] text-[var(--text-primary)] border-[var(--bg)]"
+                          : "bg-[var(--bg)] text-[var(--text-secondary)] border-[var(--bg)]"
                       }`}
                     >
                       Light
@@ -357,8 +357,8 @@ export default function Settings() {
                       onClick={() => setTheme("dark")}
                       className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
                         theme === "dark"
-                          ? "bg-gray-800 text-white border-gray-900"
-                          : "bg-white text-gray-700 border-gray-300"
+                          ? "bg-[var(--primary-color)] text-[var(--text-primary)] border-[var(--bg)]"
+                          : "bg-[var(--bg)] text-[var(--text-secondary)] border-[var(--bg)]"
                       }`}
                     >
                       Dark
@@ -366,11 +366,11 @@ export default function Settings() {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-gray-200 flex flex-col gap-3">
+                <div className="pt-2 border-t border-[var(--seperating-gray)] flex flex-col gap-3">
                   <button
                     onClick={handleSaveSettings}
                     disabled={isLoadingProfile || isSavingFilters}
-                    className="w-full bg-[#75C07A] hover:bg-green-800 disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md"
+                    className="w-full bg-[var(--primary-button)] hover:bg-[var(--primary-button-hover)] disabled:bg-[var(--disabled-button)] text-[var(--text-primary)] font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md"
                   >
                     {isSavingFilters ? "Sparar..." : "Spara inställningar"}
                   </button>
@@ -389,15 +389,15 @@ export default function Settings() {
             {/* INNEHÅLL: LÖSENORD */}
             {activeTab === "losenord" && (
               <div className="w-full mx-auto">
-                <h3 className="font-bold text-xl mb-6 text-center border-b-2 border-green-500 pb-2">
+                <h3 className="font-bold text-xl mb-6 text-center border-b-2 border-[var(--primary-color)] pb-2">
                   Byt lösenord
                 </h3>
                 <form
                   className="space-y-6"
                   onSubmit={(e) => e.preventDefault()}
                 >
-                  <div className="flex flex-col bg-gray-50 p-4 rounded-lg shadow-sm">
-                    <label className="mb-2 text-sm font-bold text-gray-700">
+                  <div className="flex flex-col bg-[var(--secondary-element)] p-4 rounded-lg shadow-sm">
+                    <label className="mb-2 text-sm font-bold">
                       Nuvarande lösenord
                     </label>
                     <div className="relative">
@@ -405,22 +405,22 @@ export default function Settings() {
                         type={showCurrentPassword ? "text" : "password"}
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
-                        className="w-full p-3 pr-12 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        className="w-full p-3 pr-12 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                       />
                       <button
                         type="button"
                         onClick={() =>
                           setShowCurrentPassword(!showCurrentPassword)
                         }
-                        className="absolute right-3 top-3.5 text-gray-500 hover:text-black transition-colors"
+                        className="absolute right-3 top-3.5 text-[var(--text-secondary)] hover:text-black transition-colors"
                       >
                         {showCurrentPassword ? <EyeSlashIcon /> : <EyeIcon />}
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex flex-col bg-gray-50 p-4 rounded-lg shadow-sm">
-                    <label className="mb-2 text-sm font-bold text-gray-700">
+                  <div className="flex flex-col bg-[var(--secondary-element)] p-4 rounded-lg shadow-sm">
+                    <label className="mb-2 text-sm font-bold">
                       Nytt lösenord
                     </label>
                     <div className="relative">
@@ -428,20 +428,20 @@ export default function Settings() {
                         type={showNewPassword ? "text" : "password"}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full p-3 pr-12 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        className="w-full p-3 pr-12 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                       />
                       <button
                         type="button"
                         onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-3 top-3.5 text-gray-500 hover:text-black transition-colors"
+                        className="absolute right-3 top-3.5 text-[var(--text-secondary)] hover:text-black transition-colors"
                       >
                         {showNewPassword ? <EyeSlashIcon /> : <EyeIcon />}
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex flex-col bg-gray-50 p-4 rounded-lg shadow-sm">
-                    <label className="mb-2 text-sm font-bold text-gray-700">
+                  <div className="flex flex-col bg-[var(--secondary-element)] p-4 rounded-lg shadow-sm">
+                    <label className="mb-2 text-sm font-bold">
                       Repetera nytt lösenord
                     </label>
                     <div className="relative">
@@ -449,14 +449,14 @@ export default function Settings() {
                         type={showRepeatPassword ? "text" : "password"}
                         value={repeatPassword}
                         onChange={(e) => setRepeatPassword(e.target.value)}
-                        className="w-full p-3 pr-12 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        className="w-full p-3 pr-12 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                       />
                       <button
                         type="button"
                         onClick={() =>
                           setShowRepeatPassword(!showRepeatPassword)
                         }
-                        className="absolute right-3 top-3.5 text-gray-500 hover:text-black transition-colors"
+                        className="absolute right-3 top-3.5 text-[var(--text-secondary)] hover:text-black transition-colors"
                       >
                         {showRepeatPassword ? <EyeSlashIcon /> : <EyeIcon />}
                       </button>

@@ -6,15 +6,22 @@
   --text-primary: #000000;
   --text-secondary: #111111;
   --primary-element: #ffffff;
-  --secondary-element: #CCCCCC;
+  --secondary-element: #EEEEEE;
   --primary-button: #1fd81f;
   --primary-button-hover: #74e24f;
+  --disabled-button: #7a7a7a;
+  --text-hover: #EEEEEE;
   --reset-button: #575757;
   --reset-button-hover: #c2c2c2;
   --border-primary: #252525;
   --navbar: #FFFFFF;
   --card-titel: #5e5e5e;
   --error: #FF0000;
+  --notification-color: #a9dba9;
+  --primary-color: #22a122;
+  --primary-color-background: #78d378;
+  --seperating-gray: #dfdfdf;
+  --input-border: #BBBBBB;
 }
 
 .dark {
@@ -26,12 +33,19 @@
   --secondary-element: #424242;
   --primary-button: #dd00ff;
   --primary-button-hover: #ac70ac;
+  --disabled-button: #7a7a7a;
   --reset-button: #575757;
   --reset-button-hover: #afaeae;
+  --text-hover: #181818;
   --border-primary: #111111;
   --navbar: #1b1b1b;
   --card-titel: #111111;
   --error: #FF0000;
+  --notification-color: #69ad69;
+  --primary-color: #22a122;
+  --primary-color-background: #78d378;
+  --seperating-gray: #383838;
+  --input-border: #BBBBBB;
 }
 
 @theme inline {
