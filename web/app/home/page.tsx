@@ -251,11 +251,20 @@ export default function Home() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                setManualValue(Number(value));
+                const parsedValue = Number(value);
+
+                if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+                  return;
+                }
+
+                setManualValue(parsedValue);
+                localStorage.setItem("profitabilityThreshold", String(parsedValue));
+                setValue("");
               }}
               className="flex gap-2"
             >
               <input
+                value={value}
                 onChange={(e) => setValue(e.target.value)}
                 className="text-[var(--text-primary)] border-2 border-[var(--border-primary)] rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
               />

@@ -339,6 +339,56 @@ export type Database = {
         }
         Relationships: []
       }
+
+      calculation_trappsteg: {
+        Row: {
+          kundnamn: string;
+          taxeprel: string;
+          vklfgrv: number;
+          kndntofgrv: number | null;
+          forh_se_radvis: number | null;
+          forh_se_kundvis: number | null;
+          km: number | null;
+        };
+        Insert: {
+          kundnamn: string;
+          taxeprel: string;
+          vklfgrv: number;
+          kndntofgrv?: number | null;
+          forh_se_radvis?: number | null;
+          forh_se_kundvis?: number | null;
+          km?: number | null;
+        };
+        Update: {
+          kundnamn?: string;
+          taxeprel?: string;
+          vklfgrv?: number;
+          kndntofgrv?: number | null;
+          forh_se_radvis?: number | null;
+          forh_se_kundvis?: number | null;
+          km?: number | null;
+        };
+        Relationships: [];
+      }
+
+      calculation_medelse: {
+        Row: {
+          km_bucket: number;
+          vklfgrv: number;
+          kndnto_medelse: number;
+        };
+        Insert: {
+          km_bucket: number;
+          vklfgrv: number;
+          kndnto_medelse: number;
+        };
+        Update: {
+          km_bucket?: number;
+          vklfgrv?: number;
+          kndnto_medelse?: number;
+        };
+        Relationships: [];
+      }
     }
     Views: {
       [_ in never]: never
