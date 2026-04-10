@@ -6,8 +6,8 @@
   --text-primary: #000000;
   --text-secondary: #111111;
   --primary-element: #ffffff;
-  --secondary-element: #EEEEEE;
-  --primary-button: #1fd81f;
+  --secondary-element: #F2F2F2;
+  --primary-button: #1fd81F;
   --primary-button-hover: #74e24f;
   --disabled-button: #7a7a7a;
   --text-hover: #EEEEEE;
@@ -25,7 +25,7 @@
 }
 
 .dark {
-  --bg: #121212;
+  --bg: #141414;
   --text-heading: #ffffff;
   --text-primary: #FFFFFF;
   --text-secondary: #CCCCCC;
