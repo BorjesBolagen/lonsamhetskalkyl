@@ -35,3 +35,42 @@
 //     }
 //   }
 // }
+
+type UserRole = 'admin' | 'leader' | 'unverified'
+
+const isUserRole = (key: string): key is UserRole => {
+	return ['admin', 'leader', 'unverified'].includes(key);
+}
+
+/**
+ * Loggar in med angiven roll och kollar om 
+ * @param userKey: 'admin' | 'leader' | 'unverified'
+ */
+Cypress.Commands.add('loginAs', (userKey: string) => {
+
+	if (!isUserRole(userKey)) {		
+		return new Error("Argument till loginAs måste vara 'admin' | 'leader' | 'unverified'");
+	}
+
+	cy.env(['users']).then(({ users }) => {
+		const email = users[userKey].email;
+		const password = users[userKey].password;
+
+		cy.visit('/login')
+		cy.get('[data-testid="email-input"]').type(email)
+		cy.get('[data-testid="password-input"]').type(password)
+		cy.get('[data-testid="login-button"]').click()
+
+		// If unverified different things should match
+		if (userKey === 'unverified') {
+			cy.url().should('include', '/login')
+			cy.get('[data-testid="error-message"]').should('be.visible')
+    	cy.get('[data-testid="error-message"]').should('contain', 'E-postadressen är inte bekräftad. Se inkorg för verifieringsmejl')
+			return;
+		}
+
+		// after login, user should be redirected
+    cy.url().should('include', '/home')
+    cy.getCookie('sb-ukfnyyglaistpbnlgjar-auth-token').should('exist')
+	})
+})

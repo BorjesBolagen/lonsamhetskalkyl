@@ -5,10 +5,11 @@ Under cypress/e2e/2-advanced-examples finns massa exempel på tester för cypres
 
 Starta testerna genom att:
 1. npm install borde fungera alternativt npm install cypress och npm install cypress-wait-until
-2. npm run cypress:open
-3. Välj "E2E Testing" i appen som öppnas
-4. Välj en webbläsare och klicka "Start E2E Testing"
-5. Klicka på en testfil för att köra den
+2. npm run dev
+3. npm run cypress:open i ny terminal
+4. Välj "E2E Testing" i appen som öppnas
+5. Välj en webbläsare och klicka "Start E2E Testing"
+6. Klicka på en testfil för att köra den
 
 ## Miljövariabler
 Testerna använder inloggningsuppgifter från en lokal fil som inte pushas till git.

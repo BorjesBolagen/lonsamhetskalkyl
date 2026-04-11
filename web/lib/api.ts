@@ -69,6 +69,19 @@ export const signUpProcedure = async (email: string): Promise<BasicResponse<null
   return (await response.json()) as BasicResponse<null>;
 };
 
+export const loginProcedure = async (email: string, password: string, rememberMe: boolean): Promise<BasicResponse<null>> => {
+	const response = await fetch(`/api/login`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		}, body: JSON.stringify({email, password, rememberMe}),
+	});
+	
+	if (!response.ok) throw new Error((await response.json()).message);
+
+	return (await response.json()) as BasicResponse<null>;
+}
+
 /**
  * Getter för alla användare i User-tabellen i supabase. Policies gäller, se Supabase
  */
@@ -115,7 +128,7 @@ export const getUser = async (id: string): Promise<BasicResponse<User>> => {
 	const response = await fetch(`/api/users/get/user?userId=${encodeURIComponent(id)}`, {
 		method: "GET",
 	});
-	console.log("getUser raw response:", response);
+
 	if (!response.ok) throw new Error((await response.json()).message);
 	return (await response.json()) as BasicResponse<User>;
 }

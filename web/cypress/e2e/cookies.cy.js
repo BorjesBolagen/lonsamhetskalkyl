@@ -6,13 +6,7 @@
 describe('Cookies', () => {
   beforeEach(() => {
     cy.session('adminSession', () => {
-      cy.visit('/login')
-      cy.env(['adminEmail', 'adminPassword']).then(({ adminEmail, adminPassword }) => {
-        cy.get('[data-testid="email-input"]').type(adminEmail)
-        cy.get('[data-testid="password-input"]').type(adminPassword)
-      })
-      cy.get('[data-testid="login-button"]').click()
-      cy.url().should('include', '/home')
+      cy.loginAs('admin')
     })
   })
 

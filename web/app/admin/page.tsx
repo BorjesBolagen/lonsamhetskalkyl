@@ -10,6 +10,7 @@ import {
 } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
+import { validatePassword } from "@/lib/validation";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 const mockTrafficLeaders = [
@@ -147,9 +148,12 @@ export default function Admin() {
     try {
       const supabase = getSupabaseBrowserClient();
 
-      // Check if email already exists
+      // Check if email already exists - Transmits password for validation, not actually used in backend logic
       const APIsignUpResponse = await signUpProcedure(signupEmail);
       if (!APIsignUpResponse.status) throw new Error(APIsignUpResponse.message);
+
+      // signUpProcedure kollar om email är valid. Kolla om password också är valid
+      if (!validatePassword(signupPassword)) throw new Error("Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra")
 
       // Supabase signup
       const { data, error } = await supabase.auth.signUp({

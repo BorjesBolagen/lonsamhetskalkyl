@@ -1,14 +1,40 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { validateEmail, validatePassword } from "@/lib/validation";
 
 const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365;
 
+const supabaseErrorMessages: Record<string, string> = {
+  "Invalid login credentials": "Felaktiga inloggningsuppgifter",
+  "Email not confirmed": "E-postadressen är inte bekräftad. Se inkorg för verifieringsmejl",
+  "User not found": "Användaren hittades inte",
+  "Password should be at least 6 characters": "Lösenordet måste vara minst 6 tecken",
+  "Email already registered": "E-postadressen är redan registrerad",
+  "Too many requests": "För många försök, försök igen senare",
+}
+
+const translateError = (message: string): string => {
+  return supabaseErrorMessages[message] ?? message
+}
+
 export async function POST(request: Request) {
   const { email, password, rememberMe } = await request.json();
+
+  if (!email || !password) {
+    return NextResponse.json({status: false, message: "Saknar email eller lösenord"}, {status: 400});
+  }
+
+  if (!validateEmail(email)) {
+    return NextResponse.json({status: false, message: "Email är inte rätt formaterat"}, {status: 400})
+  }
+
+  if (!validatePassword(password)) {
+    return NextResponse.json({status: false, message: "Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra"}, {status: 400})
+  }
   const cookieStore = await cookies();
 
-  const response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({ status: true, message: "Användare inloggad" }, {status: 200});
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,9 +65,10 @@ export async function POST(request: Request) {
   });
 
   if (error) {
+    //const errorMsg = "Felaktiga inloggningsuppgifter" if error.message === ""
     return NextResponse.json(
-      { ok: false, error: error.message },
-      { status: 401 }
+      { status: false, message: translateError(error.message) },
+      { status: 400 }
     );
   }
 
