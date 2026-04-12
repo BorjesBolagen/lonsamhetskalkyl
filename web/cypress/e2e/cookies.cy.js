@@ -9,11 +9,12 @@ describe('Cookies', () => {
       cy.loginAs('admin')
     })
   })
+  const adminRoutes = ["/home", "/admin", "/notifications", "/settings", "/simulator"];
+  const leaderRoutes = ["/home", "/notifications", "/settings", "/simulator"];
+  it('admin can access all pages with valid cookies', () => {
+    
 
-  it('can access all pages with valid cookies', () => {
-    const validRoutes = ["/home", "/admin", "/notifications", "/settings", "/simulator"]
-
-    validRoutes.forEach((route) => {
+    adminRoutes.forEach((route) => {
       cy.visit(route)
       cy.url().should("include", route)
     })
@@ -35,5 +36,29 @@ describe('Cookies', () => {
     
     cy.getCookie('sb-ukfnyyglaistpbnlgjar-auth-token').should('not.exist')
     cy.getCookie('sb-remember-me').should('exist')
+  })
+
+  it("can't access routes without valid auth cookie", () => {
+    cy.clearCookie('sb-ukfnyyglaistpbnlgjar-auth-token')
+    cy.getCookie('sb-ukfnyyglaistpbnlgjar-auth-token').should('not.exist')
+
+    adminRoutes.forEach((route) => {
+      cy.visit(route)
+      cy.url().should("include", "/login")
+    })
+  })
+
+  it("leader shouldn't be able to see admin panel", () => {
+    cy.loginAs('leader');
+
+    // Leader should be able to visit these routes
+    leaderRoutes.forEach((route) => {
+      cy.visit(route);
+      cy.url().should("include", route)
+    })
+
+    cy.request({ url: "/admin", failOnStatusCode: false }).then((response) => {
+      expect(response.status).to.eq(403)
+    })
   })
 })

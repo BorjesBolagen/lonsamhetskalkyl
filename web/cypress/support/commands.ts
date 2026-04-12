@@ -46,10 +46,10 @@ const isUserRole = (key: string): key is UserRole => {
  * Loggar in med angiven roll och kollar om 
  * @param userKey: 'admin' | 'leader' | 'unverified'
  */
-Cypress.Commands.add('loginAs', (userKey: string) => {
+Cypress.Commands.add('loginAs', (userKey: string, rememberMe: boolean = false) => {
 
 	if (!isUserRole(userKey)) {		
-		return new Error("Argument till loginAs måste vara 'admin' | 'leader' | 'unverified'");
+		return new Error("Argument userKey till loginAs måste vara 'admin' | 'leader' | 'unverified'");
 	}
 
 	cy.env(['users']).then(({ users }) => {
@@ -59,6 +59,8 @@ Cypress.Commands.add('loginAs', (userKey: string) => {
 		cy.visit('/login')
 		cy.get('[data-testid="email-input"]').type(email)
 		cy.get('[data-testid="password-input"]').type(password)
+		if (rememberMe) cy.get('[data-testid="remember-me"]').click()
+
 		cy.get('[data-testid="login-button"]').click()
 
 		// If unverified different things should match
@@ -71,6 +73,30 @@ Cypress.Commands.add('loginAs', (userKey: string) => {
 
 		// after login, user should be redirected
     cy.url().should('include', '/home')
-    cy.getCookie('sb-ukfnyyglaistpbnlgjar-auth-token').should('exist')
+
+		//// Check cookie status
+		// Make sure cookies exist
+		cy.getCookie('sb-ukfnyyglaistpbnlgjar-auth-token').should('exist')
+		cy.getCookie('sb-remember-me').should('exist')
+
+		// Cookies should exist with age depending on remember me:
+		//		If rememberMe is checked (true) --> age should be 30 days
+		// 		If rememberMe is unchecked (false) --> should be session cookie
+		if (rememberMe) {
+	    cy.getCookie('sb-ukfnyyglaistpbnlgjar-auth-token').then((cookie) => {
+				expect(cookie?.expiry).to.be.greaterThan(Date.now() / 1000)		// Make sure auth cookie has expiry greater than current date
+			})
+			cy.getCookie('sb-remember-me').then((cookie) => {
+				expect(cookie?.expiry).to.be.greaterThan(Date.now() / 1000)		// Make sure remember mee cookie has expiry greater than current date
+			})
+		} else {
+	    cy.getCookie('sb-ukfnyyglaistpbnlgjar-auth-token').then((cookie) => {
+				expect(cookie?.expiry).to.be.undefined;		// Make sure auth cookie has undefined expiry date, aka a session cookie
+			})
+			cy.getCookie('sb-remember-me').then((cookie) => {
+				expect(cookie?.expiry).to.be.undefined;		// Make sure remember mee cookie has expiry greater than current date
+			})	
+		}
+		
 	})
 })

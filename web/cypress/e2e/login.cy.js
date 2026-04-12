@@ -106,5 +106,34 @@ describe('Login Page', () => {
     cy.get('[data-testid="error-message"]').should('contain', 'Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra')
   })
 
-  // Probably make tests for remember me and "forgot password" too.
+  it('try having remember me enabled as admin', () => {
+    const rememberMe = true
+    cy.loginAs('admin', rememberMe);    // loginAs checks cookies
+
+    // Check user role status
+    cy.request('http://localhost:3000/api/users/get/currentUser')
+      .should((response) => {
+        expect(response.status).to.eq(200)
+        expect(response.body.status).to.eq(true)
+        expect(response.body.message).to.eq('Användare hämtad')
+      })
+  })
+
+  it('try having remember me enabled as leader', () => {
+    const rememberMe = true;
+    cy.loginAs('leader', rememberMe);   // loginAs checks cookies
+
+    // Check user role status
+    cy.request('http://localhost:3000/api/users/get/currentUser')
+      .should((response) => {
+        expect(response.status).to.eq(200)
+        expect(response.body.status).to.eq(true)
+        expect(response.body.message).to.eq('Användare hämtad')
+      })
+  })
+
+  it('try having remember me as unverified', () => {
+    const rememberMe = true;
+    cy.loginAs('unverified', rememberMe);   // loginAs checks cookies
+  })
 })

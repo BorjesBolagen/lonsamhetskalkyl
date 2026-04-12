@@ -2,8 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { validateEmail, validatePassword } from "@/lib/validation";
-
-const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365;
+import { COOKIE_MAX_AGE } from "@/lib/constants";
 
 const supabaseErrorMessages: Record<string, string> = {
   "Invalid login credentials": "Felaktiga inloggningsuppgifter",
@@ -51,7 +50,7 @@ export async function POST(request: Request) {
               path: "/",
               sameSite: "lax",
               secure: process.env.NODE_ENV === "production",
-              ...(rememberMe ? { maxAge: ONE_YEAR_IN_SECONDS } : {}),
+              maxAge: rememberMe ? COOKIE_MAX_AGE : undefined,
             });
           });
         },
@@ -76,7 +75,7 @@ export async function POST(request: Request) {
     path: "/",
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    ...(rememberMe ? { maxAge: ONE_YEAR_IN_SECONDS } : {}),
+    maxAge: rememberMe ? COOKIE_MAX_AGE : undefined,
   });
 
   response.headers.set("Cache-Control", "private, no-store");
