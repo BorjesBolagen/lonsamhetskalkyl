@@ -100,3 +100,58 @@ Cypress.Commands.add('loginAs', (userKey: string, rememberMe: boolean = false) =
 		
 	})
 })
+
+function assertSignupFormIsVisible() {
+	// Assert that all the fields exist, i.e we are in signup window
+    cy.get('[data-testid="close-signup-window"]').should("be.visible");
+    cy.get('[data-testid="signup-set-first-name"]').should("be.visible");
+    cy.get('[data-testid="signup-set-last-name"]').should("be.visible");
+    cy.get('[data-testid="signup-set-email"]').should("be.visible");
+    cy.get('[data-testid="signup-set-password"]').should("be.visible");
+    cy.get('[data-testid="signup-password-eye-icon"]').should("be.visible");
+    cy.get('[data-testid="signup-set-role"]').should("be.visible");
+    cy.get('[data-testid="signup-submit-button"]').should("be.visible");
+}
+
+Cypress.Commands.add('signupUser', (firstName: string, lastName: string, email: string, password: string, role: UserRole) => {
+
+    assertSignupFormIsVisible()
+
+	// Set all the fields after assertion
+    if (firstName) cy.get('[data-testid="signup-set-first-name"]').type(firstName);
+	if (lastName) cy.get('[data-testid="signup-set-last-name"]').type(lastName)
+    if (email) cy.get('[data-testid="signup-set-email"]').type(email)
+    if (password) cy.get('[data-testid="signup-set-password"]').type(password);
+    if (role) cy.get('[data-testid="signup-set-role"]').select(role)
+
+	// Try clicking the eye and see if password becomes visible/hidden
+	// Initially password should be hidden
+	cy.get('[data-testid="signup-set-password"]').should('have.attr', 'type', 'password')
+
+	// Click the eye icon to show password
+	cy.get('[data-testid="signup-password-eye-icon"]').click()
+	cy.get('[data-testid="signup-set-password"]').should('have.attr', 'type', 'text')
+
+	// Click again to hide password
+	cy.get('[data-testid="signup-password-eye-icon"]').click()
+	cy.get('[data-testid="signup-set-password"]').should('have.attr', 'type', 'password')
+
+	cy.get('[data-testid="signup-submit-button"]').click()
+});
+
+Cypress.Commands.add('clearSignupForm', () => {
+	
+	assertSignupFormIsVisible();
+
+	cy.visit("/admin")
+	cy.get('[data-testid="signup-button"]').should("be.visible").click();
+
+	assertSignupFormIsVisible();
+	/*
+	cy.get('[data-testid="signup-set-first-name"]').clear();
+	cy.get('[data-testid="signup-set-last-name"]').clear();
+    cy.get('[data-testid="signup-set-email"]').clear();
+    cy.get('[data-testid="signup-set-password"]').clear();
+    cy.get('[data-testid="signup-set-role"]').clear();
+	*/
+});

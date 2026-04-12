@@ -5,9 +5,7 @@
 
 describe('Cookies', () => {
   beforeEach(() => {
-    cy.session('adminSession', () => {
-      cy.loginAs('admin')
-    })
+    cy.loginAs('admin')
   })
   const adminRoutes = ["/home", "/admin", "/notifications", "/settings", "/simulator"];
   const leaderRoutes = ["/home", "/notifications", "/settings", "/simulator"];
