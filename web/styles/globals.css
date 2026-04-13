@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root {
+:root[data-theme="light"] {
   --bg: #EEEEEE;
   --text-heading: #000000;
   --text-primary: #000000;
@@ -24,7 +24,7 @@
   --input-border: #BBBBBB;
 }
 
-.dark {
+:root[data-theme="dark"] {
   --bg: #121212;
   --text-heading: #ffffff;
   --text-primary: #FFFFFF;
