@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -98,6 +98,24 @@ export type Database = {
         }
         Relationships: []
       }
+      distance_map: {
+        Row: {
+          distance: number
+          receiver: number
+          sender: number
+        }
+        Insert: {
+          distance: number
+          receiver: number
+          sender: number
+        }
+        Update: {
+          distance?: number
+          receiver?: number
+          sender?: number
+        }
+        Relationships: []
+      }
       Historical_shipment: {
         Row: {
           admin_ID: string | null
@@ -113,9 +131,11 @@ export type Database = {
           line_number: number
           net_customer_freight: number
           receiver_city: string
+          receiver_taxep: number | null
           receiver_zip: number
           reg_number: string
           sender_city: string
+          sender_taxep: number | null
           sender_zip: number
           shipment_id: number
           source_file_name: string
@@ -137,9 +157,11 @@ export type Database = {
           line_number: number
           net_customer_freight: number
           receiver_city: string
+          receiver_taxep?: number | null
           receiver_zip: number
           reg_number: string
           sender_city: string
+          sender_taxep?: number | null
           sender_zip: number
           shipment_id: number
           source_file_name: string
@@ -161,9 +183,11 @@ export type Database = {
           line_number?: number
           net_customer_freight?: number
           receiver_city?: string
+          receiver_taxep?: number | null
           receiver_zip?: number
           reg_number?: string
           sender_city?: string
+          sender_taxep?: number | null
           sender_zip?: number
           shipment_id?: number
           source_file_name?: string
@@ -288,6 +312,33 @@ export type Database = {
           },
         ]
       }
+      tax_point_lookup: {
+        Row: {
+          kontor: string | null
+          kontorsforkortning: string | null
+          postnummer: number
+          postort: string | null
+          taxepunkt: string | null
+          taxepunktspostnummer: number | null
+        }
+        Insert: {
+          kontor?: string | null
+          kontorsforkortning?: string | null
+          postnummer: number
+          postort?: string | null
+          taxepunkt?: string | null
+          taxepunktspostnummer?: number | null
+        }
+        Update: {
+          kontor?: string | null
+          kontorsforkortning?: string | null
+          postnummer?: number
+          postort?: string | null
+          taxepunkt?: string | null
+          taxepunktspostnummer?: number | null
+        }
+        Relationships: []
+      }
       Truck: {
         Row: {
           capacity: number
@@ -322,7 +373,7 @@ export type Database = {
           email_verified?: boolean | null
           filters?: Json | null
           first_name?: string | null
-          id?: string
+          id: string
           last_name?: string | null
           role?: Database["public"]["Enums"]["User_specialization_types"] | null
           threshold?: number | null
