@@ -84,11 +84,6 @@ export default function Settings() {
   const [theme, setTheme] = useState<ThemeMode>("light");
 
   useEffect(() => {
-    // For dark/lightmode
-    applyTheme(theme);
-  }, [theme]);
-
-  useEffect(() => {
     // Profile info + saved filter/theme preferences from Supabase.
     async function loadCurrentUser() {
       try {

@@ -3,8 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "../styles/globals.css";
 import { cookies } from "next/headers";
 
-// LAYOUT FÖR ALLA SIDOR
-
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -25,17 +23,14 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies(); 
+  const cookieStore = await cookies(); // async in Next 15+ [1](https://nextjs.org/docs/app/api-reference/functions/cookies)
   const theme = cookieStore.get("theme")?.value;
 
   const safeTheme = theme === "dark" ? "dark" : "light";
 
   return (
     <html lang="en" data-theme={safeTheme}>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={{ margin: 0, padding: 0 }}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
       </body>
     </html>

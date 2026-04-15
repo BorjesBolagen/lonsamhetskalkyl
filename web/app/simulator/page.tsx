@@ -134,8 +134,8 @@ export default function ProfitCalculatorPage() {
         <Navigation currentPage="simulator" />
 
       <main className="flex-grow flex flex-col lg:flex-row justify-center p-6 gap-6">
-        <div className="bg-white max-w-md w-full rounded-xl shadow-md p-8 space-y-6">
-          <h1 className="text-2xl font-bold text-center">
+        <div className="bg-[var(--primary-element)] max-w-md w-full rounded-xl shadow-md p-8 space-y-6">
+          <h1 className="text-[var(--text-primary)] text-2xl font-bold text-center">
             Räkna ut lönsamhet
           </h1>
 
@@ -151,9 +151,9 @@ export default function ProfitCalculatorPage() {
             ].map((field) => (
               <div
                 key={field.id}
-                className="flex flex-col bg-gray-50 p-4 rounded-lg shadow-sm"
+                className="flex flex-col bg-[var(--secondary-element)] p-4 rounded-lg shadow-sm"
               >
-                <label htmlFor={field.id} className="mb-1 text-sm font-medium">
+                <label htmlFor={field.id} className="mb-1 text-[var(--text-primary)] text-sm font-medium">
                   {field.label}
                 </label>
                 <input
@@ -186,14 +186,14 @@ export default function ProfitCalculatorPage() {
           </div>
         </div>
 
-        <div className="bg-white max-w-md w-full rounded-xl shadow-md p-8 space-y-6">
-          <h1 className="text-3xl font-bold text-center text-gray-800 mb-6 border-b-2 border-green-500 pb-2">
+        <div className="bg-[var(--primary-element)] max-w-md w-full rounded-xl shadow-md p-8 space-y-6">
+          <h1 className="text-3xl font-bold text-center text-[var(--text-primary)] mb-6 border-b-2 border-green-500 pb-2">
             Resultat
           </h1>
 
           <div className="text-center">
             {!result && !errorMsg && (
-              <p className="text-gray-500 italic">
+              <p className="text-[var(--text-secondary)] italic">
                 Fyll i värden och klicka på Beräkna
               </p>
             )}
