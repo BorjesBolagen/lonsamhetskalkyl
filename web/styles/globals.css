@@ -7,12 +7,14 @@
   --text-secondary: #111111;
   --primary-element: #ffffff;
   --secondary-element: #F2F2F2;
-  --primary-button: #1fd81F;
-  --primary-button-hover: #74e24f;
+  --button-submit: #22c55e;
+  --button-submit-hover: #5ad489;
+  --button-fetch: #25a3dd;
+  --button-fetch-hover: #64aef3;
+  --button-reset: #575757;
+  --button-reset-hover: #c2c2c2;
   --disabled-button: #7a7a7a;
   --text-hover: #EEEEEE;
-  --reset-button: #575757;
-  --reset-button-hover: #c2c2c2;
   --border-primary: #252525;
   --navbar: #FFFFFF;
   --card-titel: #5e5e5e;
@@ -21,31 +23,35 @@
   --primary-color: #22a122;
   --primary-color-background: #78d378;
   --seperating-gray: #dfdfdf;
-  --input-border: #BBBBBB;
+  --input-text: #b8b8b8;
+  --hover-areas: #f8f8f8;
 }
 
 html[data-theme="dark"] {
-  --bg: #121212;
+  --bg: #212121;
   --text-heading: #ffffff;
   --text-primary: #FFFFFF;
   --text-secondary: #CCCCCC;
-  --primary-element: #212121;
-  --secondary-element: #424242;
-  --primary-button: #dd00ff;
-  --primary-button-hover: #ac70ac;
+  --primary-element: #121212;
+  --secondary-element: #202020;
+  --button-submit: #22c55e;
+  --button-submit-hover: #0cf762;
+  --button-fetch: #3b82f6;
+  --button-fetch-hover: #1068f5;
+  --button-reset: #686868;
+  --button-reset-hover: #979797;
   --disabled-button: #7a7a7a;
-  --reset-button: #575757;
-  --reset-button-hover: #afaeae;
   --text-hover: #181818;
   --border-primary: #111111;
-  --navbar: #1b1b1b;
+  --navbar: #121212;
   --card-titel: #111111;
   --error: #FF0000;
   --notification-color: #69ad69;
-  --primary-color: #22a122;
+  --primary-color: #1d5f1d;
   --primary-color-background: #78d378;
   --seperating-gray: #383838;
-  --input-border: #BBBBBB;
+  --input-text: #373a39;
+  --hover-areas: #353535;
 }
 
 @theme inline {

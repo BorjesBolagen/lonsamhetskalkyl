@@ -96,7 +96,7 @@ export default function Navigation({ currentPage, hasUnsavedChanges = false }: N
 
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-[#FFFFFF]/100 text-black font-bold cursor-pointer border-1 border-[#C0C0C0] rounded-md hover:bg-black/10 transition-colors duration-150 shadow-md"            >
+              className="px-4 py-2 bg-[var(--text-primary)]/1000 text-[var(--text-primary)] font-bold cursor-pointer border-1 border-[#C0C0C0] rounded-md hover:bg-[var(--text-primary)]/10 transition-colors duration-150 shadow-md"            >
               Logga ut
             </button>
           </div>

@@ -161,7 +161,7 @@ export default function ProfitCalculatorPage() {
                   type="text"
                   value={form[field.id as keyof FormState]}
                   onChange={handleChange}
-                  className="border-2 border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-green-700"
+                  className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-1 w-full"
                 />
               </div>
             ))}
@@ -171,7 +171,7 @@ export default function ProfitCalculatorPage() {
             <button
               onClick={handleCalculate}
               disabled={isLoading}
-              className="bg-[#75C07A] text-white px-4 py-2 rounded hover:bg-green-800 transition-colors duration-300 disabled:opacity-50"
+              className="bg-[var(--button-submit)] text-white px-4 py-2 rounded hover:bg-[var(--button-submit-hover)] transition-colors duration-300 disabled:opacity-50"
             >
               {isLoading ? "Beräknar..." : "→ Beräkna"}
             </button>
@@ -179,7 +179,7 @@ export default function ProfitCalculatorPage() {
             <button
               type="button"
               onClick={handleReset}
-              className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors duration-300"
+              className="bg-[var(--button-reset)] text-white px-4 py-2 rounded hover:bg-[var(--button-reset-hover)] transition-colors duration-300"
             >
               Återställ
             </button>
@@ -187,7 +187,7 @@ export default function ProfitCalculatorPage() {
         </div>
 
         <div className="bg-[var(--primary-element)] max-w-md w-full rounded-xl shadow-md p-8 space-y-6">
-          <h1 className="text-3xl font-bold text-center text-[var(--text-primary)] mb-6 border-b-2 border-green-500 pb-2">
+          <h1 className="text-3xl font-bold text-center text-[var(--text-primary)] mb-6 border-b-2 border-[var(--primary-color)] pb-2">
             Resultat
           </h1>
 

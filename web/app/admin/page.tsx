@@ -275,7 +275,7 @@ export default function Admin() {
               <h3 className="font-bold mb-4 border-b-2 border-green-500 pb-2">
                 Fyllnadsgrad per Distrikt
               </h3>
-              <div className="flex-grow bg-[var(--secondary-element)] border-2 border-gray-200 rounded flex flex-col justify-end p-4 min-h-[12rem]">
+              <div className="flex-grow bg-[var(--secondary-element)] rounded flex flex-col justify-end p-4 min-h-[12rem]">
                 <div className="flex items-end justify-around h-full border-b-2 border-gray-300 pb-1">
                   <div
                     className="w-12 sm:w-16 bg-[#7ec58a] h-[80%] rounded-t-sm hover:opacity-80 transition-opacity"
@@ -307,7 +307,7 @@ export default function Admin() {
               <h3 className="font-bold mb-4 border-b-2 border-green-500 pb-2">
                 Intäkt per FLM
               </h3>
-              <div className="flex-grow bg-[var(--secondary-element)] border-2 border-gray-200 rounded flex items-center justify-center text-gray-400 min-h-[12rem]">
+              <div className="flex-grow bg-[var(--secondary-element)] rounded flex items-center justify-center text-gray-400 min-h-[12rem]">
                 [ Här ska en graf visas senare ]
               </div>
             </div>

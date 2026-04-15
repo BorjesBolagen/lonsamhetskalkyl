@@ -6,6 +6,7 @@ import Footer from "../../components/Footer";
 import { useEffect, useState } from "react";
 import LineCard from "../../components/LineCard";
 import Card from "../../components/Card";
+
 import {
   AREA_OPTIONS,
   AreaKey,
@@ -266,15 +267,16 @@ export default function Home() {
               <input
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                className="text-[var(--text-primary)] border-2 border-[var(--border-primary)] rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
+                className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-1 w-full"
               />
               <button
                 type="submit"
-                className="bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-2 rounded hover:bg-[var(--primary-button-hover)] transition"
+                className="bg-[var(--button-submit)] text-[var(--text-primary)] px-4 py-2 rounded hover:bg-[var(--button-submit-hover)] transition"
               >
                 Spara
               </button>
             </form>
+
           </div>
 
           {clickedButton && (
@@ -307,7 +309,7 @@ export default function Home() {
             <button
               onClick={loadLines}
               disabled={!areasLoaded || loadingLines}
-              className="w-full bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-3 rounded hover:bg-[var(--primary-button-hover)] disabled:bg-gray-400 transition font-semibold"
+              className="w-full bg-[var(--button-fetch)] text-[var(--text-primary)] px-4 py-3 rounded hover:bg-[var(--button-fetch-hover)] disabled:bg-gray-400 transition font-semibold"
             >
               {loadingLines
                 ? "Hämtar filtrerade linjer..."
