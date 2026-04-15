@@ -73,6 +73,19 @@ export const signUpProcedure = async (email: string): Promise<BasicResponse<null
   return (await response.json()) as BasicResponse<null>;
 };
 
+export const loginProcedure = async (email: string, password: string, rememberMe: boolean): Promise<BasicResponse<null>> => {
+	const response = await fetch(`/api/login`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		}, body: JSON.stringify({email, password, rememberMe}),
+	});
+	
+	if (!response.ok) throw new Error((await response.json()).message);
+
+	return (await response.json()) as BasicResponse<null>;
+}
+
 // ============================================================
 // Users
 // ============================================================
@@ -123,7 +136,7 @@ export const getUser = async (id: string): Promise<BasicResponse<User>> => {
 	const response = await fetch(`/api/users/get/user?userId=${encodeURIComponent(id)}`, {
 		method: "GET",
 	});
-	console.log("getUser raw response:", response);
+
 	if (!response.ok) throw new Error((await response.json()).message);
 	return (await response.json()) as BasicResponse<User>;
 }
@@ -227,8 +240,8 @@ export const getIlogLines = async (): Promise<IlogResponse<LineItem[]>> => {
 /**
  * Hämtar lista över ekipage (fordon/transport-enheter).
 */
-export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> => {
-	const response = await fetch("/api/ilog/equipages", { method: "GET" });
+export const getIlogEquipages = async (debugRaw: boolean): Promise<IlogResponse<EquipageItem[]>> => {
+	const response = await fetch(`/api/ilog/equipages?debugRaw=${debugRaw}`, { method: "GET" });
 
 	if (!response.ok) {
 		throw new Error("Request failed: " + (await response.text()));
@@ -242,11 +255,13 @@ export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> 
  */
 export const getIlogConsignments = async (
 	date: string,
-	equipageId: number
+	equipageId: number,
+	debugRaw: boolean
 ): Promise<IlogResponse<ConsignmentListItem[]>> => {
 	const params = new URLSearchParams({
 		date,
 		equipageId: String(equipageId),
+		debugRaw: String(debugRaw),
 	});
 
 	const response = await fetch(`/api/ilog/consignments?${params.toString()}`, {

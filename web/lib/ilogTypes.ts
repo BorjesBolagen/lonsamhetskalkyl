@@ -108,4 +108,3 @@ export type ConsignmentDetail = {
     transporterType: string;
     ilogStatus: string;
 };
-

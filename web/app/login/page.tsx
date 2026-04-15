@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
+import { loginProcedure } from "@/lib/api";
 
 export default function Login() {
   const router = useRouter();
@@ -17,24 +17,12 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-        const res = await fetch("/api/login", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          }, body: JSON.stringify({email, password, rememberMe}),
-        });
-
-        const result = await res.json();
-
-      if (!res.ok || !result.ok) {
-        setErrorMsg("Inloggning misslyckades: " + (result.error ?? "Okänt fel"));
-        return;
-      }
+        await loginProcedure(email, password, rememberMe);
         router.push("/home");
         router.refresh();
 
     } catch (err) {
-      setErrorMsg("Kunde inte kontakta servern: " + (err as Error).message);
+      setErrorMsg((err as Error).message);
     } finally {
       setIsLoading(false);
     }

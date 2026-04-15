@@ -1,7 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+import { COOKIE_MAX_AGE } from './constants';
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -27,7 +26,12 @@ export async function updateSession(request: NextRequest) {
             request,
           })
           cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, 
-            {...options, maxAge: COOKIE_MAX_AGE, path: '/', sameSite: 'lax', secure: process.env.NODE_ENV === 'production', ...(rememberMe ? { maxAge: COOKIE_MAX_AGE} : {})}))
+            {
+              ...options, 
+              path: '/',
+              sameSite: 'lax',
+              secure: process.env.NODE_ENV === 'production',
+              maxAge: rememberMe ? COOKIE_MAX_AGE : undefined}))
         }
       },
     },

@@ -6,6 +6,7 @@ import { sendMessage, signUpProcedure } from "@/lib/api";
 import { Enums, Constants, TablesUpdate } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
+import { validatePassword } from "@/lib/validation";
 import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
@@ -137,16 +138,20 @@ export default function Admin() {
       !signupPassword.trim() ||
       role === ""
     ) {
+      setSignupResponse("Alla fält måste vara ifyllda");
       return;
     }
-    setIsSigningUp(true);
+
 
     try {
       const supabase = getSupabaseBrowserClient();
 
-      // Check if email already exists
+      // Check if email already exists - Transmits password for validation, not actually used in backend logic
       const APIsignUpResponse = await signUpProcedure(signupEmail);
       if (!APIsignUpResponse.status) throw new Error(APIsignUpResponse.message);
+
+      // signUpProcedure kollar om email är valid. Kolla om password också är valid
+      if (!validatePassword(signupPassword)) throw new Error("Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra")
 
       // Supabase signup
       const { data, error } = await supabase.auth.signUp({
@@ -219,6 +224,7 @@ export default function Admin() {
               </button>
               <button
                 onClick={() => setIsAddUserOpen(true)}
+                data-testid="signup-button"
                 className="px-4 py-2 bg-[#75C07A] hover:bg-green-800 text-[var(--text-primary)] font-semibold rounded shadow transition-colors duration-300"
               >
                 + Lägg till Användare
@@ -348,6 +354,7 @@ export default function Admin() {
           <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)]">
             <button
               onClick={() => setIsAddUserOpen(false)}
+              data-testid="close-signup-window"
               className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
             >
               ✖
@@ -363,6 +370,7 @@ export default function Admin() {
                     placeholder="Förnamn"
                     value={signupFirstName}
                     onChange={(e) => setSignupFirstName(e.target.value)}
+                    data-testid="signup-set-first-name"
                     className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                   />
                 </div>
@@ -372,6 +380,7 @@ export default function Admin() {
                     placeholder="Efternamn"
                     value={signupLastName}
                     onChange={(e) => setSignupLastName(e.target.value)}
+                    data-testid="signup-set-last-name"
                     className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                   />
                 </div>
@@ -379,10 +388,11 @@ export default function Admin() {
 
               <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
                 <input
-                  type="email"
+                  type="text"
                   placeholder="E-mail"
                   value={signupEmail}
                   onChange={(e) => setSignupEmail(e.target.value)}
+                  data-testid="signup-set-email"
                   className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                 />
               </div>
@@ -395,11 +405,13 @@ export default function Admin() {
                     placeholder="Lösenord"
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
+                    data-testid="signup-set-password"
                     className="w-full p-2 pr-12 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                   />
                   <button
                     type="button"
                     onClick={() => setShowSignupPassword(!showSignupPassword)}
+                    data-testid="signup-password-eye-icon"
                     className="absolute right-3 top-2.5 text-[var(--text-secondary)] hover:text-black transition-colors"
                   >
                     {showSignupPassword ? <EyeSlashIcon /> : <EyeIcon />}
@@ -411,6 +423,7 @@ export default function Admin() {
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value as UserRole)}
+                  data-testid="signup-set-role"
                   className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                 >
                   <option value="">Välj roll</option>
@@ -426,13 +439,16 @@ export default function Admin() {
               <button
                 type="submit"
                 disabled={isSigningUp}
+                data-testid="signup-submit-button"
                 className="w-full mt-4 bg-[#75C07A] text-[var(--text-primary)] p-3 rounded font-bold hover:bg-green-800 transition-colors duration-300 disabled:opacity-50"
               >
                 {isSigningUp ? "Registrerar..." : "Registrera"}
               </button>
             </form>
             {signupResponse && (
-              <p className="mt-4 p-3 bg-[var(--secondary-element)]-100 border-l-4 border-[#75C07A] text-sm rounded">
+              <p
+                data-testid="signup-response"
+                className="mt-4 p-3 bg-[var(--secondary-element)]-100 border-l-4 border-[#75C07A]  text-sm rounded">
                 {signupResponse}
               </p>
             )}
