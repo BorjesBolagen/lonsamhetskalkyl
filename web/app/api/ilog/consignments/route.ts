@@ -31,6 +31,7 @@
 import { NextResponse } from "next/server";
 import { ilogGet, IlogHttpError } from "@/lib/ilogClient";
 import { mapConsignments } from "@/lib/ilogMappers";
+import { enrichTaxPointRelationFromSupabase } from "@/lib/taxPointLookup";
 
 // yyyyMMdd format
 const DATE_REGEX = /^\d{8}$/;
@@ -83,12 +84,14 @@ export async function GET(request: Request) {
 
     // Mappa från iLog's komplexa nested struktur till rena DTO:er
     const consignments = mapConsignments(rawConsignments);
+    const consignmentsWithTaxPointRelation =
+      await enrichTaxPointRelationFromSupabase(consignments);
 
     // Returnerar datan till frontend.
     return NextResponse.json({
       status: true,
       message: "Consignments fetched",
-      data: consignments,
+      data: consignmentsWithTaxPointRelation,
     });
   } catch (error) {
     // Kända iLog-relaterade fel.

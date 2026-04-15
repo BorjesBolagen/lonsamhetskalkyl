@@ -1,302 +1,141 @@
 "use client";
 
-import { getCurrentlySignedInUser, getIlogLines } from "../../lib/api";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { useEffect, useState } from "react";
 import LineCard from "../../components/LineCard";
-import Card from "../../components/Card";
-import {
-  AREA_OPTIONS,
-  AreaKey,
-  AreaState,
-  DEFAULT_AREAS,
-  parseAreaState,
-} from "../../lib/areas";
+import EquipageCard from "../../components/EquipageCard";
+import { getDisplayCustomerName, useHomeLines } from "./useHomeLines";
 
-type IlogLine = {
-  id: number;
-  name: string;
-  fromArea: string;
-  toArea: string;
-};
-
-class Ekipage {
-  private id: string;
-  private line: string;
-  private price: number;
-  private capacity: number;
-  private leveransstruktur: string;
-
-  public constructor(
-    id: string,
-    line: string,
-    price: number,
-    capacity: number,
-    leveransstruktur: string,
-  ) {
-    this.id = id;
-    this.line = line;
-    this.price = price;
-    this.capacity = capacity;
-    this.leveransstruktur = leveransstruktur;
-  }
-
-  public getId(): string {
-    return this.id;
-  }
-
-  public getLine(): string {
-    return this.line;
-  }
-
-  public getPrice(): number {
-    return this.price;
-  }
-
-  public getCapacity(): number {
-    return this.capacity;
-  }
-}
-
-function normalizeText(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
-}
-
+const STANDARD_FLM = 19.2;
 
 export default function Home() {
-  const STANDRD_FLM = 19.2;
+  /**
+   * Home is the presentation layer: it renders cards/popup and delegates data logic to useHomeLines.
+   */
+  const {
+    selectedDate,
+    setSelectedDate,
+    profitabilityReferenceValue,
+    lineCards,
+    loadingLines,
+    lineError,
+    hasLoadedLines,
+    visibleEquipageCount,
+    appliedClusterLabels,
+    selectedEquipage,
+    isPopupOpen,
+    areasLoaded,
+    loadLines,
+    clearDisplayedLines,
+    openPopup,
+    closePopup,
+  } = useHomeLines();
 
-  const [clickedButton, setClickedButton] = useState<Ekipage | null>(null);
-  const [manualValue, setManualValue] = useState(15000);
-  const [value, setValue] = useState("");
-
-  const [selectedAreas, setSelectedAreas] = useState<AreaState>(DEFAULT_AREAS);
-  const [areasLoaded, setAreasLoaded] = useState(false);
-
-  const [linesData, setLinesData] = useState<IlogLine[]>([]);
-  const [loadingLines, setLoadingLines] = useState(false);
-  const [lineError, setLineError] = useState("");
-  const [hasLoadedLines, setHasLoadedLines] = useState(false);
-
-  function convertCapacityToPixels(capacity: number) {
-    return (capacity / STANDRD_FLM) * 100;
-  }
-
-  function convertProfitToPixels(price: number) {
-    if (price < manualValue) {
-      return (price / manualValue) * 100;
+  /**
+   * Converts total FLM into bar progress.
+   * 19.2 FLM should be 90%, and overflow fills the final 10%.
+   */
+  function convertFlmToBarProgress(totalFlm: number): number {
+    if (totalFlm <= 0) {
+      return 0;
     }
+
+    if (totalFlm <= STANDARD_FLM) {
+      return Math.max(0, Math.min(100, (totalFlm / STANDARD_FLM) * 90));
+    }
+
     return 100;
   }
 
-  function lineMatchesSelectedAreas(line: IlogLine): boolean {
-    const activeAreas = Object.entries(selectedAreas).filter(
-      ([, isActive]) => isActive,
-    );
-
-    if (activeAreas.length === 0) {
-      return false;
+  /**
+   * Parses one prognosis value into a number.
+   * Accepts values like "1234", "1 234,50" or strings with mixed text.
+   */
+  function parsePrognosisValue(raw: string): number {
+    const match = raw.match(/-?\d+(?:[.,]\d+)?/);
+    if (!match) {
+      return 0;
     }
 
-    const fromArea = normalizeText(line.fromArea);
-    return activeAreas.some(([areaKey]) => {
-      const areaLabel = normalizeText(AREA_OPTIONS[areaKey as AreaKey]);
-      return fromArea.includes(areaLabel);
-    });
+    const normalized = match[0].replace(",", ".");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
+  /**
+   * Sums prognosis values across all consignments for one equipage.
+   */
+  function getTotalPrognosis(consignments: { prognosis: string }[]): number {
+    return consignments.reduce(
+      (sum, consignment) => sum + parsePrognosisValue(consignment.prognosis),
+      0,
+    );
+  }
 
-  const Ekipage1 = new Ekipage(
-    "L20",
-    "Linköping - Stockholm",
-    12000,
-    12.4,
-    "null",
-  );
-  const Ekipage2 = new Ekipage(
-    "L21",
-    "Linköping - Stockholm",
-    13000,
-    19.2,
-    "null",
-  );
-  const Ekipage3 = new Ekipage(
-    "L22",
-    "Linköping - Stockholm",
-    18500,
-    19.2,
-    "null",
-  );
-
-  useEffect(() => {
-    // Load user's saved area filters once so fetch button uses persisted settings.
-    async function loadCurrentUserSettings() {
-      try {
-        const response = await getCurrentlySignedInUser();
-        const user = response.data;
-        
-        if (user) {
-          setSelectedAreas(parseAreaState(user.filters));
-        } else {
-          setSelectedAreas(DEFAULT_AREAS);
-        }
-      } catch (error) {
-        setSelectedAreas(DEFAULT_AREAS);
-      } finally {
-        setAreasLoaded(true);
-      }
+  /**
+   * Converts prognosis amount into bar progress using user-configurable reference value.
+   */
+  function convertProfitToBarProgress(totalPrognosis: number): number {
+    if (!Number.isFinite(totalPrognosis) || totalPrognosis <= 0) {
+      return 0;
     }
 
-    loadCurrentUserSettings();
-  }, []);
+    const reference =
+      profitabilityReferenceValue > 0 ? profitabilityReferenceValue : 15000;
+    return Math.max(0, Math.min(100, (totalPrognosis / reference) * 100));
+  }
 
-  const loadLines = async () => {
-    try {
-      setLoadingLines(true);
-      setLineError("");
-      setHasLoadedLines(true);
+  const selectedEquipageTotalPrognosis = selectedEquipage
+    ? getTotalPrognosis(selectedEquipage.consignments)
+    : 0;
 
-      const response = await getIlogLines();
-      // Filter only by origin area (fromArea), not destination.
-      const filteredLines = (response.data ?? []).filter((line: IlogLine) =>
-        lineMatchesSelectedAreas(line),
-      );
-
-      setLinesData(filteredLines);
-    } catch (error) {
-      setLineError("Kunde inte hämta filtrerade linjer, försök igen.");
-    } finally {
-      setLoadingLines(false);
-    }
-  };
-
-  
   return (
-    <div className="">
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="home" />
-      <main className="flex-grow p-6 flex gap-10">
-        <div>
-          {!loadingLines && !lineError && linesData.length > 0 && (
-                <div className="space-y-3">
-                  {linesData.map((line) => (
-                    <LineCard key={line.id} title={line.name}>
-                      <div className="text-sm text-[var--(text-primary)] space-y-1">
-                        <div className="flex">
-                          <Card
-                            key={Ekipage1.getId()}
-                            title={Ekipage1.getId()}
-                            capacity={convertCapacityToPixels(Ekipage1.getCapacity())}
-                            price={convertProfitToPixels(Ekipage1.getPrice())}
-                          >
-                            <button
-                              onClick={() => setClickedButton(Ekipage1)}
-                            >
-                              Info
-                            </button>
-                          </Card>
-                          <Card
-                            key={Ekipage2.getId()}
-                            title={Ekipage2.getId()}
-                            capacity={convertCapacityToPixels(Ekipage2.getCapacity())}
-                            price={convertProfitToPixels(Ekipage2.getPrice())}
-                          >
-                            <button
-                              onClick={() => setClickedButton(Ekipage2)}
-                              className=""
-                            >
-                              Info
-                            </button>
-                          </Card>
-                          <Card
-                            key={Ekipage3.getId()}
-                            title={Ekipage3.getId()}
-                            capacity={convertCapacityToPixels(Ekipage3.getCapacity())}
-                            price={convertProfitToPixels(Ekipage3.getPrice())}
-                          >
-                            <button
-                              onClick={() => setClickedButton(Ekipage3)}
-                              className=""
-                            >
-                              Info
-                            </button>
-                          </Card>
-                        </div>
-                        
-                        <p className="text-[var(--text-primary)]">
-                          <strong>ID:</strong> {line.id}
-                        </p>
-                        <p className="text-[var(--text-primary)]">
-                          <strong>Från:</strong> {line.fromArea}
-                        </p>
-                        <p className="text-[var(--text-primary)]">
-                          <strong>Till:</strong> {line.toArea}
-                        </p>
-                      </div>
-                    </LineCard>
-                  ))}
-                </div>
-              )}
-          </div>
-        <div className="w-[40rem] space-y-6 ml-auto">
-          <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 max-w-md">
-            <p className="text-[var(--text-primary)] mb-2 font-medium">
-              Manuellt värde: {manualValue}
-            </p>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const parsedValue = Number(value);
-
-                if (!Number.isFinite(parsedValue) || parsedValue < 0) {
-                  return;
-                }
-
-                setManualValue(parsedValue);
-                localStorage.setItem("profitabilityThreshold", String(parsedValue));
-                setValue("");
-              }}
-              className="flex gap-2"
-            >
-              <input
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                className="text-[var(--text-primary)] border-2 border-[var(--border-primary)] rounded p-2 w-full focus:outline-none focus:ring-2 focus:ring-green-700"
-              />
-              <button
-                type="submit"
-                className="bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-2 rounded hover:bg-[var(--primary-button-hover)] transition"
-              >
-                Spara
-              </button>
-            </form>
-          </div>
-
-          {clickedButton && (
-            <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 max-w-md">
-              <h2 className="text-[var(--text-primary)] text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
-              <div>
-                <p className="text-[var(--text-primary)]">
-                  <strong>ID:</strong> {clickedButton.getId()}
-                </p>
-                <p className="text-[var(--text-primary)]">
-                  <strong >Linje:</strong> {clickedButton.getLine()}
-                </p>
-                <p className="text-[var(--text-primary)]">
-                  <strong>Pris:</strong> {clickedButton.getPrice()}
-                </p>
-              </div>
+      <main className="flex-grow p-6 flex gap-6">
+        <div className="flex-grow">
+          {/* Left column: grouped lines with equipage cards. */}
+          {!loadingLines && !lineError && lineCards.length > 0 && (
+            <div className="space-y-3">
+              {lineCards.map((line) => (
+                <LineCard
+                  key={`${line.id}-${line.name}`}
+                  title={`${line.name} (${line.id})`}
+                >
+                  <div className="flex flex-wrap gap-4 items-start w-full">
+                    {line.equipages.map((equipage) => (
+                      <EquipageCard
+                        key={`${line.id}-${equipage.id}`}
+                        title={equipage.name}
+                        capacity={convertFlmToBarProgress(equipage.totalFlm)}
+                        price={convertProfitToBarProgress(
+                          getTotalPrognosis(equipage.consignments),
+                        )}
+                      >
+                        <button
+                          type="button"
+                          className="w-full text-sm"
+                          onClick={() => openPopup(equipage)}
+                        >
+                          Info
+                        </button>
+                      </EquipageCard>
+                    ))}
+                  </div>
+                </LineCard>
+              ))}
             </div>
           )}
+        </div>
 
+        <div className="w-[25rem] space-y-6 ml-auto">
+          {/* Right column: controls + status summary for current fetch context. */}
           <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
-            <div>
-              <p className="font-medium text-[var(--text-primary)]">Aktuella linjer</p>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
+                Aktuella linjer
+              </p>
               {!areasLoaded && (
                 <p className="text-sm text-[var(--text-primary)] mt-1">
                   Laddar dina sparade områden...
@@ -304,36 +143,182 @@ export default function Home() {
               )}
             </div>
 
-            <button
-              onClick={loadLines}
-              disabled={!areasLoaded || loadingLines}
-              className="w-full bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-3 rounded hover:bg-[var(--primary-button-hover)] disabled:bg-gray-400 transition font-semibold"
-            >
-              {loadingLines
-                ? "Hämtar filtrerade linjer..."
-                : "Hämta filtrerade linjer"}
-            </button>
+            <div className="flex flex-col gap-3">
+              <div className="space-y-1">
+                <label
+                  htmlFor="selectedDate"
+                  className="block text-sm font-medium text-[var(--text-primary)]"
+                >
+                  Datum för filtrering
+                </label>
+                <input
+                  id="selectedDate"
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full text-[var(--text-primary)] border-2 border-[var(--border-primary)] rounded p-2 focus:outline-none focus:ring-2 focus:ring-green-700"
+                />
+              </div>
+
+              <button
+                onClick={loadLines}
+                disabled={!areasLoaded || loadingLines}
+                className="w-full bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-3 rounded hover:bg-[var(--primary-button-hover)] disabled:bg-gray-400 transition font-semibold inline-flex items-center justify-center gap-2"
+              >
+                {loadingLines && (
+                  <span
+                    className="h-4 w-4 rounded-full border-2 border-[var(--text-primary)] border-t-transparent animate-spin"
+                    aria-hidden="true"
+                  />
+                )}
+                <span>
+                  {loadingLines
+                    ? "Hämtar linjer, ekipage och bokningar..."
+                    : "Hämta filtrerade linjer"}
+                </span>
+              </button>
+            </div>
 
             <div className="text-sm text-[var(--primary-text)]">
-              {!areasLoaded ? (
-                <p className="text-[var(--text-primary)]">Vänta tills inställningarna har laddats.</p>
+              {loadingLines ? null : !areasLoaded ? (
+                <p className="text-[var(--text-primary)]">
+                  Vänta tills inställningarna har laddats.
+                </p>
               ) : lineError ? (
                 <p className="text-[var(--error)]">{lineError}</p>
               ) : !hasLoadedLines ? (
-                <p className="text-[var(--text-primary)]">Klicka på knappen för att ladda linjerna.</p>
-              ) : linesData.length > 0 ? (
-                <p className="text-[var(--text-primary)]">{linesData.length} filtrerade linjer hittades.</p>
+                <p className="text-[var(--text-primary)]">
+                  Klicka på knappen för att ladda linjerna.
+                </p>
+              ) : lineCards.length > 0 ? (
+                <div className="text-[var(--text-primary)] space-y-1 leading-6">
+                  <p>
+                    Från val
+                    {appliedClusterLabels.length === 1
+                      ? "t kluster "
+                      : "da kluster "}
+                    {appliedClusterLabels.length > 0
+                      ? appliedClusterLabels.join(", ")
+                      : " inga valda kluster"}{" "}
+                    hittades {lineCards.length} linjer med totalt{" "}
+                    {visibleEquipageCount} ekipage
+                    {selectedDate ? ` för ${selectedDate}.` : "."}
+                  </p>
+                </div>
               ) : (
-                <p>Inga linjer matchade dina valda områden.</p>
+                <div className="space-y-1">
+                  <p>Inga linjer matchade dina valda kluster.</p>
+                  <p>
+                    Kluster:{" "}
+                    {appliedClusterLabels.length > 0
+                      ? appliedClusterLabels.join(", ")
+                      : "Inga kluster valda"}
+                  </p>
+                  <p>Datum: {selectedDate || "Ej valt"}</p>
+                </div>
               )}
             </div>
 
-            
+            <div className="flex justify-end">
+              <button
+                onClick={clearDisplayedLines}
+                disabled={
+                  loadingLines || (!hasLoadedLines && lineCards.length === 0)
+                }
+                className="bg-transparent border border-[var(--border-primary)] text-[var(--text-primary)] text-xs px-3 py-1 rounded hover:bg-[var(--bg)] disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Rensa visning
+              </button>
+            </div>
           </div>
         </div>
       </main>
-      <Footer/>
+
+      <Footer />
+
+      {isPopupOpen && selectedEquipage && (
+        // Popup for consignment-level details on the selected equipage.
+        <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
+          <div className="bg-[var(--primary-element)] rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-primary)]">
+              <h2 className="text-[var(--text-primary)] text-xl font-bold">
+                Ekipage {selectedEquipage.name}: {selectedEquipage.lineName}
+              </h2>
+              <button
+                onClick={closePopup}
+                className="bg-[var(--primary-button)] text-[var(--text-primary)] px-3 py-1 rounded hover:bg-[var(--primary-button-hover)] transition"
+              >
+                Stäng
+              </button>
+            </div>
+
+            <div className="p-6 overflow-auto max-h-[calc(90vh-74px)]">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-[var(--border-primary)]">
+                    <th className="text-left py-2 pr-3">Destination</th>
+                    <th className="text-left py-2 pr-3">Kund</th>
+                    <th className="text-left py-2 pr-3">Hämtadress</th>
+                    <th className="text-left py-2 pr-3">Hämtort</th>
+                    <th className="text-left py-2 pr-3">Godsuppgifter</th>
+                    <th className="text-left py-2 pr-3">Prognos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedEquipage.consignments.map((consignment, index) => (
+                    <tr
+                      key={`${consignment.consignmentId}-${index}`}
+                      className="border-b border-[var(--border-primary)]"
+                    >
+                      <td className="py-2 pr-3">
+                        {consignment.destinationCity ||
+                          consignment.receiverName ||
+                          "-"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {getDisplayCustomerName(consignment)}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {consignment.pickupLocationStreet ||
+                          consignment.senderName ||
+                          "-"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {consignment.pickupLocationCity || "-"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {consignment.estimatedProperties || "-"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {consignment.prognosis || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="mt-4 text-sm text-[var(--text-primary)] flex flex-wrap items-center gap-x-4 gap-y-1">
+                <div className="whitespace-nowrap">
+                  <strong>Antal bokningar:</strong>{" "}
+                  {selectedEquipage.consignments.length}
+                </div>
+                <div className="whitespace-nowrap">
+                  <strong>Total vikt:</strong>{" "}
+                  {selectedEquipage.totalWeightKg.toFixed(0)} kg
+                </div>
+                <div className="whitespace-nowrap">
+                  <strong>Total FLM:</strong>{" "}
+                  {(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm
+                </div>
+                <div className="whitespace-nowrap">
+                  <strong>Total prognos:</strong>{" "}
+                  {selectedEquipageTotalPrognosis.toFixed(0)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
   );
 }

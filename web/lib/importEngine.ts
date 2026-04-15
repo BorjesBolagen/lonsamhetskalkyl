@@ -342,15 +342,26 @@ export async function processHistoricalCSV(
     }
 
     const supabaseAdmin = getSupabaseAdminClient();
+
+    // avbgsp_id är primärnyckeln: om samma avbgsp_id kommer in igen ska den gamla raden ersättas.
+    const latestRowsByAvbgspId = new Map<number, HistoricalInsert>();
+    for (const row of rowsToInsert) {
+        if (row.avbgsp_id !== undefined && row.avbgsp_id !== null) {
+            latestRowsByAvbgspId.set(row.avbgsp_id, row);
+        }
+    }
+
+    const rowsToWrite = Array.from(latestRowsByAvbgspId.values());
+
     const batchSize = 500;
-    const totalInsertRows = rowsToInsert.length;
+    const totalInsertRows = rowsToWrite.length;
     let insertedRows = 0;
 
     for (let start = 0; start < totalInsertRows; start += batchSize) {
-        const batch = rowsToInsert.slice(start, start + batchSize);
+        const batch = rowsToWrite.slice(start, start + batchSize);
         const { error: insertError } = await supabaseAdmin
             .from('Historical_shipment')
-            .insert(batch);
+            .upsert(batch, { onConflict: 'avbgsp_id' });
 
         if (insertError) {
             throw new ImportHttpError(
