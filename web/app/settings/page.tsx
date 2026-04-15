@@ -484,7 +484,6 @@ export default function Settings() {
                     <input
                       id="profitabilityReferenceValue"
                       type="number"
-                      min={1}
                       step={100}
                       value={profitabilityReferenceValue}
                       onChange={(e) => {
@@ -498,38 +497,7 @@ export default function Settings() {
                       className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                     />
                   </div>
-                </div>
-
-                {/* DEL 4: Prisreferens för Home */}
-                <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
-                    Referensvärde för prisbar
-                  </h3>
-                  <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2">
-                    <label
-                      htmlFor="profitabilityReferenceValue"
-                      className="block text-sm font-medium text-[var(--text-primary)]"
-                    >
-                      Värde som motsvarar 100% i prisbaren
-                    </label>
-                    <input
-                      id="profitabilityReferenceValue"
-                      type="number"
-                      min={1}
-                      step={100}
-                      value={profitabilityReferenceValue}
-                      onChange={(e) => {
-                        const parsed = Number(e.target.value);
-                        setProfitabilityReferenceValue(
-                          Number.isFinite(parsed) && parsed > 0
-                            ? parsed
-                            : DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-                        );
-                      }}
-                      className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
-                    />
-                  </div>
-                </div>
+                </div>     
 
                 <div className="pt-2 border-t border-[var(--seperating-gray)] flex flex-col gap-3">
                   <button
