@@ -240,8 +240,8 @@ export const getIlogLines = async (): Promise<IlogResponse<LineItem[]>> => {
 /**
  * Hämtar lista över ekipage (fordon/transport-enheter).
 */
-export const getIlogEquipages = async (debugRaw: boolean): Promise<IlogResponse<EquipageItem[]>> => {
-	const response = await fetch(`/api/ilog/equipages?debugRaw=${debugRaw}`, { method: "GET" });
+export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> => {
+	const response = await fetch("/api/ilog/equipages", { method: "GET" });
 
 	if (!response.ok) {
 		throw new Error("Request failed: " + (await response.text()));
@@ -255,13 +255,11 @@ export const getIlogEquipages = async (debugRaw: boolean): Promise<IlogResponse<
  */
 export const getIlogConsignments = async (
 	date: string,
-	equipageId: number,
-	debugRaw: boolean
+	equipageId: number
 ): Promise<IlogResponse<ConsignmentListItem[]>> => {
 	const params = new URLSearchParams({
 		date,
 		equipageId: String(equipageId),
-		debugRaw: String(debugRaw),
 	});
 
 	const response = await fetch(`/api/ilog/consignments?${params.toString()}`, {
