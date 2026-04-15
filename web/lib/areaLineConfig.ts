@@ -1,4 +1,4 @@
-// Canonical mapping from line labels in iLog/Excel to filter clusters in settings.
+// Mapping from line labels in iLog/Excel to filter clusters in settings.
 const LINE_TO_CLUSTER: Record<string, string> = {
   "Alvesta": "DistributionVXO",
   "Borlänge - GBG": "AHL-Borlänge",
@@ -145,6 +145,9 @@ const LINE_TO_CLUSTER: Record<string, string> = {
   "Övrigt": "Ej relevant",
 } as const;
 
+/**
+ * Make string comparisons accent-insensitive and case-insensitive.
+ */
 function normalizeText(value: string): string {
   return value
     .toLowerCase()
@@ -152,6 +155,9 @@ function normalizeText(value: string): string {
     .replace(/\p{Diacritic}/gu, "");
 }
 
+/**
+ * Normalize formatting noise so line labels from different sources match.
+ */
 function normalizeLineName(value: string): string {
   return normalizeText(value)
     .replace(/\(avd:[^)]+\)/g, "")
@@ -174,10 +180,16 @@ export const ACTIVE_CLUSTERS = Array.from(
 
 const companyPrefixes = ["AHL-", "SML-"] as const;
 
+/**
+ * Keep cluster labels clean before prefix handling and comparisons.
+ */
 function normalizeClusterLabel(value: string): string {
   return value.trim();
 }
 
+/**
+ * Support matching both A-B and B-A without duplicating mappings.
+ */
 function reverseLineName(value: string): string {
   const parts = normalizeLineName(value)
     .split("-")
@@ -193,10 +205,30 @@ function reverseLineName(value: string): string {
 
 for (const [lineName, cluster] of Object.entries(LINE_TO_CLUSTER)) {
   const normalized = normalizeLineName(lineName);
+  // Guard against accidental key collapse if new labels normalize to the same key.
+  if (
+    process.env.NODE_ENV !== "production" &&
+    NORMALIZED_LINE_TO_CLUSTER.has(normalized) &&
+    NORMALIZED_LINE_TO_CLUSTER.get(normalized) !== cluster
+  ) {
+    console.warn(
+      "[areaLineConfig] normalizeLineName collision:",
+      lineName,
+      "->",
+      normalized,
+      "existing cluster:",
+      NORMALIZED_LINE_TO_CLUSTER.get(normalized),
+      "new cluster:",
+      cluster,
+    );
+  }
   NORMALIZED_LINE_TO_CLUSTER.set(normalized, cluster);
   REVERSED_NORMALIZED_LINE_TO_CLUSTER.set(reverseLineName(normalized), cluster);
 }
 
+/**
+ * Remove company prefixes so old group-style filter keys can still resolve.
+ */
 function stripCompanyPrefix(clusterLabel: string): string {
   const normalized = normalizeClusterLabel(clusterLabel);
   for (const prefix of companyPrefixes) {
@@ -208,6 +240,9 @@ function stripCompanyPrefix(clusterLabel: string): string {
   return normalized;
 }
 
+/**
+ * Map modern cluster labels to legacy aliases used by older saved filters.
+ */
 function areaAliasFromCluster(clusterLabel: string): string {
   const normalized = normalizeText(clusterLabel).replace(/[^a-z0-9]+/g, "");
 
@@ -226,6 +261,9 @@ function areaAliasFromCluster(clusterLabel: string): string {
   return stripCompanyPrefix(clusterLabel);
 }
 
+/**
+ * Convert display labels to stable object keys for persisted filter state.
+ */
 const toAreaKey = (label: string): string => {
   return label
     .toLowerCase()
@@ -248,10 +286,16 @@ export const DEFAULT_AREAS = Object.fromEntries(
   AREA_KEYS.map((key) => [key, false]),
 ) as AreaState;
 
+/**
+ * Defensive type guard for loosely typed data loaded from storage/database.
+ */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Accept both new and legacy filter payload shapes.
+ */
 export function parseAreaState(filters: unknown): AreaState {
   const source =
     isPlainObject(filters) && isPlainObject(filters.areas)
@@ -290,8 +334,10 @@ export function parseAreaState(filters: unknown): AreaState {
   ) as AreaState;
 }
 
+/**
+ * Direct match first, then fallback to reversed direction (A-B <-> B-A).
+ */
 export function getLineCluster(lineName: string): string | null {
-  // Direct match first, then fallback to reversed direction (A-B <-> B-A).
   const normalized = normalizeLineName(lineName);
   const directMatch = NORMALIZED_LINE_TO_CLUSTER.get(normalized);
   if (directMatch) {

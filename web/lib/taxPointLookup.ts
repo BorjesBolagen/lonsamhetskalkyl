@@ -12,8 +12,14 @@ type TaxPointRow = {
   taxepunkt: string | null;
 };
 
+/**
+ * Keep only digits so postal code comparisons are format-independent.
+ */
 const normalizeDigits = (value: string): string => value.replace(/\D/g, "");
 
+/**
+ * Normalize place names for stable lookups (trim, uppercase, remove diacritics).
+ */
 const normalizePlace = (value: string): string =>
   value
     .trim()
@@ -21,6 +27,9 @@ const normalizePlace = (value: string): string =>
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
 
+/**
+ * Convert lookup row tax point postal code to a comparable string value.
+ */
 const asTaxPointPostCodeValue = (row: TaxPointRow): string => {
   if (typeof row.taxepunktspostnummer === "number" && Number.isFinite(row.taxepunktspostnummer)) {
     return String(Math.trunc(row.taxepunktspostnummer));
@@ -29,6 +38,9 @@ const asTaxPointPostCodeValue = (row: TaxPointRow): string => {
   return "";
 };
 
+/**
+ * Split large arrays into smaller chunks to keep DB IN-queries safe.
+ */
 const chunk = <T>(items: T[], size: number): T[][] => {
   const result: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -37,6 +49,9 @@ const chunk = <T>(items: T[], size: number): T[][] => {
   return result;
 };
 
+/**
+ * Fetch tax point lookup rows by postal codes and postorts from Supabase.
+ */
 const fetchTaxPointRows = async (
   postalCodes: string[],
   postorts: string[],
@@ -81,6 +96,9 @@ const fetchTaxPointRows = async (
   return rows;
 };
 
+/**
+ * Enrich consignments with taxPointRelation using postal code first, then place fallback.
+ */
 export async function enrichTaxPointRelationFromSupabase(
   consignments: ConsignmentListItem[],
 ): Promise<ConsignmentListItem[]> {
@@ -110,7 +128,7 @@ export async function enrichTaxPointRelationFromSupabase(
   try {
     rows = await fetchTaxPointRows(postalCodes, postorts);
   } catch {
-    // If lookup table is missing or temporarily unavailable, keep consignments as-is.
+    // Fail soft: keep original consignments if lookup is unavailable.
     return consignments;
   }
 

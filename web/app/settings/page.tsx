@@ -31,6 +31,7 @@ const applyTheme = (newTheme: "light" | "dark") => {
 };
 
 const DEFAULT_THEME: ThemeMode = "light";
+const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -45,6 +46,19 @@ function parseTheme(filters: unknown): ThemeMode {
   }
 
   return DEFAULT_THEME;
+}
+
+function parseProfitabilityReferenceValue(filters: unknown): number {
+  if (
+    isPlainObject(filters) &&
+    typeof filters.profitabilityReferenceValue === "number" &&
+    Number.isFinite(filters.profitabilityReferenceValue) &&
+    filters.profitabilityReferenceValue > 0
+  ) {
+    return filters.profitabilityReferenceValue;
+  }
+
+  return DEFAULT_PROFITABILITY_REFERENCE_VALUE;
 }
 
 export default function Settings() {
@@ -77,6 +91,8 @@ export default function Settings() {
   // States för områden
   const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
   const [theme, setTheme] = useState<ThemeMode>(DEFAULT_THEME);
+  const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
+    useState<number>(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
 
   const clusterGroups = useMemo(() => {
     const sortedKeys = [...AREA_KEYS].sort((a, b) =>
@@ -164,6 +180,9 @@ export default function Settings() {
 
         setDistricts(parseAreaState(user.filters));
         setTheme(parseTheme(user.filters));
+        setProfitabilityReferenceValue(
+          parseProfitabilityReferenceValue(user.filters),
+        );
       } catch (error) {
         setFiltersStatus({
           type: "error",
@@ -195,6 +214,7 @@ export default function Settings() {
         ...storedFilters,
         areas: districts,
         theme,
+        profitabilityReferenceValue,
       };
 
       await setFilters(userId, nextFilters as Json);
@@ -426,6 +446,37 @@ export default function Settings() {
                     >
                       Dark
                     </button>
+                  </div>
+                </div>
+
+                {/* DEL 4: Prisreferens för Home */}
+                <div>
+                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
+                    Referensvärde för prisbar
+                  </h3>
+                  <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2">
+                    <label
+                      htmlFor="profitabilityReferenceValue"
+                      className="block text-sm font-medium text-[var(--text-primary)]"
+                    >
+                      Värde som motsvarar 100% i prisbaren
+                    </label>
+                    <input
+                      id="profitabilityReferenceValue"
+                      type="number"
+                      min={1}
+                      step={100}
+                      value={profitabilityReferenceValue}
+                      onChange={(e) => {
+                        const parsed = Number(e.target.value);
+                        setProfitabilityReferenceValue(
+                          Number.isFinite(parsed) && parsed > 0
+                            ? parsed
+                            : DEFAULT_PROFITABILITY_REFERENCE_VALUE,
+                        );
+                      }}
+                      className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                    />
                   </div>
                 </div>
 

@@ -24,7 +24,11 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 const HOME_CACHE_KEY = "home-lines-cache-v6";
+const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
 
+/**
+ * Returns tomorrow in the YYYY-MM-DD format used by the native date input.
+ */
 function getDefaultHomeDate(): string {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -33,6 +37,28 @@ function getDefaultHomeDate(): string {
   const month = String(tomorrow.getMonth() + 1).padStart(2, "0");
   const day = String(tomorrow.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Reads the profitability reference value from user filters and falls back to a safe default.
+ */
+function parseProfitabilityReferenceValue(filters: unknown): number {
+  if (
+    typeof filters === "object" &&
+    filters !== null &&
+    !Array.isArray(filters) &&
+    typeof (filters as Record<string, unknown>).profitabilityReferenceValue ===
+      "number"
+  ) {
+    const candidate = (filters as Record<string, unknown>)
+      .profitabilityReferenceValue as number;
+
+    if (Number.isFinite(candidate) && candidate > 0) {
+      return candidate;
+    }
+  }
+
+  return DEFAULT_PROFITABILITY_REFERENCE_VALUE;
 }
 
 type EquipageWithConsignments = {
@@ -58,23 +84,21 @@ type HomeCachePayload = {
   appliedClusterLabels: string[];
 };
 
+/**
+ * Recalculates totals directly from consignments, because cached totals may be missing or stale.
+ */
 function ensureEquipageTotals(
   equipage: EquipageWithConsignments,
 ): EquipageWithConsignments {
-  // Some cached entries might miss totals; derive from consignments as fallback.
-  const totalWeightKg =
-    equipage.totalWeightKg ??
-    equipage.consignments.reduce(
-      (sum, consignment) => sum + (consignment.weight ?? 0),
-      0,
-    );
+  const totalWeightKg = equipage.consignments.reduce(
+    (sum, consignment) => sum + (consignment.weight ?? 0),
+    0,
+  );
 
-  const totalFlm =
-    equipage.totalFlm ??
-    equipage.consignments.reduce(
-      (sum, consignment) => sum + (consignment.flm ?? 0),
-      0,
-    );
+  const totalFlm = equipage.consignments.reduce(
+    (sum, consignment) => sum + (consignment.flm ?? 0),
+    0,
+  );
 
   return {
     ...equipage,
@@ -83,6 +107,9 @@ function ensureEquipageTotals(
   };
 }
 
+/**
+ * Normalizes cached line cards so totals are always rebuilt from the consignments.
+ */
 function normalizeLineCards(
   lineCards: LineWithEquipages[],
 ): LineWithEquipages[] {
@@ -92,6 +119,9 @@ function normalizeLineCards(
   }));
 }
 
+/**
+ * Converts the native YYYY-MM-DD date value into the yyyyMMdd format used by iLog.
+ */
 function toIlogDate(value: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return null;
@@ -100,6 +130,9 @@ function toIlogDate(value: string): string | null {
   return value.replace(/-/g, "");
 }
 
+/**
+ * Splits a line name into its directional parts while removing AVD suffixes.
+ */
 function splitLineParts(lineName: string): string[] {
   return lineName
     .replace(/\(avd:[^)]+\)/gi, "")
@@ -108,6 +141,9 @@ function splitLineParts(lineName: string): string[] {
     .filter((part) => part.length > 0);
 }
 
+/**
+ * Flips the displayed line direction when the selected cluster matches the destination side.
+ */
 function orientLineNameForSelectedAreas(
   lineName: string,
   selectedAreaLabels: string[],
@@ -133,6 +169,9 @@ function orientLineNameForSelectedAreas(
   return `${from} - ${to}`;
 }
 
+/**
+ * Finds the most common zoneName among consignments and uses that as the display line hint.
+ */
 function getDominantConsignmentLineName(
   consignments: ConsignmentListItem[],
 ): string | null {
@@ -160,6 +199,9 @@ function getDominantConsignmentLineName(
   return bestName;
 }
 
+/**
+ * Splits a list into fixed-size batches so consignment requests can run in smaller groups.
+ */
 function chunkArray<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
 
@@ -170,6 +212,9 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+/**
+ * Fetches consignments for one equipage and retries once on transient failures.
+ */
 async function getIlogConsignmentsWithRetry(
   ilogDate: string,
   equipageId: number,
@@ -184,6 +229,9 @@ async function getIlogConsignmentsWithRetry(
   }
 }
 
+/**
+ * Returns the last non-empty name fragment after splitting on asterisks.
+ */
 function pickTrailingNamePart(rawValue: string): string | null {
   const value = rawValue
     .trim()
@@ -195,6 +243,9 @@ function pickTrailingNamePart(rawValue: string): string | null {
   return value && value.length > 0 ? value : null;
 }
 
+/**
+ * Returns a readable customer name, falling back to pickupLocationName when needed.
+ */
 export function getDisplayCustomerName(consignment: ConsignmentListItem): string {
   const normalizedCustomerName = pickTrailingNamePart(consignment.customerName);
   if (normalizedCustomerName) {
@@ -209,10 +260,15 @@ export function getDisplayCustomerName(consignment: ConsignmentListItem): string
   return pickTrailingNamePart(pickupLocationName) ?? pickupLocationName;
 }
 
+/**
+ * Loads the Home view data, applies cluster filters, groups equipages, and manages the cached result.
+ */
 export function useHomeLines() {
   const [selectedAreas, setSelectedAreas] = useState<AreaState>(DEFAULT_AREAS);
   const [areasLoaded, setAreasLoaded] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getDefaultHomeDate);
+  const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
+    useState<number>(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
 
   const [lineCards, setLineCards] = useState<LineWithEquipages[]>([]);
   const [loadingLines, setLoadingLines] = useState(false);
@@ -223,7 +279,7 @@ export function useHomeLines() {
 
   const [selectedEquipage, setSelectedEquipage] =
     useState<EquipageWithConsignments | null>(null);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [appliedClusterLabels, setAppliedClusterLabels] = useState<string[]>(
     [],
   );
@@ -236,11 +292,17 @@ export function useHomeLines() {
     [selectedAreas],
   );
 
+  /**
+   * Matches a line cluster against the currently selected cluster labels.
+   */
   const normalizedSelectedClusters = useMemo(
     () => new Set(selectedAreaLabels.map((label) => normalizeText(label))),
     [selectedAreaLabels],
   );
 
+  /**
+   * Returns true when a line belongs to one of the selected clusters.
+   */
   function lineMatchesSelectedAreas(clusterName: string): boolean {
     if (normalizedSelectedClusters.size === 0) {
       return false;
@@ -249,16 +311,19 @@ export function useHomeLines() {
     return normalizedSelectedClusters.has(normalizeText(clusterName));
   }
 
+  /**
+   * Clears only the visible Home state while keeping user settings intact.
+   */
   function resetDisplayedData(): void {
     setLineCards([]);
     setCandidateEquipageCount(0);
     setVisibleEquipageCount(0);
     setSelectedEquipage(null);
-    setIsDetailsOpen(false);
+    setIsPopupOpen(false);
   }
 
   useEffect(() => {
-    // Load persisted user cluster preferences once on mount.
+    /** Load persisted user cluster preferences once on mount. */
     async function loadCurrentUserSettings() {
       try {
         const response = await getCurrentlySignedInUser();
@@ -266,11 +331,16 @@ export function useHomeLines() {
 
         if (user) {
           setSelectedAreas(parseAreaState(user.filters));
+          setProfitabilityReferenceValue(
+            parseProfitabilityReferenceValue(user.filters),
+          );
         } else {
           setSelectedAreas(DEFAULT_AREAS);
+          setProfitabilityReferenceValue(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
         }
       } catch {
         setSelectedAreas(DEFAULT_AREAS);
+        setProfitabilityReferenceValue(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
       } finally {
         setAreasLoaded(true);
       }
@@ -285,7 +355,7 @@ export function useHomeLines() {
     }
 
     try {
-      // Restore last fetched Home result to avoid refetch on quick navigation.
+      /** Restore the last fetched Home result to avoid a refetch on quick navigation. */
       const raw = sessionStorage.getItem(HOME_CACHE_KEY);
       if (!raw) {
         return;
@@ -309,6 +379,9 @@ export function useHomeLines() {
     }
   }, [areasLoaded]);
 
+  /**
+   * Persists the current Home payload in sessionStorage.
+   */
   function persistHomeCache(payload: HomeCachePayload): void {
     try {
       sessionStorage.setItem(HOME_CACHE_KEY, JSON.stringify(payload));
@@ -317,6 +390,9 @@ export function useHomeLines() {
     }
   }
 
+  /**
+   * Removes the cached Home payload from sessionStorage.
+   */
   function clearHomeCache(): void {
     try {
       sessionStorage.removeItem(HOME_CACHE_KEY);
@@ -325,6 +401,9 @@ export function useHomeLines() {
     }
   }
 
+  /**
+   * Fetches, filters, groups, and caches the Home line data for the selected date.
+   */
   const loadLines = async () => {
     try {
       const requestedClusterLabels = [...selectedAreaLabels];
@@ -383,7 +462,7 @@ export function useHomeLines() {
       );
 
       // Step 2: keep equipages linked to approved lines.
-      // iLog kan returnera dubletter; dedupe by equipage ID during selection.
+      // iLog can return dupes, dedupe by equipage ID during selection.
       const filteredEquipageMap = new Map<number, EquipageItem>();
       for (const equipage of (equipagesResponse.data ?? []) as EquipageItem[]) {
         const belongsToApprovedLine =
@@ -448,6 +527,7 @@ export function useHomeLines() {
             const equipageRow: EquipageWithConsignments = {
               id: equipage.id,
               name: equipage.name,
+              // lineId is used for stable grouping and matching; lineName is what the user sees.
               lineId: displayLine.id,
               lineName: directedLineName,
               consignments: visibleConsignments,
@@ -525,13 +605,16 @@ export function useHomeLines() {
     }
   };
 
-  const openDetails = (equipage: EquipageWithConsignments) => {
+  /** Open the popup for one equipage. */
+  const openPopup = (equipage: EquipageWithConsignments) => {
     setSelectedEquipage(ensureEquipageTotals(equipage));
-    setIsDetailsOpen(true);
+    setIsPopupOpen(true);
   };
 
-  const closeDetails = () => setIsDetailsOpen(false);
+  /** Close the popup. */
+  const closePopup = () => setIsPopupOpen(false);
 
+  /** Clear the visible results and remove the cached Home payload. */
   const clearDisplayedLines = () => {
     resetDisplayedData();
     setLineError("");
@@ -543,6 +626,7 @@ export function useHomeLines() {
   return {
     selectedDate,
     setSelectedDate,
+    profitabilityReferenceValue,
     lineCards,
     loadingLines,
     lineError,
@@ -552,11 +636,11 @@ export function useHomeLines() {
     appliedClusterLabels,
     selectedAreaLabels,
     selectedEquipage,
-    isDetailsOpen,
+    isPopupOpen,
     areasLoaded,
     loadLines,
     clearDisplayedLines,
-    openDetails,
-    closeDetails,
+    openPopup,
+    closePopup,
   };
 }

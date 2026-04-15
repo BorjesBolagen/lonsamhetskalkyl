@@ -3,15 +3,19 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import LineCard from "../../components/LineCard";
-import Card from "../../components/Card";
+import EquipageCard from "../../components/EquipageCard";
 import { getDisplayCustomerName, useHomeLines } from "./useHomeLines";
 
-export default function Home() {
-  const standardFlm = 19.2;
+const STANDARD_FLM = 19.2;
 
+export default function Home() {
+  /**
+   * Home is the presentation layer: it renders cards/popup and delegates data logic to useHomeLines.
+   */
   const {
     selectedDate,
     setSelectedDate,
+    profitabilityReferenceValue,
     lineCards,
     loadingLines,
     lineError,
@@ -19,23 +23,77 @@ export default function Home() {
     visibleEquipageCount,
     appliedClusterLabels,
     selectedEquipage,
-    isDetailsOpen,
+    isPopupOpen,
     areasLoaded,
     loadLines,
     clearDisplayedLines,
-    openDetails,
-    closeDetails,
+    openPopup,
+    closePopup,
   } = useHomeLines();
 
-  function convertCapacityToPixels(totalFlm: number): number {
-    return Math.max(0, Math.min(100, (totalFlm / standardFlm) * 100));
+  /**
+   * Converts total FLM into bar progress.
+   * 19.2 FLM should be 90%, and overflow fills the final 10%.
+   */
+  function convertFlmToBarProgress(totalFlm: number): number {
+    if (totalFlm <= 0) {
+      return 0;
+    }
+
+    if (totalFlm <= STANDARD_FLM) {
+      return Math.max(0, Math.min(100, (totalFlm / STANDARD_FLM) * 90));
+    }
+
+    return 100;
   }
+
+  /**
+   * Parses one prognosis value into a number.
+   * Accepts values like "1234", "1 234,50" or strings with mixed text.
+   */
+  function parsePrognosisValue(raw: string): number {
+    const match = raw.match(/-?\d+(?:[.,]\d+)?/);
+    if (!match) {
+      return 0;
+    }
+
+    const normalized = match[0].replace(",", ".");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  /**
+   * Sums prognosis values across all consignments for one equipage.
+   */
+  function getTotalPrognosis(consignments: { prognosis: string }[]): number {
+    return consignments.reduce(
+      (sum, consignment) => sum + parsePrognosisValue(consignment.prognosis),
+      0,
+    );
+  }
+
+  /**
+   * Converts prognosis amount into bar progress using user-configurable reference value.
+   */
+  function convertProfitToBarProgress(totalPrognosis: number): number {
+    if (!Number.isFinite(totalPrognosis) || totalPrognosis <= 0) {
+      return 0;
+    }
+
+    const reference =
+      profitabilityReferenceValue > 0 ? profitabilityReferenceValue : 15000;
+    return Math.max(0, Math.min(100, (totalPrognosis / reference) * 100));
+  }
+
+  const selectedEquipageTotalPrognosis = selectedEquipage
+    ? getTotalPrognosis(selectedEquipage.consignments)
+    : 0;
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="home" />
 
-      <main className="flex-grow p-6 flex gap-10">
+      <main className="flex-grow p-6 flex gap-6">
         <div className="flex-grow">
           {/* Left column: grouped lines with equipage cards. */}
           {!loadingLines && !lineError && lineCards.length > 0 && (
@@ -45,22 +103,24 @@ export default function Home() {
                   key={`${line.id}-${line.name}`}
                   title={`${line.name} (${line.id})`}
                 >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 w-full">
+                  <div className="flex flex-wrap gap-4 items-start w-full">
                     {line.equipages.map((equipage) => (
-                      <Card
+                      <EquipageCard
                         key={`${line.id}-${equipage.id}`}
                         title={equipage.name}
-                        capacity={convertCapacityToPixels(equipage.totalFlm)}
-                        price={100}
+                        capacity={convertFlmToBarProgress(equipage.totalFlm)}
+                        price={convertProfitToBarProgress(
+                          getTotalPrognosis(equipage.consignments),
+                        )}
                       >
                         <button
                           type="button"
                           className="w-full text-sm"
-                          onClick={() => openDetails(equipage)}
+                          onClick={() => openPopup(equipage)}
                         >
                           Info
                         </button>
-                      </Card>
+                      </EquipageCard>
                     ))}
                   </div>
                 </LineCard>
@@ -69,7 +129,7 @@ export default function Home() {
           )}
         </div>
 
-        <div className="w-[28rem] space-y-6 ml-auto">
+        <div className="w-[25rem] space-y-6 ml-auto">
           {/* Right column: controls + status summary for current fetch context. */}
           <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
             <div className="text-center">
@@ -176,16 +236,16 @@ export default function Home() {
 
       <Footer />
 
-      {isDetailsOpen && selectedEquipage && (
-        // Modal for consignment-level details on the selected equipage.
+      {isPopupOpen && selectedEquipage && (
+        // Popup for consignment-level details on the selected equipage.
         <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
           <div className="bg-[var(--primary-element)] rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-primary)]">
               <h2 className="text-[var(--text-primary)] text-xl font-bold">
-                Ekipage {selectedEquipage.name} - {selectedEquipage.lineName}
+                Ekipage {selectedEquipage.name}: {selectedEquipage.lineName}
               </h2>
               <button
-                onClick={closeDetails}
+                onClick={closePopup}
                 className="bg-[var(--primary-button)] text-[var(--text-primary)] px-3 py-1 rounded hover:bg-[var(--primary-button-hover)] transition"
               >
                 Stäng
@@ -193,21 +253,6 @@ export default function Home() {
             </div>
 
             <div className="p-6 overflow-auto max-h-[calc(90vh-74px)]">
-              <div className="mb-4 text-sm text-[var(--text-primary)]">
-                <p>
-                  <strong>Antal bokningar:</strong>{" "}
-                  {selectedEquipage.consignments.length}
-                </p>
-                <p>
-                  <strong>Total vikt:</strong>{" "}
-                  {selectedEquipage.totalWeightKg.toFixed(0)} kg
-                </p>
-                <p>
-                  <strong>Total FLM:</strong>{" "}
-                  {(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm
-                </p>
-              </div>
-
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b-2 border-[var(--border-primary)]">
@@ -251,6 +296,25 @@ export default function Home() {
                   ))}
                 </tbody>
               </table>
+
+              <div className="mt-4 text-sm text-[var(--text-primary)] flex flex-wrap items-center gap-x-4 gap-y-1">
+                <div className="whitespace-nowrap">
+                  <strong>Antal bokningar:</strong>{" "}
+                  {selectedEquipage.consignments.length}
+                </div>
+                <div className="whitespace-nowrap">
+                  <strong>Total vikt:</strong>{" "}
+                  {selectedEquipage.totalWeightKg.toFixed(0)} kg
+                </div>
+                <div className="whitespace-nowrap">
+                  <strong>Total FLM:</strong>{" "}
+                  {(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm
+                </div>
+                <div className="whitespace-nowrap">
+                  <strong>Total prognos:</strong>{" "}
+                  {selectedEquipageTotalPrognosis.toFixed(0)}
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -25,14 +25,6 @@ Detta dokument beskriver hur sidan Home hämtar data från iLog, filtrerar resul
 9. Ekipage grupperas per visad linje och sorteras.
 10. Resultatet visas i LineCards + detaljmodal.
 
-## Datumhantering
-
-- UI använder `YYYY-MM-DD`.
-- iLog kräver `yyyyMMdd`.
-- `toIlogDate` gör om formatet innan API-anrop.
-
-Om datumformatet är ogiltigt avbryts hämtningen och felmeddelande visas.
-
 ## Klusterfiltrering
 
 `lib/areaLineConfig.ts` innehåller:
@@ -40,11 +32,6 @@ Om datumformatet är ogiltigt avbryts hämtningen och felmeddelande visas.
 - `LINE_TO_CLUSTER`: linjenamn -> kluster
 - `getLineCluster(lineName)`: hittar kluster för linjenamn, inklusive omvänt riktad linje
 - `AREA_OPTIONS`/`DEFAULT_AREAS`/`parseAreaState`: model för inställningsfilter
-
-Viktigt:
-
-- Filtreringen sker på klusternivå (inte på fri text i fromArea/toArea).
-- "Ej relevant" är exkluderat från valbara kluster.
 
 ## Ekipage-matchning
 
@@ -61,31 +48,6 @@ Detta gör matchningen robust även när iLog-data inte är helt konsekvent.
 - Hämtningen körs i batchar (`chunkArray`) med `Promise.allSettled`.
 - Varje bokningsanrop har en enkel retry (`getIlogConsignmentsWithRetry`).
 
-Syfte:
-
-- Snabbare totalhämtning än sekventiella anrop.
-- Tåligare vid tillfälliga 5xx-fel från iLog.
-
-## Nuvarande filtreringsregler för bokningar
-
-- Ekipage med 0 bokningar tas bort.
-- Ingen extra zone-filter används i Home.
-- Ingen extra innehållsfilter ("tom bokning") används i Home.
-
-## Caching i sessionStorage
-
-Nyckel: `home-lines-cache-v6`
-
-Cachen sparar:
-
-- valt datum
-- beräknade lineCards
-- antal kandidat-ekipage
-- antal synliga ekipage
-- tillämpade klusteretiketter
-
-`Rensa visning` tar bort både UI-resultat och cache.
-
 ## Detaljvy (Info-knappen)
 
 När användaren klickar `Info` på ett ekipage:
@@ -93,15 +55,3 @@ När användaren klickar `Info` på ett ekipage:
 - detaljmodal öppnas
 - totalvikt och total FLM beräknas/säkerställs
 - tabell visar bland annat destination, kund, hämtadress, godsuppgifter och prognos
-
-## Status- och felhantering i UI
-
-Home-panelen visar olika status beroende på state:
-
-- laddar inställningar
-- laddar iLog-data
-- fel vid hämtning
-- inga matchande linjer
-- sammanfattning av antal linjer och ekipage
-
-Sammanfattningen baseras på `appliedClusterLabels` så texten matchar den datamängd som faktiskt visas.

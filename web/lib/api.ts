@@ -19,6 +19,10 @@ type HistoricalImportResponse = {
 	insertedRows: number;
 };
 
+// ============================================================
+// Messages
+// ============================================================
+
 export const sendMessage = async (message: string): Promise<MessageResponse> => {
 	const sentAt = new Date().toLocaleTimeString("sv-SE", {
 		hour: "2-digit",
@@ -38,6 +42,10 @@ export const sendMessage = async (message: string): Promise<MessageResponse> => 
 
 	return (await response.json()) as MessageResponse;
 };
+
+// ============================================================
+// Auth
+// ============================================================
 
 /**
  * Validerar om inloggningssession/token fortfarande är giltig.
@@ -64,6 +72,10 @@ export const signUpProcedure = async (email: string): Promise<BasicResponse<null
 
   return (await response.json()) as BasicResponse<null>;
 };
+
+// ============================================================
+// Users
+// ============================================================
 
 /**
  * Getter för alla användare i User-tabellen i supabase. Policies gäller, se Supabase
@@ -177,7 +189,7 @@ export const setPassword = async (id: string, newPassword: string): Promise<Basi
 }
 
 /**
- * Deletes a uiser based on id. Only admins can do this.
+ * Deletes a user based on id. Only admins can do this.
  * VARNING: Odefinierat beteende om det inte är någon inloggad (alltså om ingen cookie med token finns)
  * @param id 
  * @returns 
@@ -193,6 +205,10 @@ export const deleteUser = async (id: string): Promise<BasicResponse<null>> => {
 	return (await response.json()) as BasicResponse<null>;
 }
 
+
+// ============================================================
+// iLog data
+// ============================================================
 
 
 /**
@@ -265,6 +281,11 @@ export const getIlogConsignment = async (
 };
 
 
+// ============================================================
+// Profitability simulation
+// ============================================================
+
+
 export type SimulationProfitabilityValue = {
 	step_used: number;
 	taxeprel: string;
@@ -308,6 +329,11 @@ export const calculateSimulationProfitability = async (
 
 	return (await response.json()) as SimulationProfitabilityResponse;
 };
+
+// ============================================================
+// Historical import
+// ============================================================
+
 /**
  * Hämtar signerad upload-URL och jobId för historisk import.
  */
