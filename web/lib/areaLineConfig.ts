@@ -246,10 +246,6 @@ function stripCompanyPrefix(clusterLabel: string): string {
 function areaAliasFromCluster(clusterLabel: string): string {
   const normalized = normalizeText(clusterLabel).replace(/[^a-z0-9]+/g, "");
 
-  if (normalized.includes("distributionble") || normalized === "ble") {
-    return "Borlänge";
-  }
-
   if (
     normalized.includes("distributionvxo") ||
     normalized.includes("distribution") ||
