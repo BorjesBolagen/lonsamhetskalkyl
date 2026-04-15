@@ -14,26 +14,11 @@ import { useEffect, useState } from "react";
 
 type ThemeMode = "light" | "dark";
 
-function setTheme(mode: "light" | "dark") {
-  const root = document.documentElement;
-
-  if (mode === "dark") {
-    root.classList.add("dark");
-  } else {
-    root.classList.remove("dark");
-  }
+function applyThemeToDOM(theme: ThemeMode) {
+  document.documentElement.setAttribute("data-theme", theme);
+  document.cookie = `theme=${theme}; path=/; max-age=31536000`;
+  localStorage.setItem("theme", theme);
 }
-
-const applyTheme = (newTheme: "light" | "dark") => {
-  // Save in localStorage (client use)
-  localStorage.setItem("theme", newTheme);
-
-  // Save in cookie (server use) // TODO: minska max age lol
-  document.cookie = `theme=${newTheme}; path=/; max-age=31536000`;
-
-  // Apply immediately
-  document.documentElement.setAttribute("data-theme", newTheme);
-};
 
 const DEFAULT_THEME: ThemeMode = "light";
 
@@ -83,7 +68,10 @@ export default function Settings() {
 
   // States för områden
   const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  // What is currently active in the app
+  const [appliedTheme, setAppliedTheme] = useState<ThemeMode>("light");
+  // What the user is editing (draft)
+  const [draftTheme, setDraftTheme] = useState<ThemeMode>("light");
 
   useEffect(() => {
     // Profile info + saved filter/theme preferences from Supabase.
@@ -119,11 +107,10 @@ export default function Settings() {
         setDistricts(parseAreaState(user.filters));
 
         const dbTheme = parseTheme(user.filters);
-        setTheme(dbTheme);
-
-        // Sync cookie + localStorage ONLY (no DOM change)
-        document.cookie = `theme=${dbTheme}; path=/; max-age=31536000`;
-        localStorage.setItem("theme", dbTheme);
+        setAppliedTheme(dbTheme);
+        setDraftTheme(dbTheme);
+        // apply once on load
+        applyThemeToDOM(dbTheme);
 
       } catch (error) {
         setFiltersStatus({
@@ -168,10 +155,12 @@ export default function Settings() {
       const nextFilters: Record<string, unknown> = {
         ...storedFilters,
         areas: districts,
-        theme,
+        theme: draftTheme,
       };
 
       await setFilters(userId, nextFilters as Json);
+      setAppliedTheme(draftTheme);
+      applyThemeToDOM(draftTheme);
       setStoredFilters(nextFilters);
       setFiltersStatus({ type: "success", message: "Inställningar sparade." });
       setHasUnsavedChanges(false);
@@ -380,11 +369,10 @@ export default function Settings() {
                   <div className="flex space-x-4">
                     <button
                       onClick={() => {
-                        setTheme("light");
-                        applyTheme("light");
+                        setDraftTheme("light");
                         setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${theme === "light"
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "light"
                         ? "bg-[#7ec58a] text-black border-[#6ab076]"
                         : "bg-white text-gray-700 border-gray-300"
                         }`}
@@ -394,11 +382,10 @@ export default function Settings() {
 
                     <button
                       onClick={() => {
-                        setTheme("dark");
-                        applyTheme("dark");
+                        setDraftTheme("dark");
                         setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${theme === "dark"
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "dark"
                         ? "bg-gray-800 text-white border-gray-900"
                         : "bg-white text-gray-700 border-gray-300"
                         }`}

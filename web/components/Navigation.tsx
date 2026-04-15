@@ -22,6 +22,13 @@ export default function Navigation({ currentPage, hasUnsavedChanges = false }: N
 
 
   const handleLogout = async () => {
+    if (hasUnsavedChanges) {
+      const ok = confirm(
+        "Du har osparade ändringar. Vill du verkligen logga ut?"
+      );
+      if (!ok) return;
+    }
+
     try {
       const supabase = getSupabaseBrowserClient();
       await supabase.auth.signOut();
