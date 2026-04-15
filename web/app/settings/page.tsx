@@ -79,6 +79,8 @@ export default function Settings() {
     message: string;
   } | null>(null);
 
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
   // States för områden
   const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
   const [theme, setTheme] = useState<ThemeMode>("light");
@@ -136,6 +138,19 @@ export default function Settings() {
     loadCurrentUser();
   }, []);
 
+  // Warn user if refreshing after changed settings
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      e.preventDefault();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
+
   const handleSaveSettings = async () => {
     if (!userId) {
       setFiltersStatus({
@@ -159,6 +174,7 @@ export default function Settings() {
       await setFilters(userId, nextFilters as Json);
       setStoredFilters(nextFilters);
       setFiltersStatus({ type: "success", message: "Inställningar sparade." });
+      setHasUnsavedChanges(false);
     } catch (error) {
       setFiltersStatus({
         type: "error",
@@ -211,10 +227,13 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
-      
+
       {/* Wrapper för navigationsbaren så den ligger överst */}
       <div className="relative z-[60]">
-        <Navigation currentPage="settings" />
+        <Navigation
+          currentPage="settings"
+          hasUnsavedChanges={hasUnsavedChanges}
+        />
       </div>
 
       <main className="flex-grow flex flex-col p-6 items-center">
@@ -229,11 +248,10 @@ export default function Settings() {
             {/* KONTO-FLIKEN */}
             <button
               onClick={() => setActiveTab("konto")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
-                activeTab === "konto"
-                  ? "bg-[var(--primary-element)] border-[#446E30]"
-                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-              }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "konto"
+                ? "bg-[var(--primary-element)] border-[#446E30]"
+                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+                }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -255,11 +273,10 @@ export default function Settings() {
             {/* LÖSENORD-FLIKEN */}
             <button
               onClick={() => setActiveTab("losenord")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
-                activeTab === "losenord"
-                  ? "bg-[var(--primary-element)] border-[#446E30]"
-                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-              }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "losenord"
+                ? "bg-[var(--primary-element)] border-[#446E30]"
+                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+                }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -334,12 +351,13 @@ export default function Settings() {
                             <input
                               type="checkbox"
                               checked={districts[distKey]}
-                              onChange={() =>
+                              onChange={() => {
                                 setDistricts({
                                   ...districts,
                                   [distKey]: !districts[distKey],
-                                })
-                              }
+                                });
+                                setHasUnsavedChanges(true);
+                              }}
                               className="w-6 h-6 appearance-none border-2 border-gray-400 bg-white checked:bg-white rounded-sm cursor-pointer"
                             />
                             {districts[distKey] && (
@@ -364,12 +382,12 @@ export default function Settings() {
                       onClick={() => {
                         setTheme("light");
                         applyTheme("light");
+                        setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
-                        theme === "light"
-                          ? "bg-[#7ec58a] text-black border-[#6ab076]"
-                          : "bg-white text-gray-700 border-gray-300"
-                      }`}
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${theme === "light"
+                        ? "bg-[#7ec58a] text-black border-[#6ab076]"
+                        : "bg-white text-gray-700 border-gray-300"
+                        }`}
                     >
                       Light
                     </button>
@@ -378,12 +396,12 @@ export default function Settings() {
                       onClick={() => {
                         setTheme("dark");
                         applyTheme("dark");
+                        setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
-                        theme === "dark"
-                          ? "bg-gray-800 text-white border-gray-900"
-                          : "bg-white text-gray-700 border-gray-300"
-                      }`}
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${theme === "dark"
+                        ? "bg-gray-800 text-white border-gray-900"
+                        : "bg-white text-gray-700 border-gray-300"
+                        }`}
                     >
                       Dark
                     </button>
