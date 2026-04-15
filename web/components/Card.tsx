@@ -32,7 +32,7 @@ export default function Card({
       <Pricebar progress={price} />
 
       {/* Button */}
-      <div className="bg-[var(--primary-button)] mt-2 w-full text-center text-[var(--text-secondary)] px-2 py-1 rounded hover:bg-gray-500 transition text-sm">
+      <div className="mt-2 w-full">
         {children}
       </div>
     </div>

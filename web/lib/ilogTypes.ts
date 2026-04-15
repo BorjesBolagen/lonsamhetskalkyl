@@ -14,6 +14,8 @@
 export type EquipageItem = {
     id: number;
     name: string;
+    lines: LineItem[]
+    resources: ResourceItem[]
 };
 
 /**
@@ -60,8 +62,27 @@ export type ConsignmentListItem = {
     zoneName: string;
     equipageName: string;
     pickupDate: string;
+    deliveryTime: string;
     positioning: string;
     comment: string;
+    
+    senderCity: string;
+    senderAreaCode: string;
+    senderAddress: string;
+    
+    destinationCity: string;
+    destinationAreaCode: string;
+    destinationAddress: string;
+    
+    consignmentProperties: string;
+    estimatedProperties: string;
+    temperature: string;
+    adrCode: string;
+    adrComment: string;
+    bookingnumber: number | null;
+    freightPayerName: string;
+    inh: string | null;
+    exp: string | null;
 };
 
 /**
@@ -91,3 +112,10 @@ export type ConsignmentDetail = {
     ilogStatus: string;
 };
 
+export type ResourceItem = {
+    id: number,
+    groupId: number,
+    registrationNumber: string,
+    resourceType: string,
+    comment: string
+}

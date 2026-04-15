@@ -1,9 +1,10 @@
 "use client";
 
-import { getCurrentlySignedInUser, getIlogLines } from "../../lib/api";
+import { getCurrentlySignedInUser, getIlogConsignments, getIlogEquipages, getIlogLines } from "../../lib/api";
+import type { EquipageItem, ConsignmentListItem } from "@/lib/ilogTypes";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import LineCard from "../../components/LineCard";
 import Card from "../../components/Card";
 import {
@@ -21,44 +22,6 @@ type IlogLine = {
   toArea: string;
 };
 
-class Ekipage {
-  private id: string;
-  private line: string;
-  private price: number;
-  private capacity: number;
-  private leveransstruktur: string;
-
-  public constructor(
-    id: string,
-    line: string,
-    price: number,
-    capacity: number,
-    leveransstruktur: string,
-  ) {
-    this.id = id;
-    this.line = line;
-    this.price = price;
-    this.capacity = capacity;
-    this.leveransstruktur = leveransstruktur;
-  }
-
-  public getId(): string {
-    return this.id;
-  }
-
-  public getLine(): string {
-    return this.line;
-  }
-
-  public getPrice(): number {
-    return this.price;
-  }
-
-  public getCapacity(): number {
-    return this.capacity;
-  }
-}
-
 function normalizeText(value: string): string {
   return value
     .toLowerCase()
@@ -70,12 +33,15 @@ function normalizeText(value: string): string {
 export default function Home() {
   const STANDRD_FLM = 19.2;
 
-  const [clickedButton, setClickedButton] = useState<Ekipage | null>(null);
+  const [selectedEquipage, setSelectedEquipage] = useState<EquipageItem | null>(null);
+  const [selectedEquipageError, setSelectedEquipageError] = useState("");
+  const [equipagesByLineId, setEquipagesByLineId] = useState<Record<number, EquipageItem[]>>({});
+  const [consignments, setConsignments] = useState<ConsignmentListItem[]>([]);
   const [manualValue, setManualValue] = useState(15000);
   const [value, setValue] = useState("");
 
   const [selectedAreas, setSelectedAreas] = useState<AreaState>(DEFAULT_AREAS);
-  const [areasLoaded, setAreasLoaded] = useState(false);
+  const [areasLoaded, setAreasLoaded] = useState<boolean | null>(false);
 
   const [linesData, setLinesData] = useState<IlogLine[]>([]);
   const [loadingLines, setLoadingLines] = useState(false);
@@ -91,6 +57,21 @@ export default function Home() {
       return (price / manualValue) * 100;
     }
     return 100;
+  }
+
+  /**
+   * Gets the current date and returns it on a yyyMMdd format. Used for getting consignments
+   * @param offsetDays: How many days to offset from today. -1 is yesterday, 1 is tomorrow etc
+   */
+  function getCurrentDate(offsetDays: number): string {
+    const date = new Date();
+    date.setDate(date.getDate() + offsetDays);
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    return `${year}${month}${day}`;
   }
 
   function lineMatchesSelectedAreas(line: IlogLine): boolean {
@@ -109,28 +90,6 @@ export default function Home() {
     });
   }
 
-
-  const Ekipage1 = new Ekipage(
-    "L20",
-    "Linköping - Stockholm",
-    12000,
-    12.4,
-    "null",
-  );
-  const Ekipage2 = new Ekipage(
-    "L21",
-    "Linköping - Stockholm",
-    13000,
-    19.2,
-    "null",
-  );
-  const Ekipage3 = new Ekipage(
-    "L22",
-    "Linköping - Stockholm",
-    18500,
-    19.2,
-    "null",
-  );
 
   useEffect(() => {
     // Load user's saved area filters once so fetch button uses persisted settings.
@@ -154,7 +113,7 @@ export default function Home() {
     loadCurrentUserSettings();
   }, []);
 
-  const loadLines = async () => {
+  const loadLines = useCallback(async () => {
     try {
       setLoadingLines(true);
       setLineError("");
@@ -172,6 +131,45 @@ export default function Home() {
     } finally {
       setLoadingLines(false);
     }
+
+    // After getting lines, get equipages for each line
+    try {
+      const response = await getIlogEquipages(false);
+      const equipages = response.data ?? [];
+
+      const byLineId = equipages.reduce<Record<number, EquipageItem[]>>((acc, equipage) => {
+        equipage.lines.forEach((line) => {
+          if (typeof line.id === "number") {
+            acc[line.id] = acc[line.id] ?? [];
+            acc[line.id].push(equipage);
+          }
+        });
+        return acc;
+      }, {});
+
+      setEquipagesByLineId(byLineId);
+    } catch (error) {
+      setSelectedEquipageError("Kunde inte hämta ekipage för linje");
+      console.log(error);
+    }
+  }, [selectedAreas]);
+
+
+  const displayInfo = async (equipage: EquipageItem) => {
+    try {
+      const response = await getIlogConsignments(getCurrentDate(0), equipage.id, false);
+      const consignmentData = response.data ?? [];
+      console.log(consignmentData);
+      
+      const unique = consignmentData.filter((item, index) =>
+        consignmentData.findIndex((other) => other.consignmentId === item.consignmentId) === index
+      );
+
+      setConsignments(unique);
+    } catch (error) {
+      setSelectedEquipageError("Kunde inte hämta sändningar på ekipaget");
+      console.error(error);
+    }
   };
 
   
@@ -185,46 +183,32 @@ export default function Home() {
                 <div className="space-y-3">
                   {linesData.map((line) => (
                     <LineCard key={line.id} title={line.name}>
-                      <div className="text-sm text-[var--(text-primary)] space-y-1">
+                      <div className="text-sm text-[var(--text-primary)] space-y-1">
                         <div className="flex">
-                          <Card
-                            key={Ekipage1.getId()}
-                            title={Ekipage1.getId()}
-                            capacity={convertCapacityToPixels(Ekipage1.getCapacity())}
-                            price={convertProfitToPixels(Ekipage1.getPrice())}
-                          >
-                            <button
-                              onClick={() => setClickedButton(Ekipage1)}
-                            >
-                              Info
-                            </button>
-                          </Card>
-                          <Card
-                            key={Ekipage2.getId()}
-                            title={Ekipage2.getId()}
-                            capacity={convertCapacityToPixels(Ekipage2.getCapacity())}
-                            price={convertProfitToPixels(Ekipage2.getPrice())}
-                          >
-                            <button
-                              onClick={() => setClickedButton(Ekipage2)}
-                              className=""
-                            >
-                              Info
-                            </button>
-                          </Card>
-                          <Card
-                            key={Ekipage3.getId()}
-                            title={Ekipage3.getId()}
-                            capacity={convertCapacityToPixels(Ekipage3.getCapacity())}
-                            price={convertProfitToPixels(Ekipage3.getPrice())}
-                          >
-                            <button
-                              onClick={() => setClickedButton(Ekipage3)}
-                              className=""
-                            >
-                              Info
-                            </button>
-                          </Card>
+                          <div className="flex flex-wrap gap-2">
+                            {equipagesByLineId[line.id]?.length ? (
+                              equipagesByLineId[line.id].map((equipage) => (
+                                <Card
+                                  key={equipage.id}
+                                  title={equipage.name || String(equipage.id)}
+                                  capacity={0}
+                                  price={20}
+                                >
+                                  <button
+                                    className="bg-[var(--primary-button)] w-full text-center text-[var(--text-secondary)] px-2 py-1 rounded hover:bg-gray-500 transition text-sm"
+                                    onClick={() => {
+                                      setSelectedEquipage(equipage);
+                                      displayInfo(equipage);
+                                    }}
+                                  >
+                                    Info
+                                  </button>
+                                </Card>
+                              ))
+                            ) : (
+                              <p className="text-[var(--text-primary)]">Inga ekipage hittades för denna linje.</p>
+                            )}
+                          </div>
                         </div>
                         
                         <p className="text-[var(--text-primary)]">
@@ -277,20 +261,55 @@ export default function Home() {
             </form>
           </div>
 
-          {clickedButton && (
+          {selectedEquipage && (
             <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 max-w-md">
               <h2 className="text-[var(--text-primary)] text-xl font-bold mb-4 border-b pb-2">Detaljer</h2>
               <div>
                 <p className="text-[var(--text-primary)]">
-                  <strong>ID:</strong> {clickedButton.getId()}
+                  <strong>ID:</strong> {selectedEquipage.id}
                 </p>
                 <p className="text-[var(--text-primary)]">
-                  <strong >Linje:</strong> {clickedButton.getLine()}
+                  <strong>Namn:</strong> {selectedEquipage.name}
                 </p>
                 <p className="text-[var(--text-primary)]">
-                  <strong>Pris:</strong> {clickedButton.getPrice()}
+                  <strong>Linjer:</strong> {selectedEquipage.lines.map((line) => line.name).join(", ") || "Inga"}
+                </p>
+                <p className="text-[var(--text-primary)]">
+                  <strong>Resurser:</strong> {selectedEquipage.resources.length}
                 </p>
               </div>
+            </div>
+          )}
+
+          {consignments.length > 0 && (
+            <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 w-full max-w-none overflow-x-auto">
+              <h2 className="text-[var(--text-primary)] text-xl font-bold mb-4 border-b pb-2">Sändningar</h2>
+              <table className="w-full text-sm text-[var(--text-primary)] border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--border-primary)]">
+                    <th className="text-left px-2 py-2">ID</th>
+                    <th className="text-left px-2 py-2">Avsändare Stad</th>
+                    <th className="text-left px-2 py-2">Avsändare Adress</th>
+                    <th className="text-left px-2 py-2">Mottagare Stad</th>
+                    <th className="text-left px-2 py-2">Mottagare Adress</th>
+                    <th className="text-left px-2 py-2">Kund</th>
+                    <th className="text-left px-2 py-2">Godsuppgifter</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consignments.map((consignment) => (
+                    <tr key={consignment.consignmentId} className="border-b border-[var(--border-primary)] hover:bg-[var(--secondary-element)] transition">
+                      <td className="px-2 py-2">{consignment.consignmentId}</td>
+                      <td className="px-2 py-2">{consignment.senderCity}</td>
+                      <td className="px-2 py-2 text-xs">{consignment.senderAddress}</td>
+                      <td className="px-2 py-2">{consignment.destinationCity}</td>
+                      <td className="px-2 py-2 text-xs">{consignment.destinationAddress}</td>
+                      <td className="px-2 py-2">{consignment.customerName}</td>
+                      <td className="px-2 py-2 text-xs">{consignment.estimatedProperties}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
@@ -307,6 +326,7 @@ export default function Home() {
             <button
               onClick={loadLines}
               disabled={!areasLoaded || loadingLines}
+              suppressHydrationWarning
               className="w-full bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-3 rounded hover:bg-[var(--primary-button-hover)] disabled:bg-gray-400 transition font-semibold"
             >
               {loadingLines
