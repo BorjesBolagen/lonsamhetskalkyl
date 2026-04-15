@@ -288,6 +288,33 @@ export type Database = {
           },
         ]
       }
+      tax_point_lookup: {
+        Row: {
+          kontor: string | null
+          kontorsforkortning: string | null
+          postnummer: number
+          postort: string | null
+          taxepunkt: string | null
+          taxepunktspostnummer: number | null
+        }
+        Insert: {
+          kontor?: string | null
+          kontorsforkortning?: string | null
+          postnummer: number
+          postort?: string | null
+          taxepunkt?: string | null
+          taxepunktspostnummer?: number | null
+        }
+        Update: {
+          kontor?: string | null
+          kontorsforkortning?: string | null
+          postnummer?: number
+          postort?: string | null
+          taxepunkt?: string | null
+          taxepunktspostnummer?: number | null
+        }
+        Relationships: []
+      }
       Truck: {
         Row: {
           capacity: number

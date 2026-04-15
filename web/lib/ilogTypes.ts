@@ -14,6 +14,8 @@
 export type EquipageItem = {
     id: number;
     name: string;
+    linkedLineIds: number[];
+    linkedLineNames: string[];
 };
 
 /**
@@ -53,14 +55,30 @@ export type ConsignmentListItem = {
     consignmentId: number;
     waybillnumber: string;
     status: string;
-    sender: string;
-    receiver: string;
+    taxPointRelation: string;
+    pickupPostalCode: string;
+    destinationPostalCode: string;
+    senderName: string;
+    receiverName: string;
+    destinationCity: string;
+    destinationLocationName: string;
     weight: number | null;
+    flm: number | null;
     customerName: string;
+    pickupLocationName: string;
     zoneName: string;
     equipageName: string;
     pickupDate: string;
     positioning: string;
+    pickupLocationStreet: string;
+    pickupLocationCity: string;
+    consignmentProperties: string;
+    estimatedProperties: string;
+    goodsDescription: string;
+    opalBookingId: number | null;
+    transporterType: string;
+    ilogStatus: string;
+    prognosis: string;
     comment: string;
 };
 

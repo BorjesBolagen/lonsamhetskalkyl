@@ -5,12 +5,13 @@ import { getCurrentlySignedInUser, setFilters } from "../../lib/api";
 import {
   AREA_KEYS,
   AREA_OPTIONS,
+  AreaKey,
   AreaState,
   DEFAULT_AREAS,
   parseAreaState,
-} from "../../lib/areas";
+} from "../../lib/areaLineConfig";
 import { Json } from "../../lib/supabaseServerSchema";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type ThemeMode = "light" | "dark";
 
@@ -76,6 +77,54 @@ export default function Settings() {
   // States för områden
   const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
   const [theme, setTheme] = useState<ThemeMode>(DEFAULT_THEME);
+
+  const clusterGroups = useMemo(() => {
+    const sortedKeys = [...AREA_KEYS].sort((a, b) =>
+      AREA_OPTIONS[a].localeCompare(AREA_OPTIONS[b], "sv"),
+    );
+
+    return {
+      sml: sortedKeys.filter((key) =>
+        AREA_OPTIONS[key].toUpperCase().startsWith("SML-"),
+      ),
+      ahl: sortedKeys.filter((key) =>
+        AREA_OPTIONS[key].toUpperCase().startsWith("AHL-"),
+      ),
+      other: sortedKeys.filter((key) => {
+        const value = AREA_OPTIONS[key].toUpperCase();
+        return !value.startsWith("SML-") && !value.startsWith("AHL-");
+      }),
+    };
+  }, []);
+
+  const renderClusterToggle = (distKey: AreaKey) => {
+    return (
+      <label
+        key={distKey}
+        className="flex items-center justify-between cursor-pointer py-1.5 w-full hover:bg-[var(--text-hover)] transition-colors px-2 rounded"
+      >
+        <span className="font-bold text-base">{AREA_OPTIONS[distKey]}</span>
+        <div className="relative flex items-center">
+          <input
+            type="checkbox"
+            checked={districts[distKey]}
+            onChange={() =>
+              setDistricts({
+                ...districts,
+                [distKey]: !districts[distKey],
+              })
+            }
+            className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
+          />
+          {districts[distKey] && (
+            <span className="absolute inset-0 flex items-center justify-center text-[var(--text-primary)] pointer-events-none pb-1 font-bold text-lg">
+              x
+            </span>
+          )}
+        </div>
+      </label>
+    );
+  };
 
   useEffect(() => {
     // For dark/lightmode
@@ -203,7 +252,6 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
-      
       {/* Wrapper för navigationsbaren så den ligger överst */}
       <div className="relative z-[60]">
         <Navigation currentPage="settings" />
@@ -285,16 +333,18 @@ export default function Settings() {
                       <span className="text-[var(--text-primary)] font-bold">
                         Användare:
                       </span>
-                      <span className="font-medium">
-                        {displayName}
-                      </span>
+                      <span className="font-medium">{displayName}</span>
                     </div>
                     <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-                      <span className="text-[var(--text-primary)] font-bold">E-post:</span>
+                      <span className="text-[var(--text-primary)] font-bold">
+                        E-post:
+                      </span>
                       <span className="font-medium">{email}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-[var(--text-primary)] font-bold">Roll:</span>
+                      <span className="text-[var(--text-primary)] font-bold">
+                        Roll:
+                      </span>
                       <span className="bg-[var(--primary-element)] text-[var(--text-primary)] px-3 py-1 rounded-full text-sm font-bold">
                         {role}
                       </span>
@@ -305,44 +355,48 @@ export default function Settings() {
                 {/* DEL 2: Områden (Interaktiv) */}
                 <div>
                   <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
-                    Filtrera dina områden
+                    Filtrera dina kluster
                   </h3>
                   {isLoadingProfile && (
                     <p className="text-sm bg-[var(--text-secondary)] mb-3">
                       Laddar sparade inställningar...
                     </p>
                   )}
-                  <div className="flex flex-col space-y-4">
-                    {AREA_KEYS.map((distKey) => {
-                      return (
-                        <label
-                          key={distKey}
-                          className="flex items-center justify-between cursor-pointer border-b border-[var(--seperating-gray)] pb-2 w-full hover:bg-[var(--text-hover)] transition-colors px-2 rounded"
-                        >
-                          <span className="font-bold text-lg">
-                            {AREA_OPTIONS[distKey]}
-                          </span>
-                          <div className="relative flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={districts[distKey]}
-                              onChange={() =>
-                                setDistricts({
-                                  ...districts,
-                                  [distKey]: !districts[distKey],
-                                })
-                              }
-                              className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
-                            />
-                            {districts[distKey] && (
-                              <span className="absolute inset-0 flex items-center justify-center text-[var(--text-primary)] pointer-events-none pb-1 font-bold text-lg">
-                                x
-                              </span>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
+                        <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
+                          SML kluster
+                        </h4>
+                        <div className="space-y-2">
+                          {clusterGroups.sml.map((distKey) =>
+                            renderClusterToggle(distKey),
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
+                        <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
+                          AHL kluster
+                        </h4>
+                        <div className="space-y-2">
+                          {clusterGroups.ahl.map((distKey) =>
+                            renderClusterToggle(distKey),
+                          )}
+                        </div>
+
+                        <div className="pt-2">
+                          <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
+                            Övriga kluster
+                          </h4>
+                          <div className="space-y-2 pt-1">
+                            {clusterGroups.other.map((distKey) =>
+                              renderClusterToggle(distKey),
                             )}
                           </div>
-                        </label>
-                      );
-                    })}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
