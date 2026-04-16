@@ -71,7 +71,7 @@ export default function Login() {
 
         <form onSubmit={handleLogin} className="space-y-8">
           <div className="flex items-center border-b border-gray-400 py-2 focus-within:border-[#76a57d]">
-            <span className="text-gray-500 mr-3">✉</span>
+            <span className="text-gray-500 mr-3"></span>
             <input
               type="text"
               data-testid="email-input"
@@ -84,7 +84,7 @@ export default function Login() {
           </div>
 
           <div className="flex items-center border-b border-gray-400 py-2 focus-within:border-[#76a57d]">
-            <span className="text-gray-500 mr-3">🔒</span>
+            <span className="text-gray-500 mr-3"></span>
             <input
               type="password"
               data-testid="password-input"

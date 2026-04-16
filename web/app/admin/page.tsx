@@ -363,50 +363,50 @@ export default function Admin() {
             >
               ✖
             </button>
-            <h3 className="font-bold text-xl mb-6 border-b-2 border-green-500 pb-2">
+            <h3 className="font-bold text-xl mb-6 border-b-2 border-[var(--primary-color)] pb-2">
               Skapa ny användare
             </h3>
             <form onSubmit={handleSignup} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
+                <div className="">
                   <input
                     type="text"
                     placeholder="Förnamn"
                     value={signupFirstName}
                     onChange={(e) => setSignupFirstName(e.target.value)}
-                    className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                    className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
                   />
                 </div>
-                <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
+                <div className="">
                   <input
                     type="text"
                     placeholder="Efternamn"
                     value={signupLastName}
                     onChange={(e) => setSignupLastName(e.target.value)}
-                    className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                    className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
                   />
                 </div>
               </div>
 
-              <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
+              <div className="">
                 <input
                   type="email"
                   placeholder="E-mail"
                   value={signupEmail}
                   onChange={(e) => setSignupEmail(e.target.value)}
-                  className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                  className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
                 />
               </div>
 
               {/* Uppdaterat fält för lösenord med ögon-ikonen */}
-              <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
+              <div className="">
                 <div className="relative">
                   <input
                     type={showSignupPassword ? "text" : "password"}
                     placeholder="Lösenord"
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
-                    className="w-full p-2 pr-12 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                    className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
                   />
                   <button
                     type="button"
@@ -418,11 +418,11 @@ export default function Admin() {
                 </div>
               </div>
 
-              <div className="flex flex-col bg-[var(--secondary-element)] p-3 rounded-lg shadow-sm">
+              <div className="">
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value as UserRole)}
-                  className="w-full p-2 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                  className="bg-[var(--input-text)] text-[var(--text-secondary)] focus:outline-none rounded p-2 w-full"
                 >
                   <option value="">Välj roll</option>
                   {Constants.public.Enums["User_specialization_types"].map(
@@ -437,7 +437,7 @@ export default function Admin() {
               <button
                 type="submit"
                 disabled={isSigningUp}
-                className="w-full mt-4 bg-[#75C07A] text-[var(--text-primary)] p-3 rounded font-bold hover:bg-green-800 transition-colors duration-300 disabled:opacity-50"
+                className="w-full mt-4 bg-[var(--button-submit)] text-[var(--text-primary)] p-3 rounded font-bold hover:bg-[var(--button-submit-hover)] transition-colors duration-300 disabled:opacity-50"
               >
                 {isSigningUp ? "Registrerar..." : "Registrera"}
               </button>

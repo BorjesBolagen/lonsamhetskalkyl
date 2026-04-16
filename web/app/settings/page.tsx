@@ -373,8 +373,8 @@ export default function Settings() {
                         setHasUnsavedChanges(true);
                       }}
                       className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "light"
-                        ? "bg-[#7ec58a] text-black border-[#6ab076]"
-                        : "bg-white text-gray-700 border-gray-300"
+                        ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                        : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
                         }`}
                     >
                       Light
@@ -386,8 +386,8 @@ export default function Settings() {
                         setHasUnsavedChanges(true);
                       }}
                       className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "dark"
-                        ? "bg-gray-800 text-white border-gray-900"
-                        : "bg-white text-gray-700 border-gray-300"
+                        ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                        : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
                         }`}
                     >
                       Dark

@@ -40,10 +40,11 @@ export default function Navigation({ currentPage, hasUnsavedChanges = false }: N
   };
 
   const getLinkClasses = (isActive: boolean) =>
-    `relative h-full flex items-center px-4 py-4 font-bold transition-colors duration-200 ${isActive
-      ? "after:content-[''] after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-[var(--text-primary)]"
-      : "text-[var(--text-heading)] hover:bg-[var(--text-primary)]/10"
-    }`;
+  `relative h-full flex items-center px-4 py-4 font-bold transition-colors duration-500
+   after:content-[''] after:absolute after:left-0 after:bottom-0 after:h-[2px] after:w-full
+   after:bg-[var(--text-primary)] after:origin-left after:transition-transform after:duration-300
+   ${isActive ? "after:scale-x-100" : "after:scale-x-0"}
+   ${!isActive ? "text-[var(--text-heading)] hover:bg-[var(--text-primary)]/10" : ""}`;
 
   return (
     <nav className="bg-[var(--navbar)] text-[var(--text-primary)] shadow-sm">
