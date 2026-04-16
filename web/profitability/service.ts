@@ -2,10 +2,9 @@ import "server-only";
 
 import {
   average,
-  buildTaxeprel,
+  buildTaxeprelFromRelation,
   chooseKmBucket,
   getVklfgrv,
-  normalizeCode,
   normalizeText,
 } from "./engine";
 import {
@@ -15,29 +14,21 @@ import {
   fetchKmByTaxeprel,
   fetchMedelseRowsByVkl,
 } from "./repository";
-import type {
-  SimulationProfitabilityInput,
-  SimulationProfitabilityResult,
-} from "./types";
+import type { ProfitabilityInput, ProfitabilityResult } from "./types";
 
-export async function calculateSimulationProfitability(
-  input: SimulationProfitabilityInput
-): Promise<SimulationProfitabilityResult> {
+export async function calculateProfitability(
+  input: ProfitabilityInput
+): Promise<ProfitabilityResult> {
   const kundnamn = normalizeText(input.kundnamn);
-  const start = normalizeCode(input.start);
-  const slut = normalizeCode(input.slut);
+  const taxPointRelation = input.taxPointRelation?.trim();
   const weight = Number(input.chargeable_weight);
 
   if (!kundnamn) {
     throw new Error("Kundnamn måste fyllas i.");
   }
 
-  if (!start) {
-    throw new Error("Start måste fyllas i.");
-  }
-
-  if (!slut) {
-    throw new Error("Slut måste fyllas i.");
+  if (!taxPointRelation) {
+    throw new Error("taxPointRelation måste fyllas i.");
   }
 
   if (!Number.isFinite(weight) || weight <= 0) {
@@ -45,11 +36,25 @@ export async function calculateSimulationProfitability(
   }
 
   const vklfgrv = getVklfgrv(weight);
-  const taxeprel = buildTaxeprel(start, slut);
+  const taxeprel = buildTaxeprelFromRelation(taxPointRelation);
 
-  // Steg 1: exakt träff
   const exactRow = await fetchExactTrappstegRow(kundnamn, taxeprel, vklfgrv);
+
+  console.log("step1 lookup", {
+    kundnamn,
+    taxeprel,
+    vklfgrv,
+    exactRow,
+  });
+
   if (exactRow && (exactRow.kndntofgrv ?? 0) > 0) {
+    console.log("step1 used", {
+      kundnamn,
+      taxeprel,
+      vklfgrv,
+      kndntofgrv: exactRow.kndntofgrv,
+    });
+
     return {
       step_used: 1,
       taxeprel,
@@ -59,10 +64,11 @@ export async function calculateSimulationProfitability(
     };
   }
 
-  // Gemensam bas för steg 2 och 3
   const km = await fetchKmByTaxeprel(taxeprel);
   if (km === null || !Number.isFinite(km)) {
-    throw new Error(`Inget km-värde hittades för taxeprel='${taxeprel}'.`);
+    throw new Error(
+      `Ingen distans hittades i distance_map för taxeprel='${taxeprel}'.`
+    );
   }
 
   const medelseRows = await fetchMedelseRowsByVkl(vklfgrv);
@@ -80,7 +86,6 @@ export async function calculateSimulationProfitability(
 
   const medelseValue = Number(medelseRow.kndnto_medelse);
 
-  // Steg 2: kundnamn + vklfgrv
   const customerVklRows = await fetchCustomerVklRows(kundnamn, vklfgrv);
   const step2Factors = customerVklRows
     .map((row) => Number(row.forh_se_radvis ?? 0))
@@ -98,7 +103,6 @@ export async function calculateSimulationProfitability(
     };
   }
 
-  // Steg 3: endast kundnamn
   const customerRows = await fetchCustomerRows(kundnamn);
   const step3Factors = customerRows
     .map((row) => Number(row.forh_se_kundvis ?? 0))

@@ -4,26 +4,24 @@ import { useEffect, useState } from "react";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import {
-	calculateSimulationProfitability,
-	type SimulationProfitabilityResponse,
+	calculateProfitability,
+	type ProfitabilityResponse,
 } from "@/lib/api";
 
 type FormState = {
   kundnamn: string;
-  start: string;
-  slut: string;
+  taxeprel: string;
   vikt: string;
 };
 
 export default function ProfitCalculatorPage() {
   const [form, setForm] = useState<FormState>({
     kundnamn: "",
-    start: "",
-    slut: "",
+    taxeprel: "",
     vikt: "",
   });
 
-  const [result, setResult] = useState<SimulationProfitabilityResponse | null>(null);
+  const [result, setResult] = useState<ProfitabilityResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [isAnimating, setIsAnimating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,8 +40,7 @@ export default function ProfitCalculatorPage() {
   const handleReset = () => {
     setForm({
       kundnamn: "",
-      start: "",
-      slut: "",
+      taxeprel: "",
       vikt: "",
     });
     setResult(null);
@@ -68,14 +65,8 @@ export default function ProfitCalculatorPage() {
         setErrorMsg("Kundnamn måste fyllas i.");
         return;
       }
-
-      if (!form.start.trim()) {
-        setErrorMsg("Start måste fyllas i.");
-        return;
-      }
-
-      if (!form.slut.trim()) {
-        setErrorMsg("Slut måste fyllas i.");
+      if (!form.taxeprel.trim()) {
+        setErrorMsg("Taxerelation måste fyllas i.");
         return;
       }
 
@@ -91,10 +82,9 @@ export default function ProfitCalculatorPage() {
         return;
       }
 
-      const data = await calculateSimulationProfitability(
+      const data = await calculateProfitability(
       form.kundnamn.trim(),
-      form.start.trim(),
-      form.slut.trim(),
+      form.taxeprel.trim(),
       parsedWeight
        );
 

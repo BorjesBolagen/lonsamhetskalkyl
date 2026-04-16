@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  calculateProfitability,
   getCurrentlySignedInUser,
   getIlogConsignments,
   getIlogEquipages,
@@ -23,7 +24,7 @@ import {
 } from "../../lib/areaLineConfig";
 import { useEffect, useMemo, useState } from "react";
 
-const HOME_CACHE_KEY = "home-lines-cache-v6";
+const HOME_CACHE_KEY = "home-lines-cache-v7";
 
 function getDefaultHomeDate(): string {
   const tomorrow = new Date();
@@ -35,14 +36,20 @@ function getDefaultHomeDate(): string {
   return `${year}-${month}-${day}`;
 }
 
+type ConsignmentWithProfitability = ConsignmentListItem & {
+  profitabilityPrice: number | null;
+};
+
 type EquipageWithConsignments = {
   id: number;
   name: string;
   lineId: number;
   lineName: string;
-  consignments: ConsignmentListItem[];
+  consignments: ConsignmentWithProfitability[];
   totalWeightKg: number;
   totalFlm: number;
+  totalProfitabilityPrice: number;
+  profitabilityBarPercent: number;
 };
 
 type LineWithEquipages = LineItem & {
@@ -72,7 +79,14 @@ function ensureEquipageTotals(
   const totalFlm =
     equipage.totalFlm ??
     equipage.consignments.reduce(
-      (sum, consignment) => sum + (consignment.flm ?? 0),
+      (sum, consignment) => sum + ((consignment as any).flm ?? 0),
+      0,
+    );
+
+  const totalProfitabilityPrice =
+    equipage.totalProfitabilityPrice ??
+    equipage.consignments.reduce(
+      (sum, consignment) => sum + (consignment.profitabilityPrice ?? 0),
       0,
     );
 
@@ -80,6 +94,8 @@ function ensureEquipageTotals(
     ...equipage,
     totalWeightKg,
     totalFlm,
+    totalProfitabilityPrice,
+    profitabilityBarPercent: equipage.profitabilityBarPercent ?? 0,
   };
 }
 
@@ -195,6 +211,50 @@ function pickTrailingNamePart(rawValue: string): string | null {
   return value && value.length > 0 ? value : null;
 }
 
+function toBarPercent(totalPrice: number, threshold: number): number {
+  if (!Number.isFinite(threshold) || threshold <= 0) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(100, (totalPrice / threshold) * 100));
+}
+
+async function calculateConsignmentProfitabilityPrice(
+  consignment: ConsignmentListItem,
+): Promise<number | null> {
+  const kundnamn = consignment.customerName?.trim();
+  const taxPointRelation = consignment.taxPointRelation?.trim();
+  const weight = Number(consignment.weight);
+
+  console.log({
+    consignmentId: consignment.consignmentId,
+    kundnamn,
+    taxPointRelation,
+    weight,
+  });
+
+  if (
+    !kundnamn ||
+    !taxPointRelation ||
+    !Number.isFinite(weight) ||
+    weight <= 0
+  ) {
+    return null;
+  }
+
+  const response = await calculateProfitability(
+    kundnamn,
+    taxPointRelation,
+    weight,
+  );
+
+  if (!response.success || !response.value) {
+    return null;
+  }
+
+  return response.value.estimated_revenue;
+} 
+
 export function getDisplayCustomerName(consignment: ConsignmentListItem): string {
   const normalizedCustomerName = pickTrailingNamePart(consignment.customerName);
   if (normalizedCustomerName) {
@@ -227,6 +287,8 @@ export function useHomeLines() {
   const [appliedClusterLabels, setAppliedClusterLabels] = useState<string[]>(
     [],
   );
+
+  const [manualThreshold, setManualThreshold] = useState(15000);
 
   const selectedAreaLabels = useMemo(
     () =>
@@ -277,6 +339,14 @@ export function useHomeLines() {
     }
 
     loadCurrentUserSettings();
+
+    const savedThreshold = localStorage.getItem("profitabilityThreshold");
+    if (savedThreshold) {
+      const parsed = Number(savedThreshold);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        setManualThreshold(parsed);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -432,8 +502,28 @@ export function useHomeLines() {
               return null;
             }
 
+            const enrichedConsignments: ConsignmentWithProfitability[] =
+              await Promise.all(
+                visibleConsignments.map(async (consignment) => {
+                  try {
+                    const profitabilityPrice =
+                      await calculateConsignmentProfitabilityPrice(consignment);
+
+                    return {
+                      ...consignment,
+                      profitabilityPrice,
+                    };
+                  } catch {
+                    return {
+                      ...consignment,
+                      profitabilityPrice: null,
+                    };
+                  }
+                }),
+              );
+
             const dominantLineName =
-              getDominantConsignmentLineName(visibleConsignments) ?? baseLine.name;
+              getDominantConsignmentLineName(enrichedConsignments) ?? baseLine.name;
             const dominantLine = approvedLines.find(
               (line) =>
                 normalizeLineName(line.name) ===
@@ -445,19 +535,29 @@ export function useHomeLines() {
               requestedClusterLabels,
             );
 
+            const totalProfitabilityPrice = enrichedConsignments.reduce(
+              (sum, consignment) => sum + (consignment.profitabilityPrice ?? 0),
+              0,
+            );
+
             const equipageRow: EquipageWithConsignments = {
               id: equipage.id,
               name: equipage.name,
               lineId: displayLine.id,
               lineName: directedLineName,
-              consignments: visibleConsignments,
-              totalWeightKg: visibleConsignments.reduce(
+              consignments: enrichedConsignments,
+              totalWeightKg: enrichedConsignments.reduce(
                 (sum, consignment) => sum + (consignment.weight ?? 0),
                 0,
               ),
-              totalFlm: visibleConsignments.reduce(
-                (sum, consignment) => sum + (consignment.flm ?? 0),
+              totalFlm: enrichedConsignments.reduce(
+                (sum, consignment) => sum + ((consignment as any).flm ?? 0),
                 0,
+              ),
+              totalProfitabilityPrice,
+              profitabilityBarPercent: toBarPercent(
+                totalProfitabilityPrice,
+                manualThreshold,
               ),
             };
 
@@ -508,7 +608,7 @@ export function useHomeLines() {
       setLineCards(nonEmptyLines);
       setVisibleEquipageCount(visibleCount);
       setAppliedClusterLabels(requestedClusterLabels);
-      // Persist exactly what is shown so summary text matches visible cards.
+
       persistHomeCache({
         selectedDate,
         lineCards: nonEmptyLines,

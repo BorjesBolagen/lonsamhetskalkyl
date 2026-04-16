@@ -51,7 +51,7 @@ export default function Home() {
                         key={`${line.id}-${equipage.id}`}
                         title={equipage.name}
                         capacity={convertCapacityToPixels(equipage.totalFlm)}
-                        price={100}
+                        price={equipage.profitabilityBarPercent}
                       >
                         <button
                           type="button"
@@ -245,7 +245,9 @@ export default function Home() {
                         {consignment.estimatedProperties || "-"}
                       </td>
                       <td className="py-2 pr-3">
-                        {consignment.prognosis || "-"}
+                        {consignment.profitabilityPrice !== null
+                          ? consignment.profitabilityPrice.toFixed(0)
+                          : "-"}
                       </td>
                     </tr>
                   ))}

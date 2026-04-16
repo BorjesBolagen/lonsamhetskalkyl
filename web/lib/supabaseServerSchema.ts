@@ -366,6 +366,24 @@ export type Database = {
         }
         Relationships: []
       }
+      distance_map: {
+        Row: {
+          sender: string
+          receiver: string
+          distance: number | null
+        }
+        Insert: {
+          sender: string
+          receiver: string
+          distance?: number | null
+        }
+        Update: {
+          sender?: string
+          receiver?: string
+          distance?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
