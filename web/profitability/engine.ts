@@ -1,5 +1,3 @@
-import type { MedelseRow } from "./types";
-
 export function normalizeText(value: string): string {
   return value.trim().toUpperCase().replace(/\s+/g, " ");
 }
@@ -8,7 +6,16 @@ export function normalizeCode(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-export function buildTaxeprel(start: string, slut: string): string {
+export function buildTaxeprelFromRelation(taxPointRelation: string): string {
+  const [startRaw, slutRaw] = taxPointRelation.split("-");
+
+  const start = normalizeCode(startRaw ?? "");
+  const slut = normalizeCode(slutRaw ?? "");
+
+  if (!start || !slut) {
+    throw new Error(`Ogiltig taxPointRelation: '${taxPointRelation}'`);
+  }
+
   return `${start}-${slut}`;
 }
 
@@ -69,14 +76,16 @@ export function getVklfgrv(weight: number): number {
 
 export function chooseKmBucket(
   km: number,
-  medelseRows: MedelseRow[],
+  medelseRows: Array<{ km_bucket: number; vklfgrv: number }>,
   vklfgrv: number
 ): number {
-  const buckets = [...new Set(
-    medelseRows
-      .filter((row) => row.vklfgrv === vklfgrv)
-      .map((row) => row.km_bucket)
-  )].sort((a, b) => a - b);
+  const buckets = [
+    ...new Set(
+      medelseRows
+        .filter((row) => row.vklfgrv === vklfgrv)
+        .map((row) => row.km_bucket)
+    ),
+  ].sort((a, b) => a - b);
 
   if (buckets.length === 0) {
     throw new Error(`Inga km-buckets hittades för vklfgrv=${vklfgrv}.`);
