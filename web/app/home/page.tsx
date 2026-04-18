@@ -245,8 +245,8 @@ export default function Home() {
                         {consignment.estimatedProperties || "-"}
                       </td>
                       <td className="py-2 pr-3">
-                        {consignment.profitabilityPrice !== null
-                          ? consignment.profitabilityPrice.toFixed(0)
+                        {consignment.profitabilityValue
+                          ? `${consignment.profitabilityValue.estimated_revenue?.toFixed(0)} - ${consignment.profitabilityValue.step_used.toFixed(0)}`
                           : "-"}
                       </td>
                     </tr>

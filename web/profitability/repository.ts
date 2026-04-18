@@ -94,7 +94,7 @@ export async function fetchCustomerVklRows(
 export async function fetchCustomerRows(
   kundnamn: string
 ): Promise<TrappstegRow[]> {
-  const supabase = await getSupabaseAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   const response = await supabase
     .from("calculation_trappsteg")
@@ -127,13 +127,14 @@ export async function fetchKmByTaxeprel(
 
   const rows = response.data ?? [];
 
+  /*
   console.log("distance_map candidates", {
     taxeprel,
     sender,
     receiver,
     count: rows.length,
     rows,
-  });
+  });*/
 
   const matchedRow = rows.find((row: any) => {
     const rowSender = normalizeTaxepunkt(row.sender);
@@ -169,4 +170,26 @@ export async function fetchMedelseRowsByVkl(
   }
 
   return (response.data ?? []) as MedelseRow[];
+}
+
+/**
+ * Rundar upp en vikt till lägsta vikt i nästa viktklass
+ * @param weight vikt att hitta vikt+1 för
+ * @returns vikt som ett nummer, -1 om fel uppstår
+ */
+export async function roundUpWeight(weight: number): Promise<number> {
+
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase.rpc("round_up_weight", {
+    input_weight: weight
+  });
+
+  if (error) {
+    console.error("Kunde inte konvertera vikt till viktklass: ", error.message);
+    return -1;
+  }
+
+  const viktklass = Number(data);
+  return viktklass;
+
 }

@@ -22,8 +22,5 @@ export type ProfitabilityInput = {
 
 export type ProfitabilityResult = {
   step_used: number;
-  taxeprel: string;
-  vklfgrv: number;
   estimated_revenue: number;
-  explanation: string;
 };

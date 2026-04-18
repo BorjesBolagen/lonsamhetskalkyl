@@ -6,6 +6,7 @@ import {
   getIlogConsignments,
   getIlogEquipages,
   getIlogLines,
+  ProfitabilityValue,
 } from "../../lib/api";
 import type {
   ConsignmentListItem,
@@ -23,6 +24,7 @@ import {
   parseAreaState,
 } from "../../lib/areaLineConfig";
 import { useEffect, useMemo, useState } from "react";
+import { ProfitabilityResult } from "@/profitability/types";
 
 const HOME_CACHE_KEY = "home-lines-cache-v7";
 
@@ -37,7 +39,7 @@ function getDefaultHomeDate(): string {
 }
 
 type ConsignmentWithProfitability = ConsignmentListItem & {
-  profitabilityPrice: number | null;
+  profitabilityValue?: ProfitabilityValue | null;
 };
 
 type EquipageWithConsignments = {
@@ -86,7 +88,7 @@ function ensureEquipageTotals(
   const totalProfitabilityPrice =
     equipage.totalProfitabilityPrice ??
     equipage.consignments.reduce(
-      (sum, consignment) => sum + (consignment.profitabilityPrice ?? 0),
+      (sum, consignment) => sum + (consignment.profitabilityValue?.estimated_revenue ?? 0),
       0,
     );
 
@@ -221,7 +223,7 @@ function toBarPercent(totalPrice: number, threshold: number): number {
 
 async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
-): Promise<number | null> {
+): Promise<ProfitabilityValue | null> {
   const kundnamn = consignment.customerName?.trim();
   const taxPointRelation = consignment.taxPointRelation?.trim();
   const weight = Number(consignment.weight);
@@ -252,7 +254,7 @@ async function calculateConsignmentProfitabilityPrice(
     return null;
   }
 
-  return response.value.estimated_revenue;
+  return response.value;
 } 
 
 export function getDisplayCustomerName(consignment: ConsignmentListItem): string {
@@ -506,17 +508,17 @@ export function useHomeLines() {
               await Promise.all(
                 visibleConsignments.map(async (consignment) => {
                   try {
-                    const profitabilityPrice =
+                    const profitabilityValue =
                       await calculateConsignmentProfitabilityPrice(consignment);
 
                     return {
                       ...consignment,
-                      profitabilityPrice,
+                      profitabilityValue,
                     };
                   } catch {
                     return {
                       ...consignment,
-                      profitabilityPrice: null,
+                      profitabilityValue: null,
                     };
                   }
                 }),
@@ -536,7 +538,7 @@ export function useHomeLines() {
             );
 
             const totalProfitabilityPrice = enrichedConsignments.reduce(
-              (sum, consignment) => sum + (consignment.profitabilityPrice ?? 0),
+              (sum, consignment) => sum + (consignment.profitabilityValue?.estimated_revenue ?? 0),
               0,
             );
 
