@@ -5,8 +5,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    console.log("profitability request body:", body);
-
     const result = await calculateProfitability({
       kundnamn: body.kundnamn,
       taxPointRelation: body.taxPointRelation,

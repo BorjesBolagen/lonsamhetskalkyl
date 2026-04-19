@@ -133,6 +133,7 @@ export type Database = {
           date_completed: string
           DMT: number | null
           FLM: number | null
+          forh_SE_radvis: number | null
           imported_at: string
           line_number: number
           net_customer_freight: number
@@ -160,6 +161,7 @@ export type Database = {
           date_completed: string
           DMT?: number | null
           FLM?: number | null
+          forh_SE_radvis?: number | null
           imported_at: string
           line_number: number
           net_customer_freight: number
@@ -187,6 +189,7 @@ export type Database = {
           date_completed?: string
           DMT?: number | null
           FLM?: number | null
+          forh_SE_radvis?: number | null
           imported_at?: string
           line_number?: number
           net_customer_freight?: number
@@ -422,6 +425,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_distance: {
+        Args: { in_receiver_taxep: number; in_sender_taxep: number }
+        Returns: number
+      }
+      get_medel_se: {
+        Args: { in_kilometer: number; in_viktklass: number }
+        Returns: number
+      }
+      get_snitt_forh_se_radvis: {
+        Args: { in_kundnamn: string; in_weight: number }
+        Returns: number
+      }
+      get_taxep: { Args: { in_postal_code: number }; Returns: number }
       get_weight_class: { Args: { input_weight: number }; Returns: number }
       is_admin: { Args: { user_id: string }; Returns: boolean }
       is_traffic_leader: { Args: { user_id: string }; Returns: boolean }
@@ -438,12 +454,30 @@ export type Database = {
           vikt: number
         }[]
       }
+      steg_2: {
+        Args: {
+          in_input_weight: number
+          in_name: string
+          in_taxep_receiver: number
+          in_taxep_sender: number
+        }
+        Returns: Database["public"]["CompositeTypes"]["steg_2_result"]
+        SetofOptions: {
+          from: "*"
+          to: "steg_2_result"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       User_specialization_types: "admin" | "traffic_leader"
     }
     CompositeTypes: {
-      [_ in never]: never
+      steg_2_result: {
+        medel_se_faktor: number | null
+        snitt_kund_vkl_forh_se: number | null
+      }
     }
   }
 }

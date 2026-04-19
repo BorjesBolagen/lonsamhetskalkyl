@@ -15,8 +15,18 @@ import {
   fetchMedelseRowsByVkl,
 } from "./repository";
 import type { ProfitabilityInput, ProfitabilityResult } from "./types";
-import { try_steg_1 } from "./trappsteg_steg";
+import { try_steg_1, try_steg_2 } from "./trappsteg_steg";
 
+/**
+ * Kör hela trappstegsmodellen basically.
+ * Om step_used är -1 så har ett fel inträffat
+ * Om estimated_revenue är -1 så har ett fel inträffat
+ * @param input Alla parametrar som behövs för alla steg i modellen
+ * @returns {
+ *   step_used: number;
+ *   estimated_revenue: number;
+ * }
+ */
 export async function calculateProfitability(
   input: ProfitabilityInput
 ): Promise<ProfitabilityResult> {
@@ -52,10 +62,30 @@ export async function calculateProfitability(
     console.error("Fel i steg 1, fortsätter till steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
     return {
       step_used: -1,
-      estimated_revenue: 0,
+      estimated_revenue: -1,
     }
   }
 
+  // Försök göra steg 2
+  try {
+    const steg2Estimated = await try_steg_2(input);
+    
+    // Om steg 2 gav null så fick vi ingen träff. Fortsätt med steg 3
+    if (steg2Estimated !== null) {
+      return {
+        step_used: 2,
+        estimated_revenue: steg2Estimated
+      }
+    }
+  } catch (error) {
+    console.error("Fel i steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
+    return {
+      step_used: -1,
+      estimated_revenue: -1,
+    }
+  }
+
+  /*
   // Gammalt steg 1
   const vklfgrv = getVklfgrv(weight);
   const taxeprel = buildTaxeprelFromRelation(taxPointRelation);
@@ -113,5 +143,5 @@ export async function calculateProfitability(
 
   throw new Error(
     `Ingen träff i steg 1-3 för kundnamn='${kundnamn}', taxeprel='${taxeprel}', vklfgrv='${vklfgrv}'.`
-  );
+  );*/
 }
