@@ -622,6 +622,7 @@ export function useHomeLines() {
               (sum, consignment) => sum + (consignment.profitabilityValue?.estimated_revenue ?? 0),
               0,
             );
+            console.log(`total price: ${totalProfitabilityPrice} for equipage ${equipage.id}`);
 
             const equipageRow: EquipageWithConsignments = {
               id: equipage.id,
