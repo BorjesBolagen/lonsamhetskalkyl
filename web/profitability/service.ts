@@ -15,7 +15,8 @@ import {
   fetchMedelseRowsByVkl,
 } from "./repository";
 import type { ProfitabilityInput, ProfitabilityResult } from "./types";
-import { try_steg_1, try_steg_2 } from "./trappsteg_steg";
+import { try_steg_1, try_steg_2, try_steg_3 } from "./trappsteg_steg";
+import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
 /**
  * Kör hela trappstegsmodellen basically.
@@ -46,6 +47,27 @@ export async function calculateProfitability(
   if (!Number.isFinite(weight) || weight <= 0) {
     throw new Error("Fraktgrundande vikt måste vara ett giltigt tal större än 0.");
   }
+
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_weight_class", {
+    input_weight: weight
+  })
+
+  if (error) {
+    console.error("Fel vid hämtning av viktklass: ", error);
+    throw new Error("Fel vid hämtning av viktklass: " + error.message);
+  }
+
+  // Vi ska bara köra trappstegsmodellen för viktklasser över 20. Skippa alla <= 20
+  // TODO: Kanske hantera med detail i responsen bättre. Just nu visas bara -999 i UI
+  if (data <= 20) {
+    return {
+      step_used: -999,
+      estimated_revenue: -999,
+      detail: "Endast viktklasser över 20 hanteras"
+    }
+  }
+
 
   // Försök göra steg 1.
   try {
@@ -84,6 +106,33 @@ export async function calculateProfitability(
       estimated_revenue: -1,
     }
   }
+
+  // Försök göra steg 3
+  try {
+    const steg3Estimated = await (try_steg_3(input));
+
+    // Om steg 3 gav null så fick vi ingen träff. Fortsätt med steg 4
+    if (steg3Estimated !== null) {
+      return {
+        step_used: 3,
+        estimated_revenue: steg3Estimated
+      }
+    }
+  } catch (error) {
+    console.error("Fel i steg 3. Felmeddelande:", error instanceof Error ? error.message : error);
+    return {
+      step_used: -1,
+      estimated_revenue: -1,
+    }
+  }
+
+  // Gör steg 4 och 5. nu bara returnera 0 och 0
+  return {
+    step_used: 0,
+    estimated_revenue: -1,
+  }
+
+  
 
   /*
   // Gammalt steg 1

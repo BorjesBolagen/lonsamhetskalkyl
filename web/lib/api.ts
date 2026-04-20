@@ -309,7 +309,7 @@ export type ProfitabilityResponse = {
   success: boolean;
   value?: ProfitabilityValue;
   error?: string;
-  detail?: string | Array<{ msg?: string; [key: string]: unknown }>;
+  detail?: string;
 };
 
 export const calculateProfitability = async (

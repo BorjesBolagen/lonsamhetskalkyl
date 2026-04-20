@@ -158,8 +158,74 @@ export async function try_steg_2(input: ProfitabilityInput): Promise<number | nu
     if (snitt_kund_vkl_forh_se_plus_ett !== null) { results_plus_ett.push(snitt_kund_vkl_forh_se_plus_ett) }
     else { return null }
 
+    // Beräkna estimerat pris som medel_se_faktor * snitt_kund_vkl_forh_se * vikt.
+    // Fråga - ska man ta multiplicerat med orginalvikt eller vikt+1 här?
     const estimeratPris_plus_ett = results_plus_ett.reduce((acc, val) => acc * val, 1) * weight;
 
     // Returnera det lägsta av de estimerade priserna
     return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
+}
+
+export async function try_steg_3(input: ProfitabilityInput): Promise<number | null> {
+    
+    valideraInput(input);
+
+    // Hämta variabler
+    const kundnamn = normalizeText(input.kundnamn);
+    const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
+    const weight = Number(input.chargeable_weight);
+    const weight_plus_one = await roundUpWeight(weight);
+
+    // Kolla om supabase har match på bara kundnamn
+    const supabase = await getSupabaseServerClient();
+    const { data: data_orginal, error: error_orginal } = await supabase.rpc("steg_3", {
+        in_kundnamn: kundnamn,
+        in_weight: weight,
+        in_taxep_sender: sender_taxep,
+        in_taxep_receiver: receiver_taxep
+    });
+
+    if (error_orginal) {
+        throw new Error("Fel vid steg 3: " + JSON.stringify(error_orginal, null, 2));
+    }
+
+    // Kolla om supabase har match på bara kundnamn för vikt+1
+    const { data: data_plus_ett, error: error_plus_ett } = await supabase.rpc("steg_3", {
+        in_kundnamn: kundnamn,
+        in_weight: weight_plus_one,
+        in_taxep_sender: sender_taxep,
+        in_taxep_receiver: receiver_taxep
+    });
+
+    if (error_plus_ett) {
+        throw new Error("Fel vid steg 3: " + JSON.stringify(error_plus_ett, null, 2));
+    }
+
+    // -------- Se om vi fick träff och estimera pris om vi fick träff
+    // Beräkna först estimerat pris för orginalvikt
+    const { medel_se_faktor, medel_forh_se_kundvis } = data_orginal;
+    const results_orginal = [];
+    if (medel_se_faktor !== null) { results_orginal.push(medel_se_faktor) }
+    else { return null }
+    if (medel_forh_se_kundvis !== null) { results_orginal.push(medel_forh_se_kundvis) }
+    else { return null }
+
+    // Beräkna estimerat pris som medel_se_faktor * medel_forh_se_kundvis * vikt
+    const estimeratPris_orginal = results_orginal.reduce((acc, val) => acc * val, 1) * weight;
+
+    // Beräkna sedan estimerat pris för vikt+1
+    const { medel_se_faktor: medel_se_faktor_plus_ett, medel_forh_se_kundvis: medel_forh_se_kundvis_plus_ett } = data_plus_ett;
+    const results_plus_ett = [];
+    if (medel_se_faktor_plus_ett !== null) { results_plus_ett.push(medel_se_faktor_plus_ett) }
+    else { return null }
+    if (medel_forh_se_kundvis_plus_ett !== null) { results_plus_ett.push(medel_forh_se_kundvis_plus_ett) }
+    else { return null }
+
+    // Beräkna estimerat pris som medel_se_faktor * medel_forh_se_kundvis * vikt
+    // Fråga - ska man ta multiplicerat med orginalvikt eller vikt+1 här?
+    const estimeratPris_plus_ett = results_plus_ett.reduce((acc, val) => acc * val, 1) * weight;
+
+    // Returnera det lägsta av de estimerade priserna
+    return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
+
 }

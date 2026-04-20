@@ -23,4 +23,5 @@ export type ProfitabilityInput = {
 export type ProfitabilityResult = {
   step_used: number;
   estimated_revenue: number;
+  detail?: string;
 };

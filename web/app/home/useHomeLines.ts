@@ -278,12 +278,6 @@ async function calculateConsignmentProfitabilityPrice(
   const taxPointRelation = consignment.taxPointRelation?.trim();
   const weight = Number(consignment.weight);
 
-  console.log({
-    consignmentId: consignment.consignmentId,
-    kundnamn,
-    taxPointRelation,
-    weight,
-  });
 
   if (
     !kundnamn ||
