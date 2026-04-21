@@ -1,6 +1,7 @@
 import { ProfitabilityInput } from "./types";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { roundUpWeight, normalizeText } from "../lib/backend/utils";
+import { roundUpWeight } from "../lib/backend/utils";
+import { normalizeText } from "./service";
 
 function valideraInput(input: ProfitabilityInput) {
     // Validera input
