@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -127,6 +127,7 @@ export type Database = {
           imported_at: string
           line_number: number
           net_customer_freight: number
+          office_relation: string | null
           receiver_city: string
           receiver_taxep: number | null
           receiver_zip: number
@@ -153,6 +154,7 @@ export type Database = {
           imported_at: string
           line_number: number
           net_customer_freight: number
+          office_relation?: string | null
           receiver_city: string
           receiver_taxep?: number | null
           receiver_zip: number
@@ -179,6 +181,7 @@ export type Database = {
           imported_at?: string
           line_number?: number
           net_customer_freight?: number
+          office_relation?: string | null
           receiver_city?: string
           receiver_taxep?: number | null
           receiver_zip?: number

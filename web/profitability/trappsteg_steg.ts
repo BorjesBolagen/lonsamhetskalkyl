@@ -18,8 +18,9 @@ function valideraInput(input: ProfitabilityInput) {
 
 /**
  * Steg 1 för trappstegsmodellen. Försöker hitta exakt matching på kundnamn + taxeprel + vklfgrv.
- * Om en sådan rad hittas så returneras den beräknade intäkten enligt kundnetto * vikt.
- * Om ingen rad hittas returneras null
+ * Om en sådan rad hittas så returneras den beräknade intäkten enligt: kundnetto * vikt.
+ * Om ingen rad hittas i steg 1 returneras null.
+ * 
  * @param input ProfitabilityInput typ med variabler som kan behövas i detta steg
  * @returns Estimerat pris eller null
  * @throws Error om input är fel eller om databasen inte får träff
@@ -97,8 +98,12 @@ export async function try_steg_1(input: ProfitabilityInput): Promise<number | nu
 
 /**
  * Steg 2 för trappstegsmodellen. Försöker hitta exakt matching på kundnamn + avstånd (km) + vklfgrv.
- * Om en sådan rad hittas så returneras den beräknade intäkten enligt 
- * @param input 
+ * Om en sådan rad hittas så returneras ett estimerat pris enligt: medel_se_faktor * snitt_kund_vkl_forh_se * vikt.
+ * Om vi inte får användbar träff i steg 2 returneras null.
+ *
+ * @param input ProfitabilityInput typ med variabler som behövs i steg 2.
+ * @returns Estimerat pris eller null.
+ * @throws Error om input är fel eller om databasanropet misslyckas.
  */
 export async function try_steg_2(input: ProfitabilityInput): Promise<number | null> {
 
@@ -166,6 +171,15 @@ export async function try_steg_2(input: ProfitabilityInput): Promise<number | nu
     return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
 }
 
+/**
+ * Steg 3 för trappstegsmodellen. Försöker hitta matchning på kundnamn och använder genomsnittliga faktorer för att estimera intäkten.
+ * Om träff finns returneras ett estimerat pris enligt: medel_se_faktor * medel_forh_se_kundvis * vikt.
+ * Om vi inte får användbar träff i steg 3 returneras null.
+ *
+ * @param input ProfitabilityInput typ med variabler som behövs i steg 3.
+ * @returns Estimerat pris eller null.
+ * @throws Error om input är fel eller om databasanropet misslyckas.
+ */
 export async function try_steg_3(input: ProfitabilityInput): Promise<number | null> {
     
     valideraInput(input);
@@ -230,6 +244,15 @@ export async function try_steg_3(input: ProfitabilityInput): Promise<number | nu
 
 }
 
+/**
+ * Steg 4 för trappstegsmodellen. Försöker hitta matchning på taxepunkter och viktklass, oberoende av kundnamn.
+ * Om träff finns returneras ett estimerat pris enligt: (sum_kundnetto / sum_vikt) * vikt.
+ * Om vi inte får användbar träff i steg 4 returneras null.
+ *
+ * @param input ProfitabilityInput typ med variabler som behövs i steg 4.
+ * @returns Estimerat pris eller null.
+ * @throws Error om input är fel eller om databasanropet misslyckas.
+ */
 export async function try_steg_4(input: ProfitabilityInput): Promise<number | null> {
     
     valideraInput(input);

@@ -17,6 +17,7 @@ type HistoricalImportResponse = {
 	columnsFound: number;
 	rowsFound: number;
 	insertedRows: number;
+	filteredOutRows: number;
 };
 
 // ============================================================

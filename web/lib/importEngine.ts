@@ -47,7 +47,41 @@ export type ImportResult = {
     columnsFound: number;
     rowsFound: number;
     insertedRows: number;
+    filteredOutRows: number;
 };
+
+type WeightClassInterval = {
+    min: number;
+    max: number;
+    vkl: number;
+};
+
+async function loadWeightClassIntervals(
+    supabaseAdmin: ReturnType<typeof getSupabaseAdminClient>,
+): Promise<WeightClassInterval[]> {
+    const { data, error } = await supabaseAdmin.rpc('get_entire_vkl_table');
+
+    if (error) {
+        throw new ImportHttpError(
+            500,
+            `Kunde inte hämta viktklasstabell: ${error.message}`,
+        );
+    }
+
+    if (!Array.isArray(data) || data.length === 0) {
+        throw new ImportHttpError(500, 'Kunde inte hämta giltig viktklasstabell.');
+    }
+
+    return data;
+}
+
+function resolveWeightClass(
+    weight: number,
+    intervals: WeightClassInterval[],
+): number | null {
+    const interval = intervals.find((row) => weight >= row.min && weight <= row.max);
+    return interval?.vkl ?? null;
+}
 
 export class ImportHttpError extends Error {
     // statusCode används av route-lagret för att skicka rätt HTTP-status till klienten.
@@ -279,10 +313,21 @@ export async function processHistoricalCSV(
         return (row[idx] ?? '').trim();
     };
 
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        throw new ImportHttpError(
+            500,
+            'Import misslyckades: SUPABASE_SERVICE_ROLE_KEY saknas i servermiljön.',
+        );
+    }
+
+    const supabaseAdmin = getSupabaseAdminClient();
+    const weightClassIntervals = await loadWeightClassIntervals(supabaseAdmin);
+
     const rowsToInsert: HistoricalInsert[] = [];
     const rowErrors: string[] = [];
     const importedAt = new Date().toISOString();
     const totalRows = parsed.rows.length;
+    let filteredOutRows = 0;
 
     // Valideringspass
     for (let i = 0; i < parsed.rows.length; i++) {
@@ -346,6 +391,17 @@ export async function processHistoricalCSV(
             regNumber &&
             weight !== null
         ) {
+            const weightClass = resolveWeightClass(weight, weightClassIntervals);
+            if (weightClass === null) {
+                rowErrors.push(`Rad ${rowNumber}: Kunde inte avgöra viktklass för vikt ${weight}.`);
+                continue;
+            }
+
+            if (weightClass <= 20) {
+                filteredOutRows += 1;
+                continue;
+            }
+
             rowsToInsert.push({
                 avbgsp_id: avbgspId,
                 shipment_id: shipmentId,
@@ -392,15 +448,6 @@ export async function processHistoricalCSV(
         );
     }
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        throw new ImportHttpError(
-            500,
-            'Import misslyckades: SUPABASE_SERVICE_ROLE_KEY saknas i servermiljön.',
-        );
-    }
-
-    const supabaseAdmin = getSupabaseAdminClient();
-
     // avbgsp_id är primärnyckeln: om samma avbgsp_id kommer in igen ska den gamla raden ersättas.
     const latestRowsByAvbgspId = new Map<number, HistoricalInsert>();
     for (const row of rowsToInsert) {
@@ -444,5 +491,6 @@ export async function processHistoricalCSV(
         columnsFound: parsed.header.length,
         rowsFound: parsed.rows.length,
         insertedRows,
+        filteredOutRows,
     };
 }
