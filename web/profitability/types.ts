@@ -14,17 +14,14 @@ export type MedelseRow = {
   kndnto_medelse: number;
 };
 
-export type SimulationProfitabilityInput = {
+export type ProfitabilityInput = {
   kundnamn: string;
-  start: string;
-  slut: string;
+  taxPointRelation: string;
   chargeable_weight: number;
 };
 
-export type SimulationProfitabilityResult = {
+export type ProfitabilityResult = {
   step_used: number;
-  taxeprel: string;
-  vklfgrv: number;
   estimated_revenue: number;
-  explanation: string;
+  detail?: string;
 };

@@ -54,35 +54,45 @@ export default function Home() {
   function parsePrognosisValue(raw: string): number {
     const match = raw.match(/-?\d+(?:[.,]\d+)?/);
     if (!match) {
+      console.log(`No number found in prognosis: "${raw}"`);
       return 0;
     }
 
     const normalized = match[0].replace(",", ".");
     const parsed = Number(normalized);
-    return Number.isFinite(parsed) ? parsed : 0;
+    const result = Number.isFinite(parsed) ? parsed : 0;
+    console.log(`Parsed prognosis "${raw}" -> ${result}`);
+    return result;
   }
 
   /**
    * Sums prognosis values across all consignments for one equipage.
    */
   function getTotalPrognosis(consignments: { prognosis: string }[]): number {
-    return consignments.reduce(
+    const total = consignments.reduce(
       (sum, consignment) => sum + parsePrognosisValue(consignment.prognosis),
       0,
     );
+    console.log(`Total prognosis for equipage with ${consignments.length} consignments: ${total}`);
+    return total;
   }
 
   /**
    * Converts prognosis amount into bar progress using user-configurable reference value.
    */
   function convertProfitToBarProgress(totalPrognosis: number): number {
+    console.log(`Total progrnos: ${totalPrognosis}`)
     if (!Number.isFinite(totalPrognosis) || totalPrognosis <= 0) {
       return 0;
     }
 
+    console.log("ASDFASDFASDF");
+
     const reference =
       profitabilityReferenceValue > 0 ? profitabilityReferenceValue : 15000;
-    return Math.max(0, Math.min(100, (totalPrognosis / reference) * 100));
+    const progress = Math.max(0, Math.min(100, (totalPrognosis / reference) * 100));
+    console.log(`Total prognosis: ${totalPrognosis}, Reference: ${reference}, Progress: ${progress}%`);
+    return progress;
   }
 
   const selectedEquipageTotalPrognosis = selectedEquipage
@@ -108,10 +118,8 @@ export default function Home() {
                       <EquipageCard
                         key={`${line.id}-${equipage.id}`}
                         title={equipage.name}
-                        capacity={convertFlmToBarProgress(equipage.totalFlm)}
-                        price={convertProfitToBarProgress(
-                          getTotalPrognosis(equipage.consignments),
-                        )}
+                        capacity={(convertFlmToBarProgress(equipage.totalFlm))}
+                        price={convertProfitToBarProgress(equipage.totalProfitabilityPrice)}
                       >
                         <button
                           type="button"
@@ -237,12 +245,12 @@ export default function Home() {
       <Footer />
 
       {isPopupOpen && selectedEquipage && (
-        // Popup for consignment-level details on the selected equipage.
+        // Modal for consignment-level details on the selected equipage.
         <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
           <div className="bg-[var(--primary-element)] rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-primary)]">
               <h2 className="text-[var(--text-primary)] text-xl font-bold">
-                Ekipage {selectedEquipage.name}: {selectedEquipage.lineName}
+                Ekipage {selectedEquipage.name} - {selectedEquipage.lineName}
               </h2>
               <button
                 onClick={closePopup}
@@ -253,6 +261,25 @@ export default function Home() {
             </div>
 
             <div className="p-6 overflow-auto max-h-[calc(90vh-74px)]">
+              <div className="mb-4 text-sm text-[var(--text-primary)]">
+                <p>
+                  <strong>Antal bokningar:</strong>{" "}
+                  {selectedEquipage.consignments.length}
+                </p>
+                <p>
+                  <strong>Total vikt:</strong>{" "}
+                  {selectedEquipage.totalWeightKg.toFixed(0)} kg
+                </p>
+                <p>
+                  <strong>Total FLM:</strong>{" "}
+                  {(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm
+                </p>
+                <p>
+                  <strong>Prognos (total):</strong>{" "}
+                  {selectedEquipage.totalProfitabilityPrice.toFixed(0)} kr
+                </p>
+              </div>
+
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b-2 border-[var(--border-primary)]">
@@ -290,31 +317,14 @@ export default function Home() {
                         {consignment.estimatedProperties || "-"}
                       </td>
                       <td className="py-2 pr-3">
-                        {consignment.prognosis || "-"}
+                        {consignment.profitabilityValue
+                          ? `${consignment.profitabilityValue.estimated_revenue?.toFixed(0)} - ${consignment.profitabilityValue.step_used.toFixed(0)}`
+                          : "-"}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-
-              <div className="mt-4 text-sm text-[var(--text-primary)] flex flex-wrap items-center gap-x-4 gap-y-1">
-                <div className="whitespace-nowrap">
-                  <strong>Antal bokningar:</strong>{" "}
-                  {selectedEquipage.consignments.length}
-                </div>
-                <div className="whitespace-nowrap">
-                  <strong>Total vikt:</strong>{" "}
-                  {selectedEquipage.totalWeightKg.toFixed(0)} kg
-                </div>
-                <div className="whitespace-nowrap">
-                  <strong>Total FLM:</strong>{" "}
-                  {(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm
-                </div>
-                <div className="whitespace-nowrap">
-                  <strong>Total prognos:</strong>{" "}
-                  {selectedEquipageTotalPrognosis.toFixed(0)}
-                </div>
-              </div>
             </div>
           </div>
         </div>

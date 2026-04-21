@@ -70,7 +70,6 @@ export type Database = {
           forh_se_kundvis: number | null
           forh_se_radvis: number | null
           km: number | null
-          kndnto_medelse: number | null
           kndntofgrv: number
           kundnamn: string
           taxeprel: string
@@ -80,7 +79,6 @@ export type Database = {
           forh_se_kundvis?: number | null
           forh_se_radvis?: number | null
           km?: number | null
-          kndnto_medelse?: number | null
           kndntofgrv: number
           kundnamn: string
           taxeprel: string
@@ -90,7 +88,6 @@ export type Database = {
           forh_se_kundvis?: number | null
           forh_se_radvis?: number | null
           km?: number | null
-          kndnto_medelse?: number | null
           kndntofgrv?: number
           kundnamn?: string
           taxeprel?: string
@@ -127,6 +124,7 @@ export type Database = {
           date_completed: string
           DMT: number | null
           FLM: number | null
+          forh_SE_radvis: number | null
           imported_at: string
           line_number: number
           net_customer_freight: number
@@ -142,6 +140,7 @@ export type Database = {
           upload_date: string
           volume: number | null
           weight: number
+          weight_class: number | null
         }
         Insert: {
           admin_ID?: string | null
@@ -153,6 +152,7 @@ export type Database = {
           date_completed: string
           DMT?: number | null
           FLM?: number | null
+          forh_SE_radvis?: number | null
           imported_at: string
           line_number: number
           net_customer_freight: number
@@ -168,6 +168,7 @@ export type Database = {
           upload_date: string
           volume?: number | null
           weight: number
+          weight_class?: number | null
         }
         Update: {
           admin_ID?: string | null
@@ -179,6 +180,7 @@ export type Database = {
           date_completed?: string
           DMT?: number | null
           FLM?: number | null
+          forh_SE_radvis?: number | null
           imported_at?: string
           line_number?: number
           net_customer_freight?: number
@@ -194,6 +196,7 @@ export type Database = {
           upload_date?: string
           volume?: number | null
           weight?: number
+          weight_class?: number | null
         }
         Relationships: [
           {
@@ -390,19 +393,102 @@ export type Database = {
         }
         Relationships: []
       }
+      vikt_till_viktklass: {
+        Row: {
+          class: number | null
+          max_weight: number
+          min_weight: number
+        }
+        Insert: {
+          class?: number | null
+          max_weight: number
+          min_weight: number
+        }
+        Update: {
+          class?: number | null
+          max_weight?: number
+          min_weight?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_distance: {
+        Args: { in_receiver_taxep: number; in_sender_taxep: number }
+        Returns: number
+      }
+      get_medel_forh_kundvis: { Args: { in_kundnamn: string }; Returns: number }
+      get_medel_se: {
+        Args: { in_kilometer: number; in_viktklass: number }
+        Returns: number
+      }
+      get_snitt_forh_se_radvis: {
+        Args: { in_kundnamn: string; in_weight: number }
+        Returns: number
+      }
+      get_taxep: { Args: { in_postal_code: number }; Returns: number }
+      get_weight_class: { Args: { input_weight: number }; Returns: number }
       is_admin: { Args: { user_id: string }; Returns: boolean }
       is_traffic_leader: { Args: { user_id: string }; Returns: boolean }
+      round_up_weight: { Args: { input_weight: number }; Returns: number }
+      steg_1: {
+        Args: {
+          in_input_weight: number
+          in_name: string
+          in_taxep_receiver: number
+          in_taxep_sender: number
+        }
+        Returns: {
+          kundnettofrakt: number
+          vikt: number
+        }[]
+      }
+      steg_2: {
+        Args: {
+          in_input_weight: number
+          in_name: string
+          in_taxep_receiver: number
+          in_taxep_sender: number
+        }
+        Returns: Database["public"]["CompositeTypes"]["steg_2_result"]
+        SetofOptions: {
+          from: "*"
+          to: "steg_2_result"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      steg_3: {
+        Args: {
+          in_kundnamn: string
+          in_taxep_receiver: number
+          in_taxep_sender: number
+          in_weight: number
+        }
+        Returns: Database["public"]["CompositeTypes"]["steg_3_result"]
+        SetofOptions: {
+          from: "*"
+          to: "steg_3_result"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       User_specialization_types: "admin" | "traffic_leader"
     }
     CompositeTypes: {
-      [_ in never]: never
+      steg_2_result: {
+        medel_se_faktor: number | null
+        snitt_kund_vkl_forh_se: number | null
+      }
+      steg_3_result: {
+        medel_se_faktor: number | null
+        medel_forh_se_kundvis: number | null
+      }
     }
   }
 }
