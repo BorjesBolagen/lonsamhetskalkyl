@@ -285,8 +285,7 @@ async function calculateConsignmentProfitabilityPrice(
   if (
     !kundnamn ||
     !taxPointRelation ||
-    !Number.isFinite(weight) ||
-    weight <= 0
+    !Number.isFinite(weight)
   ) {
     return null;
   }
@@ -300,8 +299,7 @@ async function calculateConsignmentProfitabilityPrice(
   if (!response.success || !response.value) {
     return null;
   }
-
-  return response.value;
+  return response.value as ProfitabilityValue;
 }
 
 /**

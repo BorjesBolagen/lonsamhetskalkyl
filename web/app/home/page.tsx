@@ -269,6 +269,7 @@ export default function Home() {
                     <th className="text-left py-2 pr-3">Hämtort</th>
                     <th className="text-left py-2 pr-3">Godsuppgifter</th>
                     <th className="text-left py-2 pr-3">Prognos</th>
+                    <th className="text-left py-2 pr-3">Steg</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -298,8 +299,17 @@ export default function Home() {
                       </td>
                       <td className="py-2 pr-3">
                         {consignment.profitabilityValue
-                          ? `${consignment.profitabilityValue.estimated_revenue?.toFixed(0)} - ${consignment.profitabilityValue.step_used.toFixed(0)}`
+                          ? consignment.profitabilityValue.step_used === -1
+                            ? consignment.profitabilityValue.detail || "-"
+                            : `${consignment.profitabilityValue.estimated_revenue.toFixed(0)} kr`
                           : "-"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {consignment.profitabilityValue
+                        ? consignment.profitabilityValue.step_used === -1
+                          ? "-"
+                          : `${consignment.profitabilityValue.step_used}`
+                        : "-"}
                       </td>
                     </tr>
                   ))}

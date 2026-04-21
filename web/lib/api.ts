@@ -299,10 +299,8 @@ export const getIlogConsignment = async (
 // ============================================================
 export type ProfitabilityValue = {
   step_used: number;
-  taxeprel: string;
-  vklfgrv: number;
   estimated_revenue: number;
-  explanation: string;
+  detail?: string;
 };
 
 export type ProfitabilityResponse = {
@@ -332,8 +330,10 @@ export const calculateProfitability = async (
   if (!contentType.includes("application/json")) {
     throw new Error("API:t returnerade inte JSON.");
   }
-
-  return (await response.json()) as ProfitabilityResponse;
+  
+  const data = await response.json();
+  console.log("API response:", JSON.stringify(data));
+  return data as ProfitabilityResponse;
 };
 
 // ============================================================

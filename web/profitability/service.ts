@@ -1,17 +1,18 @@
 import "server-only";
 
 import type { ProfitabilityInput, ProfitabilityResult } from "./types";
-import { try_steg_1, try_steg_2, try_steg_3 } from "./trappsteg_steg";
+import { try_steg_1, try_steg_2, try_steg_3, try_steg_4 } from "./trappsteg_steg";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
 /**
  * Kör hela trappstegsmodellen basically.
- * Om step_used är -1 så har ett fel inträffat
- * Om estimated_revenue är -1 så har ett fel inträffat
+ * Om step_used är -1 ( => estimated_revenue = 0) så har ett fel inträffat.
+ * I så fall har "detail" mer info om vad som gått snett
  * @param input Alla parametrar som behövs för alla steg i modellen
  * @returns {
  *   step_used: number;
  *   estimated_revenue: number;
+ *   detail?: string;
  * }
  */
 export async function calculateProfitability(
@@ -30,11 +31,10 @@ export async function calculateProfitability(
   }
 
   // Vi ska bara köra trappstegsmodellen för viktklasser över 20. Skippa alla <= 20
-  // TODO: Kanske hantera med detail i responsen bättre. Just nu visas bara -999 i UI
   if (data <= 20) {
     return {
-      step_used: -999,
-      estimated_revenue: -999,
+      step_used: -1,
+      estimated_revenue: 0,
       detail: "Endast viktklasser över 20 hanteras"
     }
   }
@@ -55,7 +55,8 @@ export async function calculateProfitability(
     console.error("Fel i steg 1, fortsätter till steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
     return {
       step_used: -1,
-      estimated_revenue: -1,
+      estimated_revenue: 0,
+      detail: "Något gick fel i steg 1"
     }
   }
 
@@ -74,7 +75,8 @@ export async function calculateProfitability(
     console.error("Fel i steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
     return {
       step_used: -1,
-      estimated_revenue: -1,
+      estimated_revenue: 0,
+      detail: "Något gick fel i steg 2"
     }
   }
 
@@ -93,78 +95,40 @@ export async function calculateProfitability(
     console.error("Fel i steg 3. Felmeddelande:", error instanceof Error ? error.message : error);
     return {
       step_used: -1,
-      estimated_revenue: -1,
+      estimated_revenue: 0,
+      detail: "Något gick fel i steg 3"
+    }
+  }
+
+  
+  // Försök göra steg 4
+  try {
+    const steg4Estimated = await try_steg_4(input);
+
+    // Om steg 4 gav null så fick vi ingen träff. Fortsätt med steg 5
+    if (steg4Estimated !== null) {
+      return {
+        step_used: 4,
+        estimated_revenue: steg4Estimated
+      }
+    }
+  } catch (error) {
+    console.error("Fel i steg 4. Felmeddelande:", error instanceof Error ? error.message : error);
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail: "Något gick fel i steg 4"
     }
   }
 
   // Gör steg 4 och 5. nu bara returnera 0 och 0
   return {
-    step_used: 0,
-    estimated_revenue: -1,
+    step_used: -1,
+    estimated_revenue: 0,
+    detail: "Inga steg gav träff"
   }
 }
 
 export function normalizeText(value: string): string {
   return value.trim().toUpperCase().replace(/\s+/g, " ");
 }
-  
-
-  /*
-  // Gammalt steg 1
-  const vklfgrv = getVklfgrv(weight);
-  const taxeprel = buildTaxeprelFromRelation(taxPointRelation);
-
-  // steg 2 och fram
-  const km = await fetchKmByTaxeprel(taxeprel);
-  if (km === null || !Number.isFinite(km)) {
-    throw new Error(
-      `Ingen distans hittades i distance_map för taxeprel='${taxeprel}'.`
-    );
-  }
-
-  const medelseRows = await fetchMedelseRowsByVkl(vklfgrv);
-  const kmBucket = chooseKmBucket(km, medelseRows, vklfgrv);
-
-  const medelseRow = medelseRows.find(
-    (row) => Number(row.km_bucket) === Number(kmBucket)
-  );
-
-  if (!medelseRow) {
-    throw new Error(
-      `Ingen MedelSE-rad hittades för km_bucket='${kmBucket}', vklfgrv='${vklfgrv}'.`
-    );
-  }
-
-  const medelseValue = Number(medelseRow.kndnto_medelse);
-
-  const customerVklRows = await fetchCustomerVklRows(kundnamn, vklfgrv);
-  const step2Factors = customerVklRows
-    .map((row) => Number(row.forh_se_radvis ?? 0))
-    .filter((value) => value > 0);
-
-  if (step2Factors.length > 0) {
-    const factor = average(step2Factors);
-
-    return {
-      step_used: 2,
-      estimated_revenue: medelseValue * factor * weight,
-    };
-  }
-
-  const customerRows = await fetchCustomerRows(kundnamn);
-  const step3Factors = customerRows
-    .map((row) => Number(row.forh_se_kundvis ?? 0))
-    .filter((value) => value > 0);
-
-  if (step3Factors.length > 0) {
-    const factor = average(step3Factors);
-
-    return {
-      step_used: 3,
-      estimated_revenue: medelseValue * factor * weight,
-    };
-  }
-
-  throw new Error(
-    `Ingen träff i steg 1-3 för kundnamn='${kundnamn}', taxeprel='${taxeprel}', vklfgrv='${vklfgrv}'.`
-  );*/
