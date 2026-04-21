@@ -62,10 +62,33 @@ export class ImportHttpError extends Error {
 }
 
 /**
- * Läser en rad från CSV och delar upp den på semikolon.
- * Hanterar citattecken så att t.ex. "A;B" inte delas i två kolumner.
+ * Detects whether the line uses semicolon or comma as delimiter.
+ * Comma-delimited lines have quoted fields containing commas.
  */
-function parseSemicolonLine(line: string): string[] {
+function detectDelimiter(line: string): ';' | ',' {
+    let semiCount = 0;
+    let commaCount = 0;
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (!inQuotes) {
+            if (char === ';') semiCount++;
+            if (char === ',') commaCount++;
+        }
+    }
+
+    // If more unquoted commas than semicolons, use comma as delimiter
+    return commaCount > semiCount ? ',' : ';';
+}
+
+/**
+ * Parses a CSV line with the specified delimiter.
+ * Handles quoted strings so that delimiters inside quotes don't split fields.
+ */
+function parseCSVLine(line: string, delimiter: ';' | ',' = ';'): string[] {
     const fields: string[] = [];
     let current = '';
     let inQuotes = false;
@@ -84,7 +107,7 @@ function parseSemicolonLine(line: string): string[] {
             continue;
         }
 
-        if (char === ';' && !inQuotes) {
+        if (char === delimiter && !inQuotes) {
             fields.push(current.trim());
             current = '';
             continue;
@@ -99,7 +122,7 @@ function parseSemicolonLine(line: string): string[] {
 
 /**
  * Konverterar text -> number.
- * Klarar svenska decimaler (",") och ignorerar tomma/NULL-värden.
+ * Klarar svenska decimaler (","), negativa tal (med − eller -), och ignorerar tomma/NULL-värden.
  */
 export function normalizeNumber(value: string | undefined): number | null {
     if (!value) {
@@ -111,10 +134,21 @@ export function normalizeNumber(value: string | undefined): number | null {
         return null;
     }
 
-    const normalized = trimmed.replace(/\s/g, '').replace(',', '.');
+    // Normalize different types of minus signs to regular ASCII minus
+    let normalized = trimmed
+        .replace(/\s/g, '')           // Remove whitespace
+        .replace(/−/g, '-')            // Unicode minus sign → ASCII minus
+        .replace(/–/g, '-')            // En-dash → ASCII minus
+        .replace(/—/g, '-')            // Em-dash → ASCII minus
+        .replace(',', '.');            // Swedish comma decimal → period
+
     const parsed = Number(normalized);
 
-    return Number.isFinite(parsed) ? parsed : null;
+    const result = Number.isFinite(parsed) ? parsed : null;
+    if (result === null) {
+        console.log(`Normalize ${value} -> ${normalized} -> ${parsed} -> ${result} gav NaN, returnerar null`);
+    }
+    return result;
 }
 
 /**
@@ -130,8 +164,9 @@ export function normalizeInteger(value: string | undefined): number | null {
 }
 
 /**
- * Validerar och normaliserar datum i format YYYY-MM-DD.
- * Returnerar null om datumet är tomt, NULL eller ogiltigt.
+ * Validerar och normaliserar datum i format YYYY-MM-DD eller MM/DD/YYYY.
+ * Accepterar MM/DD/YYYY även utan ledande nollor (t.ex. 1/5/2023).
+ * Returnerar datum i YYYY-MM-DD format, eller null om tomt/ogiltigt.
  */
 export function normalizeDate(value: string | undefined): string | null {
     if (!value) {
@@ -143,36 +178,61 @@ export function normalizeDate(value: string | undefined): string | null {
         return null;
     }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-        return null;
+    // Try YYYY-MM-DD format first
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        const timestamp = Date.parse(trimmed);
+        if (!Number.isNaN(timestamp)) {
+            return trimmed;
+        }
     }
 
-    const timestamp = Date.parse(trimmed);
-    if (Number.isNaN(timestamp)) {
-        return null;
+    // Try MM/DD/YYYY format (with or without leading zeros)
+    const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+        const month = parseInt(slashMatch[1], 10);
+        const day = parseInt(slashMatch[2], 10);
+        const year = parseInt(slashMatch[3], 10);
+
+        // Validate ranges
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            // Construct YYYY-MM-DD format with leading zeros
+            const normalizedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            
+            // Verify the date is actually valid
+            const timestamp = Date.parse(normalizedDate);
+            if (!Number.isNaN(timestamp)) {
+                return normalizedDate;
+            }
+        }
     }
 
-    return trimmed;
+    return null;
 }
 
 /**
  * Parser hela CSV-innehållet till header + rader.
  * Hanterar BOM, citattecken, och filtrerar tomma rader.
+ * Automatisk detekterar om ; eller , används som delimiter.
  */
 export function parseCSV(content: string): ParsedCSV {
     const cleaned = content.replace(/\uFEFF/, '');
     const lines = cleaned.split(/\r?\n/).filter(line => line.trim() !== '');
 
-    const headerIndex = lines.findIndex((line) => line.includes('Fraktsedelsnr;'));
+    const headerIndex = lines.findIndex((line) => 
+        line.includes('Fraktsedelsnr;') || line.includes('Fraktsedelsnr,')
+    );
     if (headerIndex === -1) {
         throw new ImportHttpError(400, 'Kunde inte hitta rubrikraden i CSV-filen.');
     }
 
-    const header = parseSemicolonLine(lines[headerIndex]);
+    // Detect delimiter from the header line
+    const delimiter = detectDelimiter(lines[headerIndex]);
+    
+    const header = parseCSVLine(lines[headerIndex], delimiter);
     const rows: string[][] = [];
 
     for (let i = headerIndex + 1; i < lines.length; i++) {
-        const parsed = parseSemicolonLine(lines[i]);
+        const parsed = parseCSVLine(lines[i], delimiter);
         const hasData = parsed.some((cell) => cell !== '' && cell.toLowerCase() !== 'null');
         if (!hasData) {
             continue;
@@ -291,8 +351,6 @@ export async function processHistoricalCSV(
                 shipment_id: shipmentId,
                 customer_id: customerId,
                 customer_name: customerName,
-                FLM: null,
-                volume: null,
                 weight,
                 line_number: lineNumber,
                 sender_zip: senderZip,
