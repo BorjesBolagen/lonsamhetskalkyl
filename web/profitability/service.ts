@@ -1,19 +1,5 @@
 import "server-only";
 
-import {
-  average,
-  buildTaxeprelFromRelation,
-  chooseKmBucket,
-  getVklfgrv,
-  normalizeText,
-} from "./engine";
-import {
-  fetchCustomerRows,
-  fetchCustomerVklRows,
-  fetchExactTrappstegRow,
-  fetchKmByTaxeprel,
-  fetchMedelseRowsByVkl,
-} from "./repository";
 import type { ProfitabilityInput, ProfitabilityResult } from "./types";
 import { try_steg_1, try_steg_2, try_steg_3 } from "./trappsteg_steg";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
@@ -31,22 +17,7 @@ import { getSupabaseServerClient } from "@/lib/supabaseServer";
 export async function calculateProfitability(
   input: ProfitabilityInput
 ): Promise<ProfitabilityResult> {
-  const kundnamn = normalizeText(input.kundnamn);
-  const taxPointRelation = input.taxPointRelation?.trim();
   const weight = Number(input.chargeable_weight);
-  // Kanse ta med linnje också
-  
-  if (!kundnamn) {
-    throw new Error("Kundnamn måste fyllas i.");
-  }
-
-  if (!taxPointRelation) {
-    throw new Error("taxPointRelation måste fyllas i.");
-  }
-
-  if (!Number.isFinite(weight) || weight <= 0) {
-    throw new Error("Fraktgrundande vikt måste vara ett giltigt tal större än 0.");
-  }
 
   const supabase = await getSupabaseServerClient();
   const { data, error } = await supabase.rpc("get_weight_class", {
@@ -131,7 +102,11 @@ export async function calculateProfitability(
     step_used: 0,
     estimated_revenue: -1,
   }
+}
 
+export function normalizeText(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/g, " ");
+}
   
 
   /*
@@ -193,4 +168,3 @@ export async function calculateProfitability(
   throw new Error(
     `Ingen träff i steg 1-3 för kundnamn='${kundnamn}', taxeprel='${taxeprel}', vklfgrv='${vklfgrv}'.`
   );*/
-}
