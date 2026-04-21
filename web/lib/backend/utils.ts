@@ -61,7 +61,7 @@ export async function roundUpWeight(weight: number): Promise<number> {
 
 }
 
-export function normalizeText(value: string): string {
+export async function normalizeText(value: string): Promise<string> {
   return value.trim().toUpperCase().replace(/\s+/g, " ");
 }
 
