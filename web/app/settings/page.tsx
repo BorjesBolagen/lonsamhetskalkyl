@@ -15,26 +15,11 @@ import { useEffect, useMemo, useState } from "react";
 
 type ThemeMode = "light" | "dark";
 
-function setTheme(mode: "light" | "dark") {
-  const root = document.documentElement;
-
-  if (mode === "dark") {
-    root.classList.add("dark");
-  } else {
-    root.classList.remove("dark");
-  }
+function applyThemeToDOM(theme: ThemeMode) {
+  document.documentElement.setAttribute("data-theme", theme);
+  document.cookie = `theme=${theme}; path=/; max-age=31536000`;
+  localStorage.setItem("theme", theme);
 }
-
-const applyTheme = (newTheme: "light" | "dark") => {
-  // Save in localStorage (client use)
-  localStorage.setItem("theme", newTheme);
-
-  // Save in cookie (server use) // TODO: minska max age lol
-  document.cookie = `theme=${newTheme}; path=/; max-age=31536000`;
-
-  // Apply immediately
-  document.documentElement.setAttribute("data-theme", newTheme);
-};
 
 const DEFAULT_THEME: ThemeMode = "light";
 const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
@@ -94,9 +79,14 @@ export default function Settings() {
     message: string;
   } | null>(null);
 
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
   // States för områden
   const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
-  const [theme, setTheme] = useState<ThemeMode>(DEFAULT_THEME);
+  // What is currently active in the app
+  const [appliedTheme, setAppliedTheme] = useState<ThemeMode>("light");
+  // What the user is editing (draft)
+  const [draftTheme, setDraftTheme] = useState<ThemeMode>(DEFAULT_THEME);
   const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
     useState<number>(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
 
@@ -187,11 +177,10 @@ export default function Settings() {
         setDistricts(parseAreaState(user.filters));
 
         const dbTheme = parseTheme(user.filters);
-        setTheme(dbTheme);
-
-        // Sync cookie + localStorage ONLY (no DOM change)
-        document.cookie = `theme=${dbTheme}; path=/; max-age=31536000`;
-        localStorage.setItem("theme", dbTheme);
+        setAppliedTheme(dbTheme);
+        setDraftTheme(dbTheme);
+        // apply once on load
+        applyThemeToDOM(dbTheme);
 
         setProfitabilityReferenceValue(
           parseProfitabilityReferenceValue(user.filters),
@@ -208,6 +197,19 @@ export default function Settings() {
 
     loadCurrentUser();
   }, []);
+
+  // Warn user if refreshing after changed settings
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      e.preventDefault();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
 
   const handleSaveSettings = async () => {
     if (!userId) {
@@ -226,13 +228,16 @@ export default function Settings() {
       const nextFilters: Record<string, unknown> = {
         ...storedFilters,
         areas: districts,
-        theme,
+        theme: draftTheme,
         profitabilityReferenceValue,
       };
 
       await setFilters(userId, nextFilters as Json);
+      setAppliedTheme(draftTheme);
+      applyThemeToDOM(draftTheme);
       setStoredFilters(nextFilters);
       setFiltersStatus({ type: "success", message: "Inställningar sparade." });
+      setHasUnsavedChanges(false);
     } catch (error) {
       setFiltersStatus({
         type: "error",
@@ -287,7 +292,10 @@ export default function Settings() {
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       {/* Wrapper för navigationsbaren så den ligger överst */}
       <div className="relative z-[60]">
-        <Navigation currentPage="settings" />
+        <Navigation
+          currentPage="settings"
+          hasUnsavedChanges={hasUnsavedChanges}
+        />
       </div>
 
       <main className="flex-grow flex flex-col p-6 items-center">
@@ -302,11 +310,10 @@ export default function Settings() {
             {/* KONTO-FLIKEN */}
             <button
               onClick={() => setActiveTab("konto")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
-                activeTab === "konto"
-                  ? "bg-[var(--primary-element)] border-[#446E30]"
-                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-              }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "konto"
+                ? "bg-[var(--primary-element)] border-[#446E30]"
+                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+                }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -328,11 +335,10 @@ export default function Settings() {
             {/* LÖSENORD-FLIKEN */}
             <button
               onClick={() => setActiveTab("losenord")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
-                activeTab === "losenord"
-                  ? "bg-[var(--primary-element)] border-[#446E30]"
-                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-              }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "losenord"
+                ? "bg-[var(--primary-element)] border-[#446E30]"
+                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+                }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -358,20 +364,18 @@ export default function Settings() {
               <div className="space-y-10 w-full mx-auto">
                 {/* DEL 1: Kontoinformation (Read-only) */}
                 <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-green-500 pb-2">
+                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
                     Din Profil
                   </h3>
-                  <div className="bg-[var(--secondary-element)] p-5 rounded-lg border border-gray-100 space-y-3">
-                    <div className="flex justify-between items-center border-b border-gray-200 pb-2">
+                  <div className="bg-[var(--secondary-element)] p-5 rounded-lg space-y-3">
+                    <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
                       <span className="text-[var(--text-primary)] font-bold">
                         Användare:
                       </span>
                       <span className="font-medium">{displayName}</span>
                     </div>
-                    <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-                      <span className="text-[var(--text-primary)] font-bold">
-                        E-post:
-                      </span>
+                    <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
+                      <span className="text-[var(--text-primary)] font-bold">E-post:</span>
                       <span className="font-medium">{email}</span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -435,34 +439,32 @@ export default function Settings() {
 
                 {/* DEL 3: Tema (Interaktiv) */}
                 <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-green-500 pb-2">
+                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
                     Tema
                   </h3>
                   <div className="flex space-x-4">
                     <button
                       onClick={() => {
-                        setTheme("light");
-                        applyTheme("light");
+                        setDraftTheme("light");
+                        setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
-                        theme === "light"
-                          ? "bg-[#7ec58a] text-black border-[#6ab076]"
-                          : "bg-white text-gray-700 border-gray-300"
-                      }`}
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "light"
+                        ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                        : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                        }`}
                     >
                       Light
                     </button>
 
                     <button
                       onClick={() => {
-                        setTheme("dark");
-                        applyTheme("dark");
+                        setDraftTheme("dark");
+                        setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
-                        theme === "dark"
-                          ? "bg-gray-800 text-white border-gray-900"
-                          : "bg-white text-gray-700 border-gray-300"
-                      }`}
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "dark"
+                        ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                        : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                        }`}
                     >
                       Dark
                     </button>
@@ -503,7 +505,7 @@ export default function Settings() {
                   <button
                     onClick={handleSaveSettings}
                     disabled={isLoadingProfile || isSavingFilters}
-                    className="w-full bg-[#75C07A] hover:bg-green-800 disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md"
+                    className="w-full bg-[var(--button-submit)] hover:bg-[var(--button-submit-hover)] disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md"
                   >
                     {isSavingFilters ? "Sparar..." : "Spara inställningar"}
                   </button>
@@ -522,7 +524,7 @@ export default function Settings() {
             {/* INNEHÅLL: LÖSENORD */}
             {activeTab === "losenord" && (
               <div className="w-full mx-auto text-[var(--text-primary)]">
-                <h3 className="font-bold text-xl mb-6 text-center border-b-2 border-green-500 pb-2">
+                <h3 className="font-bold text-xl mb-6 text-center border-b-2 border-[var(--primary-color)] pb-2">
                   Byt lösenord
                 </h3>
                 <form
@@ -538,16 +540,16 @@ export default function Settings() {
                         type={showCurrentPassword ? "text" : "password"}
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
-                        className="w-full p-3 pr-12 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-3 w-full"
                       />
                       <button
                         type="button"
                         onClick={() =>
                           setShowCurrentPassword(!showCurrentPassword)
                         }
-                        className="absolute right-3 top-3.5 hover:text-[var(--text-secondary)] transition-colors"
+                        className="absolute right-3 top-3.5 text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
                       >
-                        {showCurrentPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                        {showCurrentPassword ? <EyeIcon /> : <EyeSlashIcon />}
                       </button>
                     </div>
                   </div>
@@ -561,14 +563,14 @@ export default function Settings() {
                         type={showNewPassword ? "text" : "password"}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full p-3 pr-12 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-3 w-full"
                       />
                       <button
                         type="button"
                         onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-3 top-3.5 hover:text-black transition-colors"
+                        className="absolute right-3 top-3.5 text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
                       >
-                        {showNewPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                        {showNewPassword ? <EyeIcon /> : <EyeSlashIcon />}
                       </button>
                     </div>
                   </div>
@@ -582,21 +584,21 @@ export default function Settings() {
                         type={showRepeatPassword ? "text" : "password"}
                         value={repeatPassword}
                         onChange={(e) => setRepeatPassword(e.target.value)}
-                        className="w-full p-3 pr-12 border-2 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-3 w-full"
                       />
                       <button
                         type="button"
                         onClick={() =>
                           setShowRepeatPassword(!showRepeatPassword)
                         }
-                        className="absolute right-3 top-3.5 text-gray-500 hover:text-black transition-colors"
+                        className="absolute right-3 top-3.5 text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
                       >
-                        {showRepeatPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                        {showRepeatPassword ? <EyeIcon /> : <EyeSlashIcon />}
                       </button>
                     </div>
                   </div>
 
-                  <button className="mt-8 w-full bg-[#75C07A] hover:bg-green-800 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md">
+                  <button className="mt-8 w-full bg-[var(--button-submit)] hover:bg-[var(--button-submit-hover)] text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md">
                     Spara lösenord
                   </button>
                 </form>
