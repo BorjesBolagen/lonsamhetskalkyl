@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "../styles/globals.css";
-
-// LAYOUT FÖR ALLA SIDOR
+import { cookies } from "next/headers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,17 +18,19 @@ export const metadata: Metadata = {
   description: "Trafikledningssystem för lönsamhetsanalys av leveranser",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
+  const cookieStore = await cookies(); // async in Next 15+ [1](https://nextjs.org/docs/app/api-reference/functions/cookies)
+  const theme = cookieStore.get("theme")?.value;
+
+  const safeTheme = theme === "dark" ? "dark" : "light";
+
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={{ margin: 0, padding: 0 }}
-      >
+    <html lang="en" data-theme={safeTheme}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
       </body>
     </html>

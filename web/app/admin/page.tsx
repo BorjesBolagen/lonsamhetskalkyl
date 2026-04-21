@@ -3,14 +3,11 @@ import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
 import { sendMessage, signUpProcedure } from "@/lib/api";
-import {
-  Enums,
-  Constants,
-  TablesUpdate,
-} from "@/lib/supabaseServerSchema";
+import { Enums, Constants, TablesUpdate } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
 import { validatePassword } from "@/lib/validation";
+import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 const mockTrafficLeaders = [
@@ -166,15 +163,7 @@ export default function Admin() {
       if (!data.user) throw new Error("Kunde inte skapa användare");
 
       const defaultFilters = {
-        areas: {
-          linkoping: false,
-          vaxjo: false,
-          sundsvall: false,
-          jonkoping: false,
-          stockholm: false,
-          goteborg: false,
-          malmo: false,
-        },
+        areas: DEFAULT_AREAS,
         theme: "light",
       };
 

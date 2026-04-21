@@ -2,19 +2,19 @@ import { ReactNode } from "react";
 import Pricebar from "./pricebar2"
 import FLMbar from "./FLMbar";
 
-type CardProps = {
+type EquipageCardProps = {
   title: string;
   children: ReactNode;
   capacity: number;
   price: number;
 };
 
-export default function Card({
+export default function EquipageCard({
   title,
   children,
   capacity,
   price,
-}: CardProps) {
+}: EquipageCardProps) {
   return (
     <div className="bg-[var(--secondary-element)] rounded-xl shadow-sm p-2 w-36 flex flex-col items-center hover:shadow-md transition">
 
@@ -32,7 +32,7 @@ export default function Card({
       <Pricebar progress={price} />
 
       {/* Button */}
-      <div className="mt-2 w-full">
+      <div className="bg-[var(--primary-button)] mt-2 w-full text-center text-[var(--text-secondary)] px-2 py-1 rounded hover:bg-gray-500 transition text-sm">
         {children}
       </div>
     </div>

@@ -24,8 +24,8 @@
   --input-border: #BBBBBB;
 }
 
-.dark {
-  --bg: #141414;
+html[data-theme="dark"] {
+  --bg: #121212;
   --text-heading: #ffffff;
   --text-primary: #FFFFFF;
   --text-secondary: #CCCCCC;

@@ -19,7 +19,6 @@ import type {
   ConsignmentListItem,
   EquipageItem,
   LineItem,
-  ResourceItem,
   ZoneTreeNode,
 } from "@/lib/ilogTypes";
 
@@ -150,6 +149,53 @@ const parseWeightFromEstimatedProperties = (
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const parseFlmFromEstimatedProperties = (
+  value: string
+): number | null => {
+  const match = value.match(/(\d+(?:[.,]\d+)?)\s*flm/i);
+  if (!match) {
+    return null;
+  }
+
+  const normalized = match[1].replace(",", ".");
+  const parsed = Number(normalized);
+
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeCustomerName = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed.includes("*")) {
+    return trimmed;
+  }
+
+  const suffix = trimmed
+    .split("*")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .at(-1);
+
+  return suffix ?? trimmed;
+};
+
+const readPostalCodePart = (
+  record: Record<string, unknown>,
+  keys: string[]
+): string => {
+  const stringValue = readString(record, keys);
+  if (stringValue.length > 0) {
+    const digitsOnly = stringValue.replace(/\D/g, "");
+    return digitsOnly.length > 0 ? digitsOnly : stringValue.trim();
+  }
+
+  const numberValue = readNumber(record, keys);
+  if (numberValue === null) {
+    return "";
+  }
+
+  return String(Math.trunc(numberValue));
+};
+
 /**
  * Skapa en läsbar status-sträng från iLog-data.
  * 
@@ -240,39 +286,9 @@ const collectConsignmentCandidates = (
 };
 
 /**
- * Mappning: iLog raw resources → ResourceItem[]
- *
- * Extraherar resurser från iLog raw equipage-objekt.
- */
-const mapResources = (raw: unknown[]): ResourceItem[] => {
-  return raw
-    .map((item) => {
-      const row = asRecord(item);
-      const id = readNumber(row, ["id"]);
-      const groupId = readNumber(row, ["groupId"]);
-      const registrationNumber = readString(row, ["registrationNumber", "regno", "regNo"]);
-      const resourceType = readString(row, ["resourceType", "type"]);
-      const comment = readString(row, ["comment"]);
-
-      if (id === null || groupId === null) {
-        return null;
-      }
-
-      return {
-        id,
-        groupId,
-        registrationNumber,
-        resourceType,
-        comment,
-      };
-    })
-    .filter((item): item is ResourceItem => item !== null);
-};
-
-/**
  * Mappning: iLog raw equipages → EquipageItem[]
- *
- * Extraherar id, name, lines och resources från iLog raw equipage-objekt.
+ * 
+ * Extraherar id och name (registreringsnummer).
  * Filter bort items utan ID.
  */
 export const mapEquipages = (raw: unknown[]): EquipageItem[] => {
@@ -289,14 +305,34 @@ export const mapEquipages = (raw: unknown[]): EquipageItem[] => {
         readString(row, ["name", "displayName", "regno", "regNo", "registrationNumber"]) ||
         `Equipage ${id}`;
 
-      const linesRaw = Array.isArray(row.lines) ? row.lines : [];
-      const resourcesRaw = Array.isArray(row.resources) ? row.resources : [];
+      const linkedLineIds = new Set<number>();
+      const linkedLineNames = new Set<string>();
+
+      const rawLines = Array.isArray(row.lines)
+        ? row.lines
+        : Array.isArray(row.line)
+          ? row.line
+          : [];
+
+      for (const rawLine of rawLines) {
+        const lineRow = asRecord(rawLine);
+        const lineId = readNumber(lineRow, ["id", "lineId", "publicId"]);
+        const lineName = readString(lineRow, ["name", "lineName"]);
+
+        if (lineId !== null) {
+          linkedLineIds.add(lineId);
+        }
+
+        if (lineName) {
+          linkedLineNames.add(lineName);
+        }
+      }
 
       return {
         id,
         name,
-        lines: mapLines(linesRaw),
-        resources: mapResources(resourcesRaw),
+        linkedLineIds: Array.from(linkedLineIds),
+        linkedLineNames: Array.from(linkedLineNames),
       };
     })
     .filter((item): item is EquipageItem => item !== null);
@@ -434,7 +470,7 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
   const candidates: Record<string, unknown>[] = [];
   collectConsignmentCandidates(raw, new Set<unknown>(), candidates);
 
-  return candidates
+  const mapped = candidates
     .map((item) => {
       const row = asRecord(item);
       const consignmentId = readNumber(row, [
@@ -459,25 +495,40 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
 
       const status = formatStatus(row);
 
-      const sender =
+      const senderName =
         readString(row, ["sender", "senderName", "pickupName", "sendername"]) ||
         readNestedString(row, "pickupLocation", ["name", "city"]);
 
-      const receiver =
+      const receiverName =
         readString(row, ["receiver", "receiverName", "destinationName", "receivername"]) ||
         readNestedString(row, "destinationLocation", ["name", "city"]);
 
-      const weight =
-        readNestedNumber(row, "consignment", ["estimatedweight"]) ??
-        readNumber(row, ["estimatedweight"]) ??
-        readNumber(row, ["weight", "freightWeight"]) ??
-        readNestedNumber(row, "consignment", ["weight"]) ??
-        parseWeightFromEstimatedProperties(
-          readNestedString(row, "consignment", ["estimatedProperties"])
-        );
+      const destinationCity =
+        readNestedString(row, "destinationLocation", ["city"]) ||
+        readNestedString(row, "destinationLocation", ["name"]) ||
+        receiverName;
 
-      const customerName =
-        readNestedString(row, "customer", ["name"]) || readString(row, ["customerName"]);
+      const destinationLocationName =
+        readNestedString(row, "destinationLocation", ["name"]) ||
+        receiverName;
+
+      const estimatedProperties =
+        readNestedString(row, "consignment", ["estimatedProperties"]) ||
+        readString(row, ["estimatedProperties"]);
+
+      const weight = parseWeightFromEstimatedProperties(estimatedProperties);
+
+      const flm = parseFlmFromEstimatedProperties(estimatedProperties);
+
+      const customerName = normalizeCustomerName(
+        readNestedString(row, "customer", ["name"]) ||
+          readString(row, ["customerName", "customer"]),
+      );
+
+      const pickupLocationName =
+        readNestedString(row, "pickupLocation", ["name"]) ||
+        readString(row, ["pickupName"]) ||
+        senderName;
 
       const zoneName =
         readNestedString(row, "zone", ["name"]) || readString(row, ["zoneName"]);
@@ -492,71 +543,77 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
         readNestedString(row, "consignment", ["positioning"]) ||
         readString(row, ["positioning"]);
 
+      const pickupLocationStreet =
+        readNestedString(row, "pickupLocation", ["street"]) ||
+        readNestedString(row, "pickupLocation", ["name"]) ||
+        senderName;
+
+      const pickupLocationCity =
+        readNestedString(row, "pickupLocation", ["city"]) || readString(row, ["pickupCity"]);
+
+      const pickupLocation = asRecord(row.pickupLocation);
+      const destinationLocation = asRecord(row.destinationLocation);
+
+      const pickupPostalCode =
+        readPostalCodePart(pickupLocation, ["zip", "postalCode", "postCode", "postnummer"]) ||
+        readPostalCodePart(row, ["pickupZip", "pickupPostalCode", "senderZip"]);
+
+      const destinationPostalCode =
+        readPostalCodePart(destinationLocation, ["zip", "postalCode", "postCode", "postnummer"]) ||
+        readPostalCodePart(row, [
+          "destinationZip",
+          "destinationPostalCode",
+          "receiverZip",
+        ]);
+
       const comment =
         readNestedString(row, "consignment", ["comment"]) || readString(row, ["comment"]);
 
-      const deliveryTime =
-        readNestedString(row, "consignment", ["deliveryTime"]) || readString(row, ["deliveryTime"]);
+      const consignmentProperties = readString(row, ["consignmentProperties"]);
 
-      const consignmentProperties =
-        readString(row, ["consignmentProperties"]) ||
-        readNestedString(row, "consignment", ["consignmentProperties"]);
+      const opalBookingId =
+        readNestedNumber(row, "consignment", ["opalBookingId"]) ??
+        readNumber(row, ["opalBookingId"]);
 
-      const estimatedProperties =
-        readString(row, ["estimatedProperties"]) ||
-        readNestedString(row, "consignment", ["estimatedProperties"]);
+      const transporterType =
+        readNestedString(row, "consignment", ["transporterType"]) ||
+        readString(row, ["transporterType"]);
 
-      const temperature =
-        readString(row, ["temperature"]) || readNestedString(row, "consignment", ["temperature"]);
+      const ilogStatus =
+        readNestedString(row, "consignment", ["ilogStatus"]) ||
+        readString(row, ["ilogStatus"]);
 
-      const adrCode = readString(row, ["adrCode"]) || readNestedString(row, "consignment", ["adrCode"]);
-      const adrComment = readString(row, ["adrComment"]) || readNestedString(row, "consignment", ["adrComment"]);
-      
-      const bookingnumber =
-        readNumber(row, ["bookingnumber"]) || readNestedNumber(row, "consignment", ["bookingnumber"]);
-
-      const freightPayerName = readNestedString(row, "freightPayer", ["name"]) || "";
-
-      const inh = readString(row, ["inh"]) || readNestedString(row, "consignment", ["inh"]) || null;
-      const exp = readString(row, ["exp"]) || readNestedString(row, "consignment", ["exp"]) || null;
-
-      const senderCity = readNestedString(row, "pickupLocation", ["city"]) || "";
-      const senderAreaCode = readString(row, ["senderAreaCode"]) || readNestedString(row, "pickupLocation", ["areaCode"]) || "";
-      const senderAddress = readNestedString(row, "pickupLocation", ["street"]) || "";
-
-      const destinationCity = readNestedString(row, "destinationLocation", ["city"]) || "";
-      const destinationAreaCode = readString(row, ["destinationAreaCode"]) || readNestedString(row, "destinationLocation", ["areaCode"]) || "";
-      const destinationAddress = readNestedString(row, "destinationLocation", ["street"]) || "";
+      const goodsDescription = estimatedProperties || comment;
 
       return {
         consignmentId,
         waybillnumber,
         status,
-        sender,
-        receiver,
+        taxPointRelation: "",
+        pickupPostalCode,
+        destinationPostalCode,
+        senderName,
+        receiverName,
+        destinationCity,
+        destinationLocationName,
         weight,
+        flm,
         customerName,
+        pickupLocationName,
         zoneName,
         equipageName,
         pickupDate,
-        deliveryTime,
         positioning,
-        comment,
-        senderCity,
-        senderAreaCode,
-        senderAddress,
-        destinationCity,
-        destinationAreaCode,
-        destinationAddress,
+        pickupLocationStreet,
+        pickupLocationCity,
         consignmentProperties,
         estimatedProperties,
-        temperature,
-        adrCode,
-        adrComment,
-        bookingnumber,
-        freightPayerName,
-        inh,
-        exp,
+        goodsDescription,
+        opalBookingId,
+        transporterType,
+        ilogStatus,
+        prognosis: "",
+        comment,
       };
     })
     .filter((item): item is ConsignmentListItem => {
@@ -564,14 +621,57 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
       // Filter bort helt tomma entries - ta bara rader med faktisk data
       // iLog returnera ofta placeholder-objekt utan data
       const hasData =
-        item.sender.length > 0 ||
-        item.receiver.length > 0 ||
+        item.senderName.length > 0 ||
+        item.receiverName.length > 0 ||
+        item.destinationCity.length > 0 ||
+        item.pickupPostalCode.length > 0 ||
+        item.destinationPostalCode.length > 0 ||
         (item.weight ?? 0) > 0 ||
+        (item.flm ?? 0) > 0 ||
+        item.pickupLocationName.length > 0 ||
+        item.pickupLocationStreet.length > 0 ||
+        item.pickupLocationCity.length > 0 ||
+        item.goodsDescription.length > 0 ||
         item.positioning.length > 0 ||
-        item.comment.length > 0 ||
-        item.consignmentProperties.length > 0;
+        item.comment.length > 0;
       return hasData;
     });
+
+  const score = (item: ConsignmentListItem): number => {
+    return [
+      item.senderName,
+      item.receiverName,
+      item.destinationCity,
+      item.pickupPostalCode,
+      item.destinationPostalCode,
+      item.destinationLocationName,
+      item.customerName,
+      item.zoneName,
+      item.equipageName,
+      item.pickupLocationStreet,
+      item.pickupLocationCity,
+      item.consignmentProperties,
+      item.estimatedProperties,
+      item.goodsDescription,
+      item.transporterType,
+      item.ilogStatus,
+      item.positioning,
+      item.comment,
+    ].reduce(
+      (acc, current) => acc + (current.trim().length > 0 ? 1 : 0),
+      (item.weight !== null ? 1 : 0) + (item.flm !== null ? 1 : 0)
+    );
+  };
+
+  const dedupedByConsignment = new Map<number, ConsignmentListItem>();
+  for (const item of mapped) {
+    const current = dedupedByConsignment.get(item.consignmentId);
+    if (!current || score(item) > score(current)) {
+      dedupedByConsignment.set(item.consignmentId, item);
+    }
+  }
+
+  return Array.from(dedupedByConsignment.values());
 };
 
 /**

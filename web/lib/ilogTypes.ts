@@ -14,8 +14,8 @@
 export type EquipageItem = {
     id: number;
     name: string;
-    lines: LineItem[]
-    resources: ResourceItem[]
+    linkedLineIds: number[];
+    linkedLineNames: string[];
 };
 
 /**
@@ -55,34 +55,31 @@ export type ConsignmentListItem = {
     consignmentId: number;
     waybillnumber: string;
     status: string;
-    sender: string;
-    receiver: string;
+    taxPointRelation: string;
+    pickupPostalCode: string;
+    destinationPostalCode: string;
+    senderName: string;
+    receiverName: string;
+    destinationCity: string;
+    destinationLocationName: string;
     weight: number | null;
+    flm: number | null;
     customerName: string;
+    pickupLocationName: string;
     zoneName: string;
     equipageName: string;
     pickupDate: string;
-    deliveryTime: string;
     positioning: string;
-    comment: string;
-    
-    senderCity: string;
-    senderAreaCode: string;
-    senderAddress: string;
-    
-    destinationCity: string;
-    destinationAreaCode: string;
-    destinationAddress: string;
-    
+    pickupLocationStreet: string;
+    pickupLocationCity: string;
     consignmentProperties: string;
     estimatedProperties: string;
-    temperature: string;
-    adrCode: string;
-    adrComment: string;
-    bookingnumber: number | null;
-    freightPayerName: string;
-    inh: string | null;
-    exp: string | null;
+    goodsDescription: string;
+    opalBookingId: number | null;
+    transporterType: string;
+    ilogStatus: string;
+    prognosis: string;
+    comment: string;
 };
 
 /**
@@ -111,11 +108,3 @@ export type ConsignmentDetail = {
     transporterType: string;
     ilogStatus: string;
 };
-
-export type ResourceItem = {
-    id: number,
-    groupId: number,
-    registrationNumber: string,
-    resourceType: string,
-    comment: string
-}
