@@ -73,7 +73,9 @@ export default function Home() {
       (sum, consignment) => sum + parsePrognosisValue(consignment.prognosis),
       0,
     );
-    console.log(`Total prognosis for equipage with ${consignments.length} consignments: ${total}`);
+    console.log(
+      `Total prognosis for equipage with ${consignments.length} consignments: ${total}`,
+    );
     return total;
   }
 
@@ -81,7 +83,7 @@ export default function Home() {
    * Converts prognosis amount into bar progress using user-configurable reference value.
    */
   function convertProfitToBarProgress(totalPrognosis: number): number {
-    console.log(`Total progrnos: ${totalPrognosis}`)
+    console.log(`Total progrnos: ${totalPrognosis}`);
     if (!Number.isFinite(totalPrognosis) || totalPrognosis <= 0) {
       return 0;
     }
@@ -90,8 +92,13 @@ export default function Home() {
 
     const reference =
       profitabilityReferenceValue > 0 ? profitabilityReferenceValue : 15000;
-    const progress = Math.max(0, Math.min(100, (totalPrognosis / reference) * 100));
-    console.log(`Total prognosis: ${totalPrognosis}, Reference: ${reference}, Progress: ${progress}%`);
+    const progress = Math.max(
+      0,
+      Math.min(100, (totalPrognosis / reference) * 100),
+    );
+    console.log(
+      `Total prognosis: ${totalPrognosis}, Reference: ${reference}, Progress: ${progress}%`,
+    );
     return progress;
   }
 
@@ -118,8 +125,10 @@ export default function Home() {
                       <EquipageCard
                         key={`${line.id}-${equipage.id}`}
                         title={equipage.name}
-                        capacity={(convertFlmToBarProgress(equipage.totalFlm))}
-                        price={convertProfitToBarProgress(equipage.totalProfitabilityPrice)}
+                        capacity={convertFlmToBarProgress(equipage.totalFlm)}
+                        price={convertProfitToBarProgress(
+                          equipage.totalProfitabilityPrice,
+                        )}
                       >
                         <button
                           type="button"
@@ -171,11 +180,11 @@ export default function Home() {
               <button
                 onClick={loadLines}
                 disabled={!areasLoaded || loadingLines}
-                className="w-full bg-[var(--primary-button)] text-[var(--text-primary)] px-4 py-3 rounded hover:bg-[var(--primary-button-hover)] disabled:bg-gray-400 transition font-semibold inline-flex items-center justify-center gap-2"
+                className="w-full bg-[var(--button-submit)] hover:bg-[var(--button-submit-hover)] disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md inline-flex items-center justify-center gap-2"
               >
                 {loadingLines && (
                   <span
-                    className="h-4 w-4 rounded-full border-2 border-[var(--text-primary)] border-t-transparent animate-spin"
+                    className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin"
                     aria-hidden="true"
                   />
                 )}
@@ -254,7 +263,7 @@ export default function Home() {
               </h2>
               <button
                 onClick={closePopup}
-                className="bg-[var(--primary-button)] text-[var(--text-primary)] px-3 py-1 rounded hover:bg-[var(--primary-button-hover)] transition"
+                className="bg-[var(--button-submit)] text-white px-3 py-1 rounded hover:bg-[var(--button-submit-hover)] transition"
               >
                 Stäng
               </button>

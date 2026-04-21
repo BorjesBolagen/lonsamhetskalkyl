@@ -24,6 +24,32 @@ function applyThemeToDOM(theme: ThemeMode) {
 const DEFAULT_THEME: ThemeMode = "light";
 const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
 
+function resolveInitialTheme(): ThemeMode {
+  if (typeof document !== "undefined") {
+    const domTheme = document.documentElement.getAttribute("data-theme");
+    if (domTheme === "light" || domTheme === "dark") {
+      return domTheme;
+    }
+
+    const storedTheme = localStorage.getItem("theme");
+    if (storedTheme === "light" || storedTheme === "dark") {
+      return storedTheme;
+    }
+
+    const cookieTheme = document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith("theme="))
+      ?.split("=")[1];
+
+    if (cookieTheme === "light" || cookieTheme === "dark") {
+      return cookieTheme;
+    }
+  }
+
+  return DEFAULT_THEME;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -84,7 +110,8 @@ export default function Settings() {
   // States för områden
   const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
   // What is currently active in the app
-  const [appliedTheme, setAppliedTheme] = useState<ThemeMode>("light");
+  const [appliedTheme, setAppliedTheme] =
+    useState<ThemeMode>(resolveInitialTheme);
   // What the user is editing (draft)
   const [draftTheme, setDraftTheme] = useState<ThemeMode>(DEFAULT_THEME);
   const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
@@ -140,8 +167,8 @@ export default function Settings() {
 
   useEffect(() => {
     // For dark/lightmode
-    applyTheme(theme);
-  }, [theme]);
+    applyThemeToDOM(appliedTheme);
+  }, [appliedTheme]);
 
   useEffect(() => {
     // Profile info + saved filter/theme preferences from Supabase.
@@ -179,8 +206,6 @@ export default function Settings() {
         const dbTheme = parseTheme(user.filters);
         setAppliedTheme(dbTheme);
         setDraftTheme(dbTheme);
-        // apply once on load
-        applyThemeToDOM(dbTheme);
 
         setProfitabilityReferenceValue(
           parseProfitabilityReferenceValue(user.filters),
@@ -234,7 +259,6 @@ export default function Settings() {
 
       await setFilters(userId, nextFilters as Json);
       setAppliedTheme(draftTheme);
-      applyThemeToDOM(draftTheme);
       setStoredFilters(nextFilters);
       setFiltersStatus({ type: "success", message: "Inställningar sparade." });
       setHasUnsavedChanges(false);
@@ -310,10 +334,11 @@ export default function Settings() {
             {/* KONTO-FLIKEN */}
             <button
               onClick={() => setActiveTab("konto")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "konto"
-                ? "bg-[var(--primary-element)] border-[#446E30]"
-                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-                }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
+                activeTab === "konto"
+                  ? "bg-[var(--primary-element)] border-[#446E30]"
+                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+              }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -335,10 +360,11 @@ export default function Settings() {
             {/* LÖSENORD-FLIKEN */}
             <button
               onClick={() => setActiveTab("losenord")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "losenord"
-                ? "bg-[var(--primary-element)] border-[#446E30]"
-                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-                }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
+                activeTab === "losenord"
+                  ? "bg-[var(--primary-element)] border-[#446E30]"
+                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+              }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -375,7 +401,9 @@ export default function Settings() {
                       <span className="font-medium">{displayName}</span>
                     </div>
                     <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
-                      <span className="text-[var(--text-primary)] font-bold">E-post:</span>
+                      <span className="text-[var(--text-primary)] font-bold">
+                        E-post:
+                      </span>
                       <span className="font-medium">{email}</span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -448,10 +476,11 @@ export default function Settings() {
                         setDraftTheme("light");
                         setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "light"
-                        ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
-                        : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
-                        }`}
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
+                        draftTheme === "light"
+                          ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                          : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                      }`}
                     >
                       Light
                     </button>
@@ -461,10 +490,11 @@ export default function Settings() {
                         setDraftTheme("dark");
                         setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "dark"
-                        ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
-                        : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
-                        }`}
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
+                        draftTheme === "dark"
+                          ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                          : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                      }`}
                     >
                       Dark
                     </button>
@@ -499,7 +529,7 @@ export default function Settings() {
                       className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                     />
                   </div>
-                </div>     
+                </div>
 
                 <div className="pt-2 border-t border-[var(--seperating-gray)] flex flex-col gap-3">
                   <button
