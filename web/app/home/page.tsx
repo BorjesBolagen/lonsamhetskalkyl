@@ -18,6 +18,7 @@ export default function Home() {
     profitabilityReferenceValue,
     lineCards,
     loadingLines,
+    loadingProfitabilityCount,
     lineError,
     hasLoadedLines,
     visibleEquipageCount,
@@ -48,63 +49,17 @@ export default function Home() {
   }
 
   /**
-   * Parses one prognosis value into a number.
-   * Accepts values like "1234", "1 234,50" or strings with mixed text.
-   */
-  function parsePrognosisValue(raw: string): number {
-    const match = raw.match(/-?\d+(?:[.,]\d+)?/);
-    if (!match) {
-      console.log(`No number found in prognosis: "${raw}"`);
-      return 0;
-    }
-
-    const normalized = match[0].replace(",", ".");
-    const parsed = Number(normalized);
-    const result = Number.isFinite(parsed) ? parsed : 0;
-    console.log(`Parsed prognosis "${raw}" -> ${result}`);
-    return result;
-  }
-
-  /**
-   * Sums prognosis values across all consignments for one equipage.
-   */
-  function getTotalPrognosis(consignments: { prognosis: string }[]): number {
-    const total = consignments.reduce(
-      (sum, consignment) => sum + parsePrognosisValue(consignment.prognosis),
-      0,
-    );
-    console.log(
-      `Total prognosis for equipage with ${consignments.length} consignments: ${total}`,
-    );
-    return total;
-  }
-
-  /**
    * Converts prognosis amount into bar progress using user-configurable reference value.
    */
   function convertProfitToBarProgress(totalPrognosis: number): number {
-    console.log(`Total progrnos: ${totalPrognosis}`);
     if (!Number.isFinite(totalPrognosis) || totalPrognosis <= 0) {
       return 0;
     }
 
-    console.log("ASDFASDFASDF");
-
     const reference =
       profitabilityReferenceValue > 0 ? profitabilityReferenceValue : 15000;
-    const progress = Math.max(
-      0,
-      Math.min(100, (totalPrognosis / reference) * 100),
-    );
-    console.log(
-      `Total prognosis: ${totalPrognosis}, Reference: ${reference}, Progress: ${progress}%`,
-    );
-    return progress;
+    return Math.max(0, Math.min(100, (totalPrognosis / reference) * 100));
   }
-
-  const selectedEquipageTotalPrognosis = selectedEquipage
-    ? getTotalPrognosis(selectedEquipage.consignments)
-    : 0;
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
@@ -113,7 +68,7 @@ export default function Home() {
       <main className="flex-grow p-6 flex gap-6">
         <div className="flex-grow">
           {/* Left column: grouped lines with equipage cards. */}
-          {!loadingLines && !lineError && lineCards.length > 0 && (
+          {!lineError && lineCards.length > 0 && (
             <div className="space-y-3">
               {lineCards.map((line) => (
                 <LineCard
@@ -121,24 +76,31 @@ export default function Home() {
                   title={`${line.name} (${line.id})`}
                 >
                   <div className="flex flex-wrap gap-4 items-start w-full">
-                    {line.equipages.map((equipage) => (
-                      <EquipageCard
-                        key={`${line.id}-${equipage.id}`}
-                        title={equipage.name}
-                        capacity={convertFlmToBarProgress(equipage.totalFlm)}
-                        price={convertProfitToBarProgress(
-                          equipage.totalProfitabilityPrice,
-                        )}
-                      >
-                        <button
-                          type="button"
-                          className="w-full text-sm"
-                          onClick={() => openPopup(equipage)}
+                    {line.equipages.map((equipage) => {
+                      const isProfitabilityLoading =
+                        equipage.profitabilityStatus === "idle" ||
+                        equipage.profitabilityStatus === "loading";
+
+                      return (
+                        <EquipageCard
+                          key={`${line.id}-${equipage.id}`}
+                          title={equipage.name}
+                          capacity={convertFlmToBarProgress(equipage.totalFlm)}
+                          price={convertProfitToBarProgress(
+                            equipage.totalProfitabilityPrice,
+                          )}
+                          priceLoading={isProfitabilityLoading}
                         >
-                          Info
-                        </button>
-                      </EquipageCard>
-                    ))}
+                          <button
+                            type="button"
+                            className="w-full text-sm"
+                            onClick={() => openPopup(equipage)}
+                          >
+                            Info
+                          </button>
+                        </EquipageCard>
+                      );
+                    })}
                   </div>
                 </LineCard>
               ))}
@@ -221,6 +183,11 @@ export default function Home() {
                     {visibleEquipageCount} ekipage
                     {selectedDate ? ` för ${selectedDate}.` : "."}
                   </p>
+                  {loadingProfitabilityCount > 0 && (
+                    <p>
+                      Pris beräknas fortfarande för {loadingProfitabilityCount} ekipage.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -263,7 +230,7 @@ export default function Home() {
               </h2>
               <button
                 onClick={closePopup}
-                className="bg-[var(--button-submit)] text-white px-3 py-1 rounded hover:bg-[var(--button-submit-hover)] transition"
+                className="bg-[var(--primary-button)] text-[var(--text-primary)] px-3 py-1 rounded hover:bg-[var(--primary-button-hover)] transition"
               >
                 Stäng
               </button>
@@ -285,7 +252,11 @@ export default function Home() {
                 </p>
                 <p>
                   <strong>Prognos (total):</strong>{" "}
-                  {selectedEquipage.totalProfitabilityPrice.toFixed(0)} kr
+                  {selectedEquipage.profitabilityStatus === "done"
+                    ? `${selectedEquipage.totalProfitabilityPrice.toFixed(0)} kr`
+                    : selectedEquipage.profitabilityStatus === "error"
+                      ? "Kunde inte beräkna"
+                      : "Beräknar..."}
                 </p>
               </div>
 

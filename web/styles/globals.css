@@ -68,3 +68,12 @@ body {
   margin: 0;
   padding: 0;
 }
+
+@keyframes price-loading {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
