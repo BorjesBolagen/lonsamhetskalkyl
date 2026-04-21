@@ -18,8 +18,9 @@ function valideraInput(input: ProfitabilityInput) {
 
 /**
  * Steg 1 för trappstegsmodellen. Försöker hitta exakt matching på kundnamn + taxeprel + vklfgrv.
- * Om en sådan rad hittas så returneras den beräknade intäkten enligt kundnetto * vikt.
- * Om ingen rad hittas returneras null
+ * Om en sådan rad hittas så returneras den beräknade intäkten enligt: kundnetto * vikt.
+ * Om ingen rad hittas i steg 1 returneras null.
+ * 
  * @param input ProfitabilityInput typ med variabler som kan behövas i detta steg
  * @returns Estimerat pris eller null
  * @throws Error om input är fel eller om databasen inte får träff
@@ -97,8 +98,12 @@ export async function try_steg_1(input: ProfitabilityInput): Promise<number | nu
 
 /**
  * Steg 2 för trappstegsmodellen. Försöker hitta exakt matching på kundnamn + avstånd (km) + vklfgrv.
- * Om en sådan rad hittas så returneras den beräknade intäkten enligt 
- * @param input 
+ * Om en sådan rad hittas så returneras ett estimerat pris enligt: medel_se_faktor * snitt_kund_vkl_forh_se * vikt.
+ * Om vi inte får användbar träff i steg 2 returneras null.
+ *
+ * @param input ProfitabilityInput typ med variabler som behövs i steg 2.
+ * @returns Estimerat pris eller null.
+ * @throws Error om input är fel eller om databasanropet misslyckas.
  */
 export async function try_steg_2(input: ProfitabilityInput): Promise<number | null> {
 
@@ -166,6 +171,15 @@ export async function try_steg_2(input: ProfitabilityInput): Promise<number | nu
     return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
 }
 
+/**
+ * Steg 3 för trappstegsmodellen. Försöker hitta matchning på kundnamn och använder genomsnittliga faktorer för att estimera intäkten.
+ * Om träff finns returneras ett estimerat pris enligt: medel_se_faktor * medel_forh_se_kundvis * vikt.
+ * Om vi inte får användbar träff i steg 3 returneras null.
+ *
+ * @param input ProfitabilityInput typ med variabler som behövs i steg 3.
+ * @returns Estimerat pris eller null.
+ * @throws Error om input är fel eller om databasanropet misslyckas.
+ */
 export async function try_steg_3(input: ProfitabilityInput): Promise<number | null> {
     
     valideraInput(input);
@@ -228,4 +242,67 @@ export async function try_steg_3(input: ProfitabilityInput): Promise<number | nu
     // Returnera det lägsta av de estimerade priserna
     return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
 
+}
+
+/**
+ * Steg 4 för trappstegsmodellen. Försöker hitta matchning på taxepunkter och viktklass, oberoende av kundnamn.
+ * Om träff finns returneras ett estimerat pris enligt: (sum_kundnetto / sum_vikt) * vikt.
+ * Om vi inte får användbar träff i steg 4 returneras null.
+ *
+ * @param input ProfitabilityInput typ med variabler som behövs i steg 4.
+ * @returns Estimerat pris eller null.
+ * @throws Error om input är fel eller om databasanropet misslyckas.
+ */
+export async function try_steg_4(input: ProfitabilityInput): Promise<number | null> {
+    
+    valideraInput(input);
+
+    // Hämta variabler
+    const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
+    const weight = Number(input.chargeable_weight);
+    const weight_plus_one = await roundUpWeight(weight);
+
+    // Kolla om supabase har match på bara taxepunkter och viktklass
+    const supabase = await getSupabaseServerClient();
+    const { data: data_orginal, error: error_orginal } = await supabase.rpc("steg_4", {
+        in_sender_taxep: sender_taxep,
+        in_receiver_taxep: receiver_taxep,
+        in_weight: weight
+    });
+
+    if (error_orginal) {
+        throw new Error("Fel vid steg 4: " + JSON.stringify(error_orginal, null, 2));
+    }
+
+    // Kolla om supabase har match på vikt+1
+    const { data: data_plus_ett, error: error_plus_ett } = await supabase.rpc("steg_4", {
+        in_sender_taxep: sender_taxep,
+        in_receiver_taxep: receiver_taxep,
+        in_weight: weight_plus_one
+    });
+
+    if (error_plus_ett) {
+        throw new Error("Fel vid steg 4: " + JSON.stringify(error_plus_ett, null, 2));
+    }
+
+    // -------- Se om vi fick träff och estimera pris om vi fick träff
+    // Beräkna först estimerat pris för orginalvikt
+    let data = data_orginal[0] as { sum_kundnetto: number; sum_vikt: number };
+    const { sum_kundnetto, sum_vikt } = data;
+    if (sum_kundnetto === null) { return null }
+    if (sum_vikt === null) { return null }
+
+    // Beräkna estimerat pris enligt sum_kundnetto / sum_vikt * vikt
+    const estimeratPris_orginal = (sum_kundnetto / sum_vikt) * weight;
+
+    // Beräkna sedan estimerat pris för vikt+1
+    data = data_plus_ett[0] as { sum_kundnetto: number; sum_vikt: number };
+    const { sum_kundnetto: sum_kundnetto_plus_ett, sum_vikt: sum_vikt_plus_ett } = data;
+    if (sum_kundnetto_plus_ett === null) { return null }
+    if (sum_vikt_plus_ett === null) { return null }
+
+    const estimeratPris_plus_ett = (sum_kundnetto_plus_ett / sum_vikt_plus_ett) * weight;
+
+    // Returnera det lägsta av de estimerade priserna
+    return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
 }

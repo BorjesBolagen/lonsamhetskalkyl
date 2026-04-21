@@ -208,11 +208,10 @@ export default function ProfitCalculatorPage() {
 
                 <div className="mt-4 text-left bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
                   <p><strong>Steg:</strong> {result.value.step_used}</p>
-                  <p><strong>Taxeprel:</strong> {result.value.taxeprel}</p>
-                  <p><strong>Viktklass:</strong> {result.value.vklfgrv}</p>
+                  <p><strong>Taxeprel:</strong> {form.taxeprel}</p>
                   <p><strong>Beräknad intäkt:</strong> {result.value.estimated_revenue.toFixed(2)}</p>
                   <p><strong>Tröskelvärde:</strong> {threshold.toFixed(2)}</p>
-                  <p><strong>Förklaring:</strong> {result.value.explanation}</p>
+                  <p><strong>Detalj:</strong> {result.value.detail ?? "-"}</p>
                 </div>
               </>
             )}

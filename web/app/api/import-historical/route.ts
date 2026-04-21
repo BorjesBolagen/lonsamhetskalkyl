@@ -121,8 +121,8 @@ async function handleStartImport(adminId: string, jobId: string) {
         status: 'completed',
         rows_total: result.rowsFound,
         rows_processed: result.rowsFound,
-        rows_valid: result.rowsFound,
-        rows_failed: result.rowsFound - result.insertedRows,
+        rows_valid: result.rowsFound - result.filteredOutRows,
+        rows_failed: result.rowsFound - result.insertedRows - result.filteredOutRows,
         inserted_row_count: result.insertedRows,
         completed_at: new Date().toISOString(),
       })

@@ -23,11 +23,12 @@ import {
   normalizeText,
   parseAreaState,
 } from "../../lib/areaLineConfig";
-import { useEffect, useMemo, useState } from "react";
-import { ProfitabilityResult } from "@/profitability/types";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
-const HOME_CACHE_KEY = "home-lines-cache-v7";
+const HOME_CACHE_KEY = "home-lines-cache-v9";
+
+type ProfitabilityStatus = "idle" | "loading" | "done" | "error";
 
 /**
  * Returns tomorrow in the YYYY-MM-DD format used by the native date input.
@@ -63,6 +64,7 @@ function parseProfitabilityReferenceValue(filters: unknown): number {
 
   return DEFAULT_PROFITABILITY_REFERENCE_VALUE;
 }
+
 type ConsignmentWithProfitability = ConsignmentListItem & {
   profitabilityValue?: ProfitabilityValue | null;
 };
@@ -77,6 +79,7 @@ type EquipageWithConsignments = {
   totalFlm: number;
   totalProfitabilityPrice: number;
   profitabilityBarPercent: number;
+  profitabilityStatus: ProfitabilityStatus;
 };
 
 type LineWithEquipages = LineItem & {
@@ -113,7 +116,8 @@ function ensureEquipageTotals(
   const totalProfitabilityPrice =
     equipage.totalProfitabilityPrice ??
     equipage.consignments.reduce(
-      (sum, consignment) => sum + (consignment.profitabilityValue?.estimated_revenue ?? 0),
+      (sum, consignment) =>
+        sum + (consignment.profitabilityValue?.estimated_revenue ?? 0),
       0,
     );
 
@@ -123,6 +127,7 @@ function ensureEquipageTotals(
     totalFlm,
     totalProfitabilityPrice,
     profitabilityBarPercent: equipage.profitabilityBarPercent ?? 0,
+    profitabilityStatus: equipage.profitabilityStatus ?? "idle",
   };
 }
 
@@ -262,7 +267,6 @@ function pickTrailingNamePart(rawValue: string): string | null {
   return value && value.length > 0 ? value : null;
 }
 
-
 function toBarPercent(totalPrice: number, threshold: number): number {
   if (!Number.isFinite(threshold) || threshold <= 0) {
     return 0;
@@ -278,12 +282,10 @@ async function calculateConsignmentProfitabilityPrice(
   const taxPointRelation = consignment.taxPointRelation?.trim();
   const weight = Number(consignment.weight);
 
-
   if (
     !kundnamn ||
     !taxPointRelation ||
-    !Number.isFinite(weight) ||
-    weight <= 0
+    !Number.isFinite(weight)
   ) {
     return null;
   }
@@ -297,9 +299,8 @@ async function calculateConsignmentProfitabilityPrice(
   if (!response.success || !response.value) {
     return null;
   }
-
-  return response.value;
-} 
+  return response.value as ProfitabilityValue;
+}
 
 /**
  * Returns a readable customer name, falling back to pickupLocationName when needed.
@@ -334,6 +335,7 @@ export function useHomeLines() {
   const [hasLoadedLines, setHasLoadedLines] = useState(false);
   const [candidateEquipageCount, setCandidateEquipageCount] = useState(0);
   const [visibleEquipageCount, setVisibleEquipageCount] = useState(0);
+  const [loadingProfitabilityCount, setLoadingProfitabilityCount] = useState(0);
 
   const [selectedEquipage, setSelectedEquipage] =
     useState<EquipageWithConsignments | null>(null);
@@ -342,7 +344,7 @@ export function useHomeLines() {
     [],
   );
 
-  const [manualThreshold, setManualThreshold] = useState(15000);
+  const latestLoadIdRef = useRef(0);
 
   const selectedAreaLabels = useMemo(
     () =>
@@ -352,7 +354,7 @@ export function useHomeLines() {
     [selectedAreas],
   );
 
-  /**
+ /**
    * Matches a line cluster against the currently selected cluster labels.
    */
   const normalizedSelectedClusters = useMemo(
@@ -378,6 +380,7 @@ export function useHomeLines() {
     setLineCards([]);
     setCandidateEquipageCount(0);
     setVisibleEquipageCount(0);
+    setLoadingProfitabilityCount(0);
     setSelectedEquipage(null);
     setIsPopupOpen(false);
   }
@@ -407,14 +410,6 @@ export function useHomeLines() {
     }
 
     loadCurrentUserSettings();
-
-    const savedThreshold = localStorage.getItem("profitabilityThreshold");
-    if (savedThreshold) {
-      const parsed = Number(savedThreshold);
-      if (Number.isFinite(parsed) && parsed >= 0) {
-        setManualThreshold(parsed);
-      }
-    }
   }, []);
 
   useEffect(() => {
@@ -435,6 +430,14 @@ export function useHomeLines() {
       }
 
       const normalizedLineCards = normalizeLineCards(cached.lineCards);
+      const remainingProfitabilityCount = normalizedLineCards.reduce(
+        (sum, line) =>
+          sum +
+          line.equipages.filter(
+            (equipage) => equipage.profitabilityStatus === "loading",
+          ).length,
+        0,
+      );
 
       setSelectedDate(cached.selectedDate || getDefaultHomeDate());
       setLineCards(normalizedLineCards);
@@ -442,6 +445,7 @@ export function useHomeLines() {
       setCandidateEquipageCount(cached.candidateEquipageCount ?? 0);
       setVisibleEquipageCount(cached.visibleEquipageCount ?? 0);
       setAppliedClusterLabels(cached.appliedClusterLabels ?? []);
+      setLoadingProfitabilityCount(remainingProfitabilityCount);
     } catch {
       // ignore malformed cache
     }
@@ -458,9 +462,21 @@ export function useHomeLines() {
     }
   }
 
-  /**
-   * Removes the cached Home payload from sessionStorage.
-   */
+  function persistCurrentHomeCache(nextLineCards: LineWithEquipages[]): void {
+    const nextVisibleEquipageCount = nextLineCards.reduce(
+      (sum, line) => sum + line.equipages.length,
+      0,
+    );
+
+    persistHomeCache({
+      selectedDate,
+      lineCards: nextLineCards,
+      candidateEquipageCount,
+      visibleEquipageCount: nextVisibleEquipageCount,
+      appliedClusterLabels,
+    });
+  }
+
   function clearHomeCache(): void {
     try {
       sessionStorage.removeItem(HOME_CACHE_KEY);
@@ -469,15 +485,188 @@ export function useHomeLines() {
     }
   }
 
-  /**
-   * Fetches, filters, groups, and caches the Home line data for the selected date.
-   */
+  function updateEquipageInState(
+    equipageId: number,
+    updater: (equipage: EquipageWithConsignments) => EquipageWithConsignments,
+  ): void {
+    setLineCards((currentLines) => {
+      let changed = false;
+
+      const nextLines = currentLines.map((line) => {
+        let lineChanged = false;
+
+        const nextEquipages = line.equipages.map((equipage) => {
+          if (equipage.id !== equipageId) {
+            return equipage;
+          }
+
+          changed = true;
+          lineChanged = true;
+          return ensureEquipageTotals(updater(equipage));
+        });
+
+        return lineChanged ? { ...line, equipages: nextEquipages } : line;
+      });
+
+      if (changed) {
+        persistCurrentHomeCache(nextLines);
+      }
+
+      return changed ? nextLines : currentLines;
+    });
+
+    setSelectedEquipage((current) => {
+      if (!current || current.id !== equipageId) {
+        return current;
+      }
+
+      return ensureEquipageTotals(updater(current));
+    });
+  }
+
+  function mergeLineBatchIntoState(batchLines: LineWithEquipages[]): void {
+    setLineCards((currentLines) => {
+      const lineMap = new Map<string, LineWithEquipages>();
+
+      for (const line of currentLines) {
+        const key = `${line.id}|${normalizeLineName(line.name)}`;
+        lineMap.set(key, {
+          ...line,
+          equipages: [...line.equipages],
+        });
+      }
+
+      for (const line of batchLines) {
+        const key = `${line.id}|${normalizeLineName(line.name)}`;
+        const existingLine = lineMap.get(key);
+
+        if (!existingLine) {
+          lineMap.set(key, {
+            ...line,
+            equipages: [...line.equipages].sort((a, b) =>
+              a.name.localeCompare(b.name, "sv"),
+            ),
+          });
+          continue;
+        }
+
+        const equipageMap = new Map<number, EquipageWithConsignments>();
+        for (const equipage of existingLine.equipages) {
+          equipageMap.set(equipage.id, equipage);
+        }
+
+        for (const equipage of line.equipages) {
+          equipageMap.set(equipage.id, equipage);
+        }
+
+        existingLine.equipages = Array.from(equipageMap.values()).sort((a, b) =>
+          a.name.localeCompare(b.name, "sv"),
+        );
+      }
+
+      const nextLines = Array.from(lineMap.values()).sort((a, b) =>
+        a.name.localeCompare(b.name, "sv"),
+      );
+
+      persistCurrentHomeCache(nextLines);
+      return nextLines;
+    });
+  }
+
+  async function hydrateProfitabilityForEquipages(
+    loadId: number,
+    equipages: EquipageWithConsignments[],
+  ): Promise<void> {
+    const equipagesToHydrate = equipages.filter(
+      (equipage) => equipage.consignments.length > 0,
+    );
+
+    setLoadingProfitabilityCount(equipagesToHydrate.length);
+
+    for (const equipageBatch of chunkArray(equipagesToHydrate, 4)) {
+      await Promise.allSettled(
+        equipageBatch.map(async (equipage) => {
+          if (latestLoadIdRef.current !== loadId) {
+            return;
+          }
+
+          updateEquipageInState(equipage.id, (current) => ({
+            ...current,
+            profitabilityStatus: "loading",
+          }));
+
+          try {
+            const enrichedConsignments: ConsignmentWithProfitability[] =
+              await Promise.all(
+                equipage.consignments.map(async (consignment) => {
+                  try {
+                    const profitabilityValue =
+                      await calculateConsignmentProfitabilityPrice(consignment);
+
+                    return {
+                      ...consignment,
+                      profitabilityValue,
+                    };
+                  } catch {
+                    return {
+                      ...consignment,
+                      profitabilityValue: null,
+                    };
+                  }
+                }),
+              );
+
+            if (latestLoadIdRef.current !== loadId) {
+              return;
+            }
+
+            const totalProfitabilityPrice = enrichedConsignments.reduce(
+              (sum, consignment) =>
+                sum + (consignment.profitabilityValue?.estimated_revenue ?? 0),
+              0,
+            );
+
+            updateEquipageInState(equipage.id, (current) => ({
+              ...current,
+              consignments: enrichedConsignments,
+              totalProfitabilityPrice,
+              profitabilityBarPercent: toBarPercent(
+                totalProfitabilityPrice,
+                profitabilityReferenceValue,
+              ),
+              profitabilityStatus: "done",
+            }));
+          } catch {
+            if (latestLoadIdRef.current !== loadId) {
+              return;
+            }
+
+            updateEquipageInState(equipage.id, (current) => ({
+              ...current,
+              profitabilityStatus: "error",
+            }));
+          } finally {
+            if (latestLoadIdRef.current === loadId) {
+              setLoadingProfitabilityCount((current) => Math.max(0, current - 1));
+            }
+          }
+        }),
+      );
+    }
+  }
+
   const loadLines = async () => {
+    const loadId = Date.now();
+    latestLoadIdRef.current = loadId;
+
     try {
       const requestedClusterLabels = [...selectedAreaLabels];
       setLoadingLines(true);
+      setLoadingProfitabilityCount(0);
       setLineError("");
       setHasLoadedLines(true);
+      setLineCards([]);
+      setVisibleEquipageCount(0);
 
       const ilogDate = toIlogDate(selectedDate);
       if (!ilogDate) {
@@ -548,10 +737,15 @@ export function useHomeLines() {
 
       setCandidateEquipageCount(filteredEquipages.length);
 
-      const groupedByDirectedLine = new Map<string, LineWithEquipages>();
+      const baseEquipages: EquipageWithConsignments[] = [];
+      let accumulatedVisibleCount = 0;
+
+      setAppliedClusterLabels(requestedClusterLabels);
 
       // Step 3: fetch consignments in batches and build display rows.
       for (const equipageBatch of chunkArray(filteredEquipages, 6)) {
+        const groupedByDirectedLine = new Map<string, LineWithEquipages>();
+
         const batchResults = await Promise.allSettled(
           equipageBatch.map(async (equipage) => {
             const consignments = await getIlogConsignmentsWithRetry(
@@ -579,28 +773,8 @@ export function useHomeLines() {
               return null;
             }
 
-            const enrichedConsignments: ConsignmentWithProfitability[] =
-              await Promise.all(
-                visibleConsignments.map(async (consignment) => {
-                  try {
-                    const profitabilityValue =
-                      await calculateConsignmentProfitabilityPrice(consignment);
-
-                    return {
-                      ...consignment,
-                      profitabilityValue,
-                    };
-                  } catch {
-                    return {
-                      ...consignment,
-                      profitabilityValue: null,
-                    };
-                  }
-                }),
-              );
-
             const dominantLineName =
-              getDominantConsignmentLineName(enrichedConsignments) ?? baseLine.name;
+              getDominantConsignmentLineName(visibleConsignments) ?? baseLine.name;
             const dominantLine = approvedLines.find(
               (line) =>
                 normalizeLineName(line.name) ===
@@ -612,32 +786,24 @@ export function useHomeLines() {
               requestedClusterLabels,
             );
 
-            const totalProfitabilityPrice = enrichedConsignments.reduce(
-              (sum, consignment) => sum + (consignment.profitabilityValue?.estimated_revenue ?? 0),
-              0,
-            );
-            console.log(`total price: ${totalProfitabilityPrice} for equipage ${equipage.id}`);
-
             const equipageRow: EquipageWithConsignments = {
               id: equipage.id,
               name: equipage.name,
               // lineId is used for stable grouping and matching; lineName is what the user sees.
               lineId: displayLine.id,
               lineName: directedLineName,
-              consignments: enrichedConsignments,
-              totalWeightKg: enrichedConsignments.reduce(
+              consignments: visibleConsignments,
+              totalWeightKg: visibleConsignments.reduce(
                 (sum, consignment) => sum + (consignment.weight ?? 0),
                 0,
               ),
-              totalFlm: enrichedConsignments.reduce(
+              totalFlm: visibleConsignments.reduce(
                 (sum, consignment) => sum + ((consignment as any).flm ?? 0),
                 0,
               ),
-              totalProfitabilityPrice,
-              profitabilityBarPercent: toBarPercent(
-                totalProfitabilityPrice,
-                manualThreshold,
-              ),
+              totalProfitabilityPrice: 0,
+              profitabilityBarPercent: 0,
+              profitabilityStatus: "idle",
             };
 
             return {
@@ -648,12 +814,19 @@ export function useHomeLines() {
           }),
         );
 
+        if (latestLoadIdRef.current !== loadId) {
+          return;
+        }
+
         for (const result of batchResults) {
           if (result.status !== "fulfilled" || result.value === null) {
             continue;
           }
 
           const { displayLine, directedLineName, equipageRow } = result.value;
+          baseEquipages.push(equipageRow);
+          accumulatedVisibleCount += 1;
+
           const directedLineKey = `${displayLine.id}|${normalizeLineName(directedLineName)}`;
           const lineBucket = groupedByDirectedLine.get(directedLineKey);
 
@@ -667,40 +840,32 @@ export function useHomeLines() {
             });
           }
         }
+
+        const batchLines = Array.from(groupedByDirectedLine.values())
+          .map((line) => ({
+            ...line,
+            equipages: line.equipages.sort((a, b) =>
+              a.name.localeCompare(b.name, "sv"),
+            ),
+          }))
+          .filter((line) => line.equipages.length > 0)
+          .sort((a, b) => a.name.localeCompare(b.name, "sv"));
+
+        mergeLineBatchIntoState(batchLines);
+        setVisibleEquipageCount(accumulatedVisibleCount);
       }
 
-      const nonEmptyLines = Array.from(groupedByDirectedLine.values())
-        .map((line) => ({
-          ...line,
-          equipages: line.equipages.sort((a, b) =>
-            a.name.localeCompare(b.name, "sv"),
-          ),
-        }))
-        .filter((line) => line.equipages.length > 0)
-        .sort((a, b) => a.name.localeCompare(b.name, "sv"));
+      setVisibleEquipageCount(accumulatedVisibleCount);
 
-      const visibleCount = nonEmptyLines.reduce(
-        (sum, line) => sum + line.equipages.length,
-        0,
-      );
-
-      setLineCards(nonEmptyLines);
-      setVisibleEquipageCount(visibleCount);
-      setAppliedClusterLabels(requestedClusterLabels);
-
-      persistHomeCache({
-        selectedDate,
-        lineCards: nonEmptyLines,
-        candidateEquipageCount: filteredEquipages.length,
-        visibleEquipageCount: visibleCount,
-        appliedClusterLabels: requestedClusterLabels,
-      });
+      void hydrateProfitabilityForEquipages(loadId, baseEquipages);
     } catch {
       setLineError("Kunde inte hämta filtrerade linjer, försök igen.");
       resetDisplayedData();
       setAppliedClusterLabels([]);
     } finally {
-      setLoadingLines(false);
+      if (latestLoadIdRef.current === loadId) {
+        setLoadingLines(false);
+      }
     }
   };
 
@@ -715,6 +880,7 @@ export function useHomeLines() {
 
   /** Clear the visible results and remove the cached Home payload. */
   const clearDisplayedLines = () => {
+    latestLoadIdRef.current = Date.now();
     resetDisplayedData();
     setLineError("");
     setHasLoadedLines(false);
@@ -728,6 +894,7 @@ export function useHomeLines() {
     profitabilityReferenceValue,
     lineCards,
     loadingLines,
+    loadingProfitabilityCount,
     lineError,
     hasLoadedLines,
     candidateEquipageCount,
