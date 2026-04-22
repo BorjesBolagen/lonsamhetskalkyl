@@ -8,6 +8,8 @@ type EquipageCardProps = {
   capacity: number;
   price: number;
   priceLoading?: boolean;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 };
 
 export default function EquipageCard({
@@ -16,10 +18,11 @@ export default function EquipageCard({
   capacity,
   price,
   priceLoading = false,
+  onRefresh,
+  isRefreshing = false,
 }: EquipageCardProps) {
   return (
     <div className="bg-[var(--secondary-element)] rounded-xl shadow-sm p-2 w-36 flex flex-col items-center hover:shadow-md transition">
-
       {/* Titel */}
       <div className="bg-[var(--card-titel)] text-[var(--text-secondary)] text-sm font-semibold px-3 py-2 rounded-md mb-3 w-full text-center">
         {title}
@@ -41,9 +44,25 @@ export default function EquipageCard({
         <Pricebar progress={price} />
       )}
 
-      {/* Button */}
-      <div className="bg-[var(--button-fetch)] mt-2 w-half text-center text-[var(--text-primary)] px-2 py-1 rounded hover:bg-[var(--button-fetch-hover)] transition text-sm">
-        {children}
+      {/* Buttons */}
+      <div className="flex gap-2 mt-2 w-full justify-center">
+        <div className="bg-[var(--button-fetch)] flex-1 text-center text-[var(--text-primary)] px-2 py-1 rounded hover:bg-[var(--button-fetch-hover)] transition text-sm">
+          {children}
+        </div>
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="bg-[var(--button-fetch)] px-2 py-1 rounded hover:bg-[var(--button-fetch-hover)] transition text-[var(--text-primary)] disabled:opacity-50"
+          >
+            {isRefreshing ? (
+              <span className="inline-block w-4 h-4 border-2 border-[var(--text-primary)] border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <span>↻</span>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -26,10 +26,14 @@ export default function Home() {
     selectedEquipage,
     isPopupOpen,
     areasLoaded,
+    refreshingEquipages,
+    refreshingLines,
     loadLines,
     clearDisplayedLines,
     openPopup,
     closePopup,
+    refreshEquipageConsignments,
+    refreshLineConsignments,
   } = useHomeLines();
 
   /**
@@ -74,6 +78,8 @@ export default function Home() {
                 <LineCard
                   key={`${line.id}-${line.name}`}
                   title={`${line.name} (${line.id})`}
+                  onRefresh={() => refreshLineConsignments(line.id)}
+                  isRefreshing={refreshingLines.has(line.id)}
                 >
                   <div className="flex flex-wrap gap-4 items-start w-full">
                     {line.equipages.map((equipage) => {
@@ -90,6 +96,10 @@ export default function Home() {
                             equipage.totalProfitabilityPrice,
                           )}
                           priceLoading={isProfitabilityLoading}
+                          onRefresh={() =>
+                            refreshEquipageConsignments(equipage.id)
+                          }
+                          isRefreshing={refreshingEquipages.has(equipage.id)}
                         >
                           <button
                             type="button"
@@ -185,7 +195,8 @@ export default function Home() {
                   </p>
                   {loadingProfitabilityCount > 0 && (
                     <p>
-                      Pris beräknas fortfarande för {loadingProfitabilityCount} ekipage.
+                      Pris beräknas fortfarande för {loadingProfitabilityCount}{" "}
+                      ekipage.
                     </p>
                   )}
                 </div>
@@ -306,10 +317,10 @@ export default function Home() {
                       </td>
                       <td className="py-2 pr-3">
                         {consignment.profitabilityValue
-                        ? consignment.profitabilityValue.step_used === -1
-                          ? "-"
-                          : `${consignment.profitabilityValue.step_used}`
-                        : "-"}
+                          ? consignment.profitabilityValue.step_used === -1
+                            ? "-"
+                            : `${consignment.profitabilityValue.step_used}`
+                          : "-"}
                       </td>
                     </tr>
                   ))}

@@ -109,7 +109,7 @@ function ensureEquipageTotals(
   const totalFlm =
     equipage.totalFlm ??
     equipage.consignments.reduce(
-      (sum, consignment) => sum + ((consignment as any).flm ?? 0),
+      (sum, consignment) => sum + getConsignmentFlm(consignment),
       0,
     );
 
@@ -275,6 +275,11 @@ function toBarPercent(totalPrice: number, threshold: number): number {
   return Math.max(0, Math.min(100, (totalPrice / threshold) * 100));
 }
 
+function getConsignmentFlm(consignment: ConsignmentListItem): number {
+  const rawFlm = (consignment as Record<string, unknown>).flm;
+  return typeof rawFlm === "number" ? rawFlm : 0;
+}
+
 async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
 ): Promise<ProfitabilityValue | null> {
@@ -342,6 +347,12 @@ export function useHomeLines() {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [appliedClusterLabels, setAppliedClusterLabels] = useState<string[]>(
     [],
+  );
+  const [refreshingEquipages, setRefreshingEquipages] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [refreshingLines, setRefreshingLines] = useState<Set<number>>(
+    () => new Set(),
   );
 
   const latestLoadIdRef = useRef(0);
@@ -798,7 +809,7 @@ export function useHomeLines() {
                 0,
               ),
               totalFlm: visibleConsignments.reduce(
-                (sum, consignment) => sum + ((consignment as any).flm ?? 0),
+                (sum, consignment) => sum + getConsignmentFlm(consignment),
                 0,
               ),
               totalProfitabilityPrice: 0,
@@ -888,6 +899,113 @@ export function useHomeLines() {
     clearHomeCache();
   };
 
+  /** Uppdatera konsignmentdata för ett enskilt ekipage. */
+  const refreshEquipageConsignments = async (equipageId: number) => {
+    const ilogDate = toIlogDate(selectedDate);
+    if (!ilogDate) {
+      return;
+    }
+
+    setRefreshingEquipages((current) => new Set(current).add(equipageId));
+
+    try {
+      const refreshedEquipages = await refreshConsignmentsForEquipages(
+        [equipageId],
+        ilogDate,
+      );
+
+      if (refreshedEquipages.length > 0) {
+        const loadId = Date.now();
+        latestLoadIdRef.current = loadId;
+        void hydrateProfitabilityForEquipages(loadId, refreshedEquipages);
+      }
+    } catch {
+      // Ignore refresh failures so the user can retry manually.
+    } finally {
+      setRefreshingEquipages((current) => {
+        const next = new Set(current);
+        next.delete(equipageId);
+        return next;
+      });
+    }
+  };
+
+  /** Uppdatera konsignmentdata för alla ekipagen på en linje. */
+  const refreshLineConsignments = async (lineId: number) => {
+    const ilogDate = toIlogDate(selectedDate);
+    if (!ilogDate) {
+      return;
+    }
+
+    setRefreshingLines((current) => new Set(current).add(lineId));
+
+    try {
+      const targetLine = lineCards.find((line) => line.id === lineId);
+      if (!targetLine) {
+        return;
+      }
+
+      const refreshedEquipages = await refreshConsignmentsForEquipages(
+        targetLine.equipages.map((equipage) => equipage.id),
+        ilogDate,
+      );
+
+      if (refreshedEquipages.length > 0) {
+        const loadId = Date.now();
+        latestLoadIdRef.current = loadId;
+        void hydrateProfitabilityForEquipages(loadId, refreshedEquipages);
+      }
+    } catch {
+      // Ignore refresh failures so the user can retry manually.
+    } finally {
+      setRefreshingLines((current) => {
+        const next = new Set(current);
+        next.delete(lineId);
+        return next;
+      });
+    }
+  };
+
+  const refreshConsignmentsForEquipages = async (
+    equipageIds: number[],
+    ilogDate: string,
+  ): Promise<EquipageWithConsignments[]> => {
+    const equipageById = new Map(
+      lineCards.flatMap((line) => line.equipages.map((equipage) => [equipage.id, equipage])),
+    );
+
+    const refreshed: Array<EquipageWithConsignments | null> = await Promise.all(
+      equipageIds.map(async (equipageId) => {
+        try {
+          const consignments = await getIlogConsignmentsWithRetry(ilogDate, equipageId);
+
+          updateEquipageInState(equipageId, (current) => ({
+            ...current,
+            consignments,
+            profitabilityStatus: "idle",
+          }));
+
+          const baseEquipage = equipageById.get(equipageId);
+          if (!baseEquipage) {
+            return null;
+          }
+
+          return {
+            ...baseEquipage,
+            consignments,
+            profitabilityStatus: "idle",
+          };
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    return refreshed.filter(
+      (equipage): equipage is EquipageWithConsignments => equipage !== null,
+    );
+  };
+
   return {
     selectedDate,
     setSelectedDate,
@@ -904,9 +1022,13 @@ export function useHomeLines() {
     selectedEquipage,
     isPopupOpen,
     areasLoaded,
+    refreshingEquipages,
+    refreshingLines,
     loadLines,
     clearDisplayedLines,
     openPopup,
     closePopup,
+    refreshEquipageConsignments,
+    refreshLineConsignments,
   };
 }
