@@ -314,13 +314,10 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
-      {/* Wrapper för navigationsbaren så den ligger överst */}
-      <div className="relative z-[60]">
-        <Navigation
-          currentPage="settings"
-          hasUnsavedChanges={hasUnsavedChanges}
-        />
-      </div>
+      <Navigation
+        currentPage="settings"
+        hasUnsavedChanges={hasUnsavedChanges}
+      />
 
       <main className="flex-grow flex flex-col p-6 items-center">
         {/* Yttre container, max-w-lg gör lådan lagom snäv (inget onödigt vitt utrymme) */}
