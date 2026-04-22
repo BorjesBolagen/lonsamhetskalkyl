@@ -61,7 +61,7 @@ lib/
 
 ## Hur linjehämtningen fungerar (Home)
 
-Home-flödet byggs i `app/home/useHomeLines.ts` och ser ut så här:
+Home-flödet byggs i `app/home/useHomeDashboardData.ts` och ser ut så här:
 
 1. Läs in användarens sparade klusterfilter (`filters.areas`).
 2. Datum i UI använder `YYYY-MM-DD` (default imorgon).

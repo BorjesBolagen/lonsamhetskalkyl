@@ -4,13 +4,16 @@ import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import LineCard from "../../components/LineCard";
 import EquipageCard from "../../components/EquipageCard";
-import { getDisplayCustomerName, useHomeLines } from "./useHomeLines";
+import {
+  getDisplayCustomerName,
+  useHomeDashboardData,
+} from "./useHomeDashboardData";
 
 const STANDARD_FLM = 19.2;
 
 export default function Home() {
   /**
-   * Home is the presentation layer: it renders cards/popup and delegates data logic to useHomeLines.
+   * Home is the presentation layer: it renders cards/popup and delegates data logic to useHomeDashboardData.
    */
   const {
     selectedDate,
@@ -34,7 +37,7 @@ export default function Home() {
     closePopup,
     refreshEquipageConsignments,
     refreshLineConsignments,
-  } = useHomeLines();
+  } = useHomeDashboardData();
 
   /**
    * Converts total FLM into bar progress.
