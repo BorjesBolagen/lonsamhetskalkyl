@@ -1,0 +1,134 @@
+import "server-only";
+
+import type { ProfitabilityInput, ProfitabilityResult } from "./types";
+import { try_steg_1, try_steg_2, try_steg_3, try_steg_4 } from "./trappsteg_steg";
+import { getSupabaseServerClient } from "@/lib/supabaseServer";
+
+/**
+ * Kör hela trappstegsmodellen basically.
+ * Om step_used är -1 ( => estimated_revenue = 0) så har ett fel inträffat.
+ * I så fall har "detail" mer info om vad som gått snett
+ * @param input Alla parametrar som behövs för alla steg i modellen
+ * @returns {
+ *   step_used: number;
+ *   estimated_revenue: number;
+ *   detail?: string;
+ * }
+ */
+export async function calculateProfitability(
+  input: ProfitabilityInput
+): Promise<ProfitabilityResult> {
+  const weight = Number(input.chargeable_weight);
+
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_weight_class", {
+    input_weight: weight
+  })
+
+  if (error) {
+    console.error("Fel vid hämtning av viktklass: ", error);
+    throw new Error("Fel vid hämtning av viktklass: " + error.message);
+  }
+
+  // Vi ska bara köra trappstegsmodellen för viktklasser över 20. Skippa alla <= 20
+  if (data <= 20) {
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail: "Endast viktklasser över 20 hanteras"
+    }
+  }
+
+
+  // Försök göra steg 1.
+  try {
+    const steg1Estimated = await try_steg_1(input);
+
+    // Om steg 1 gav null så fick vi ingen träff. Fortsätt med steg 2
+    if (steg1Estimated !== null) {
+      return {
+        step_used: 1,
+        estimated_revenue: steg1Estimated
+      }
+    }
+  } catch (error) {
+    console.error("Fel i steg 1, fortsätter till steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail: "Något gick fel i steg 1"
+    }
+  }
+
+  // Försök göra steg 2
+  try {
+    const steg2Estimated = await try_steg_2(input);
+    
+    // Om steg 2 gav null så fick vi ingen träff. Fortsätt med steg 3
+    if (steg2Estimated !== null) {
+      return {
+        step_used: 2,
+        estimated_revenue: steg2Estimated
+      }
+    }
+  } catch (error) {
+    console.error("Fel i steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail: "Något gick fel i steg 2"
+    }
+  }
+
+  // Försök göra steg 3
+  try {
+    const steg3Estimated = await (try_steg_3(input));
+
+    // Om steg 3 gav null så fick vi ingen träff. Fortsätt med steg 4
+    if (steg3Estimated !== null) {
+      return {
+        step_used: 3,
+        estimated_revenue: steg3Estimated
+      }
+    }
+  } catch (error) {
+    console.error("Fel i steg 3. Felmeddelande:", error instanceof Error ? error.message : error);
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail: "Något gick fel i steg 3"
+    }
+  }
+
+  
+  // Försök göra steg 4
+  try {
+    const steg4Estimated = await try_steg_4(input);
+
+    // Om steg 4 gav null så fick vi ingen träff. Fortsätt med steg 5
+    if (steg4Estimated !== null) {
+      return {
+        step_used: 4,
+        estimated_revenue: steg4Estimated
+      }
+    }
+  } catch (error) {
+    console.error("Fel i steg 4. Felmeddelande:", error instanceof Error ? error.message : error);
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail: "Något gick fel i steg 4"
+    }
+  }
+
+  // Gör steg 4 och 5. nu bara returnera 0 och 0
+  return {
+    step_used: -1,
+    estimated_revenue: 0,
+    detail: "Inga steg gav träff"
+  }
+}
+
+export function normalizeText(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/g, " ");
+}

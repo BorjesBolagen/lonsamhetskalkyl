@@ -9,22 +9,22 @@ interface NavigationProps {
   hasUnsavedChanges?: boolean;
 }
 
-export default function Navigation({ currentPage, hasUnsavedChanges = false }: NavigationProps) {
+export default function Navigation({
+  currentPage,
+  hasUnsavedChanges = false,
+}: NavigationProps) {
   const router = useRouter();
 
   const confirmNavigation = () => {
     if (!hasUnsavedChanges) return true;
 
-    return confirm(
-      "Du har osparade ändringar. Vill du verkligen lämna sidan?"
-    );
+    return confirm("Du har osparade ändringar. Vill du verkligen lämna sidan?");
   };
-
 
   const handleLogout = async () => {
     if (hasUnsavedChanges) {
       const ok = confirm(
-        "Du har osparade ändringar. Vill du verkligen logga ut?"
+        "Du har osparade ändringar. Vill du verkligen logga ut?",
       );
       if (!ok) return;
     }
@@ -40,14 +40,14 @@ export default function Navigation({ currentPage, hasUnsavedChanges = false }: N
   };
 
   const getLinkClasses = (isActive: boolean) =>
-  `relative h-full flex items-center px-4 py-4 font-bold transition-colors duration-500
+    `relative h-full flex items-center px-4 py-4 font-bold transition-colors duration-500
    after:content-[''] after:absolute after:left-0 after:bottom-0 after:h-[2px] after:w-full
    after:bg-[var(--text-primary)] after:origin-left after:transition-transform after:duration-300
    ${isActive ? "after:scale-x-100" : "after:scale-x-0"}
    ${!isActive ? "text-[var(--text-heading)] hover:bg-[var(--text-primary)]/10" : ""}`;
 
   return (
-    <nav className="bg-[var(--navbar)] text-[var(--text-primary)] shadow-sm">
+    <nav className="sticky top-0 z-[60] bg-[var(--navbar)] text-[var(--text-primary)] shadow-sm">
       <div className="max-w-8xl mx-auto px-2 sm:px-2 lg:px-6">
         <div className="flex items-center justify-between h-14">
           {/* LEFT SIDE */}
@@ -97,11 +97,12 @@ export default function Navigation({ currentPage, hasUnsavedChanges = false }: N
 
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-[var(--text-primary)]/1000 text-[var(--text-primary)] font-bold cursor-pointer border-1 border-[#C0C0C0] rounded-md hover:bg-[var(--text-primary)]/10 transition-colors duration-150 shadow-md"            >
+              data-testid="logout-button"
+              className="px-4 py-2 bg-[var(--text-primary)]/1000 text-[var(--text-primary)] font-bold cursor-pointer border-1 border-[#C0C0C0] rounded-md hover:bg-[var(--text-primary)]/10 transition-colors duration-150 shadow-md"
+            >
               Logga ut
             </button>
           </div>
-
         </div>
       </div>
     </nav>

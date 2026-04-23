@@ -5,12 +5,13 @@ import { getCurrentlySignedInUser, setFilters } from "../../lib/api";
 import {
   AREA_KEYS,
   AREA_OPTIONS,
+  AreaKey,
   AreaState,
   DEFAULT_AREAS,
   parseAreaState,
-} from "../../lib/areas";
+} from "../../lib/areaLineConfig";
 import { Json } from "../../lib/supabaseServerSchema";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type ThemeMode = "light" | "dark";
 
@@ -21,6 +22,33 @@ function applyThemeToDOM(theme: ThemeMode) {
 }
 
 const DEFAULT_THEME: ThemeMode = "light";
+const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
+
+function resolveInitialTheme(): ThemeMode {
+  if (typeof document !== "undefined") {
+    const domTheme = document.documentElement.getAttribute("data-theme");
+    if (domTheme === "light" || domTheme === "dark") {
+      return domTheme;
+    }
+
+    const storedTheme = localStorage.getItem("theme");
+    if (storedTheme === "light" || storedTheme === "dark") {
+      return storedTheme;
+    }
+
+    const cookieTheme = document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith("theme="))
+      ?.split("=")[1];
+
+    if (cookieTheme === "light" || cookieTheme === "dark") {
+      return cookieTheme;
+    }
+  }
+
+  return DEFAULT_THEME;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -35,6 +63,19 @@ function parseTheme(filters: unknown): ThemeMode {
   }
 
   return DEFAULT_THEME;
+}
+
+function parseProfitabilityReferenceValue(filters: unknown): number {
+  if (
+    isPlainObject(filters) &&
+    typeof filters.profitabilityReferenceValue === "number" &&
+    Number.isFinite(filters.profitabilityReferenceValue) &&
+    filters.profitabilityReferenceValue > 0
+  ) {
+    return filters.profitabilityReferenceValue;
+  }
+
+  return DEFAULT_PROFITABILITY_REFERENCE_VALUE;
 }
 
 export default function Settings() {
@@ -69,9 +110,65 @@ export default function Settings() {
   // States för områden
   const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
   // What is currently active in the app
-  const [appliedTheme, setAppliedTheme] = useState<ThemeMode>("light");
+  const [appliedTheme, setAppliedTheme] =
+    useState<ThemeMode>(resolveInitialTheme);
   // What the user is editing (draft)
-  const [draftTheme, setDraftTheme] = useState<ThemeMode>("light");
+  const [draftTheme, setDraftTheme] = useState<ThemeMode>(DEFAULT_THEME);
+  const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
+    useState<number>(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
+
+  const clusterGroups = useMemo(() => {
+    const sortedKeys = [...AREA_KEYS].sort((a, b) =>
+      AREA_OPTIONS[a].localeCompare(AREA_OPTIONS[b], "sv"),
+    );
+
+    return {
+      sml: sortedKeys.filter((key) =>
+        AREA_OPTIONS[key].toUpperCase().startsWith("SML-"),
+      ),
+      ahl: sortedKeys.filter((key) =>
+        AREA_OPTIONS[key].toUpperCase().startsWith("AHL-"),
+      ),
+      other: sortedKeys.filter((key) => {
+        const value = AREA_OPTIONS[key].toUpperCase();
+        return !value.startsWith("SML-") && !value.startsWith("AHL-");
+      }),
+    };
+  }, []);
+
+  const renderClusterToggle = (distKey: AreaKey) => {
+    return (
+      <label
+        key={distKey}
+        className="flex items-center justify-between cursor-pointer py-1.5 w-full hover:bg-[var(--text-hover)] transition-colors px-2 rounded"
+      >
+        <span className="font-bold text-base">{AREA_OPTIONS[distKey]}</span>
+        <div className="relative flex items-center">
+          <input
+            type="checkbox"
+            checked={districts[distKey]}
+            onChange={() =>
+              setDistricts({
+                ...districts,
+                [distKey]: !districts[distKey],
+              })
+            }
+            className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
+          />
+          {districts[distKey] && (
+            <span className="absolute inset-0 flex items-center justify-center text-[var(--text-primary)] pointer-events-none pb-1 font-bold text-lg">
+              x
+            </span>
+          )}
+        </div>
+      </label>
+    );
+  };
+
+  useEffect(() => {
+    // For dark/lightmode
+    applyThemeToDOM(appliedTheme);
+  }, [appliedTheme]);
 
   useEffect(() => {
     // Profile info + saved filter/theme preferences from Supabase.
@@ -109,9 +206,10 @@ export default function Settings() {
         const dbTheme = parseTheme(user.filters);
         setAppliedTheme(dbTheme);
         setDraftTheme(dbTheme);
-        // apply once on load
-        applyThemeToDOM(dbTheme);
 
+        setProfitabilityReferenceValue(
+          parseProfitabilityReferenceValue(user.filters),
+        );
       } catch (error) {
         setFiltersStatus({
           type: "error",
@@ -156,11 +254,11 @@ export default function Settings() {
         ...storedFilters,
         areas: districts,
         theme: draftTheme,
+        profitabilityReferenceValue,
       };
 
       await setFilters(userId, nextFilters as Json);
       setAppliedTheme(draftTheme);
-      applyThemeToDOM(draftTheme);
       setStoredFilters(nextFilters);
       setFiltersStatus({ type: "success", message: "Inställningar sparade." });
       setHasUnsavedChanges(false);
@@ -176,54 +274,38 @@ export default function Settings() {
 
   // Ikoner för ögat
   const EyeIcon = () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={1.5}
-      stroke="currentColor"
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      fill="none" 
+      viewBox="0 0 24 24" 
+      strokeWidth={1.5} 
+      stroke="currentColor" 
       className="w-6 h-6"
     >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M2.036 12.322a1.012 1.012 0 010-.644C3.542 4.639 8.05 1 12 1c3.95 0 8.454 3.469 9.964 10.678.07.322.07.653 0 0.976 C20.457 18.332 15.947 22 12 22c-3.95 0-8.454-3.469-9.964-10.678z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   );
 
   const EyeSlashIcon = () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={1.5}
-      stroke="currentColor"
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      fill="none" 
+      viewBox="0 0 24 24" 
+      strokeWidth={1.5} 
+      stroke="currentColor" 
       className="w-6 h-6"
     >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
     </svg>
   );
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
-
-      {/* Wrapper för navigationsbaren så den ligger överst */}
-      <div className="relative z-[60]">
-        <Navigation
-          currentPage="settings"
-          hasUnsavedChanges={hasUnsavedChanges}
-        />
-      </div>
+      <Navigation
+        currentPage="settings"
+        hasUnsavedChanges={hasUnsavedChanges}
+      />
 
       <main className="flex-grow flex flex-col p-6 items-center">
         {/* Yttre container, max-w-lg gör lådan lagom snäv (inget onödigt vitt utrymme) */}
@@ -237,10 +319,11 @@ export default function Settings() {
             {/* KONTO-FLIKEN */}
             <button
               onClick={() => setActiveTab("konto")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "konto"
-                ? "bg-[var(--primary-element)] border-[#446E30]"
-                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-                }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
+                activeTab === "konto"
+                  ? "bg-[var(--primary-element)] border-[#446E30]"
+                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+              }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -262,10 +345,11 @@ export default function Settings() {
             {/* LÖSENORD-FLIKEN */}
             <button
               onClick={() => setActiveTab("losenord")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "losenord"
-                ? "bg-[var(--primary-element)] border-[#446E30]"
-                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-                }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
+                activeTab === "losenord"
+                  ? "bg-[var(--primary-element)] border-[#446E30]"
+                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+              }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -299,16 +383,18 @@ export default function Settings() {
                       <span className="text-[var(--text-primary)] font-bold">
                         Användare:
                       </span>
-                      <span className="font-medium">
-                        {displayName}
-                      </span>
+                      <span className="font-medium">{displayName}</span>
                     </div>
                     <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
-                      <span className="text-[var(--text-primary)] font-bold">E-post:</span>
+                      <span className="text-[var(--text-primary)] font-bold">
+                        E-post:
+                      </span>
                       <span className="font-medium">{email}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-[var(--text-primary)] font-bold">Roll:</span>
+                      <span className="text-[var(--text-primary)] font-bold">
+                        Roll:
+                      </span>
                       <span className="bg-[var(--primary-element)] text-[var(--text-primary)] px-3 py-1 rounded-full text-sm font-bold">
                         {role}
                       </span>
@@ -319,45 +405,48 @@ export default function Settings() {
                 {/* DEL 2: Områden (Interaktiv) */}
                 <div>
                   <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
-                    Filtrera dina områden
+                    Filtrera dina kluster
                   </h3>
                   {isLoadingProfile && (
                     <p className="text-sm text-gray-600 mb-3">
                       Laddar sparade inställningar...
                     </p>
                   )}
-                  <div className="flex flex-col space-y-4">
-                    {AREA_KEYS.map((distKey) => {
-                      return (
-                        <label
-                          key={distKey}
-                          className="flex items-center justify-between cursor-pointer border-b border-[var(--seperating-gray)] pb-2 w-full hover:bg-[var(--hover-areas)] transition-colors px-2 rounded"
-                        >
-                          <span className="font-bold text-lg">
-                            {AREA_OPTIONS[distKey]}
-                          </span>
-                          <div className="relative flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={districts[distKey]}
-                              onChange={() => {
-                                setDistricts({
-                                  ...districts,
-                                  [distKey]: !districts[distKey],
-                                });
-                                setHasUnsavedChanges(true);
-                              }}
-                              className="w-6 h-6 appearance-none bg-[var(--bg)] checked:bg-[var(--bg)] rounded-sm cursor-pointer"
-                            />
-                            {districts[distKey] && (
-                              <span className="absolute inset-0 flex items-center justify-center text-[var(--text-primary)] pointer-events-none pb-1 font-bold text-lg">
-                                x
-                              </span>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
+                        <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
+                          SML kluster
+                        </h4>
+                        <div className="space-y-2">
+                          {clusterGroups.sml.map((distKey) =>
+                            renderClusterToggle(distKey),
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
+                        <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
+                          AHL kluster
+                        </h4>
+                        <div className="space-y-2">
+                          {clusterGroups.ahl.map((distKey) =>
+                            renderClusterToggle(distKey),
+                          )}
+                        </div>
+
+                        <div className="pt-2">
+                          <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
+                            Övriga kluster
+                          </h4>
+                          <div className="space-y-2 pt-1">
+                            {clusterGroups.other.map((distKey) =>
+                              renderClusterToggle(distKey),
                             )}
                           </div>
-                        </label>
-                      );
-                    })}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -372,10 +461,11 @@ export default function Settings() {
                         setDraftTheme("light");
                         setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "light"
-                        ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
-                        : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
-                        }`}
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
+                        draftTheme === "light"
+                          ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                          : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                      }`}
                     >
                       Light
                     </button>
@@ -385,17 +475,48 @@ export default function Settings() {
                         setDraftTheme("dark");
                         setHasUnsavedChanges(true);
                       }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "dark"
-                        ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
-                        : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
-                        }`}
+                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
+                        draftTheme === "dark"
+                          ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                          : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                      }`}
                     >
                       Dark
                     </button>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3">
+                {/* DEL 4: Prisreferens för Home */}
+                <div>
+                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
+                    Referensvärde för prisbar
+                  </h3>
+                  <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2">
+                    <label
+                      htmlFor="profitabilityReferenceValue"
+                      className="block text-sm font-medium text-[var(--text-primary)]"
+                    >
+                      Värde som motsvarar 100% i prisbaren
+                    </label>
+                    <input
+                      id="profitabilityReferenceValue"
+                      type="number"
+                      step={100}
+                      value={profitabilityReferenceValue}
+                      onChange={(e) => {
+                        const parsed = Number(e.target.value);
+                        setProfitabilityReferenceValue(
+                          Number.isFinite(parsed) && parsed > 0
+                            ? parsed
+                            : DEFAULT_PROFITABILITY_REFERENCE_VALUE,
+                        );
+                      }}
+                      className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-[var(--seperating-gray)] flex flex-col gap-3">
                   <button
                     onClick={handleSaveSettings}
                     disabled={isLoadingProfile || isSavingFilters}

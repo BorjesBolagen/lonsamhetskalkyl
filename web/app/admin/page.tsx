@@ -3,13 +3,11 @@ import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
 import { sendMessage, signUpProcedure } from "@/lib/api";
-import {
-  Enums,
-  Constants,
-  TablesUpdate,
-} from "@/lib/supabaseServerSchema";
+import { Enums, Constants, TablesUpdate } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
+import { validatePassword } from "@/lib/validation";
+import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 const mockTrafficLeaders = [
@@ -140,16 +138,22 @@ export default function Admin() {
       !signupPassword.trim() ||
       role === ""
     ) {
+      setSignupResponse("Alla fält måste vara ifyllda");
       return;
     }
-    setIsSigningUp(true);
 
     try {
       const supabase = getSupabaseBrowserClient();
 
-      // Check if email already exists
+      // Check if email already exists - Transmits password for validation, not actually used in backend logic
       const APIsignUpResponse = await signUpProcedure(signupEmail);
       if (!APIsignUpResponse.status) throw new Error(APIsignUpResponse.message);
+
+      // signUpProcedure kollar om email är valid. Kolla om password också är valid
+      if (!validatePassword(signupPassword))
+        throw new Error(
+          "Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra",
+        );
 
       // Supabase signup
       const { data, error } = await supabase.auth.signUp({
@@ -161,15 +165,7 @@ export default function Admin() {
       if (!data.user) throw new Error("Kunde inte skapa användare");
 
       const defaultFilters = {
-        areas: {
-          linkoping: false,
-          vaxjo: false,
-          sundsvall: false,
-          jonkoping: false,
-          stockholm: false,
-          goteborg: false,
-          malmo: false,
-        },
+        areas: DEFAULT_AREAS,
         theme: "light",
       };
 
@@ -208,11 +204,7 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
-      
-      {/* Wrapper som tvingar navigationsbaren att alltid ligga FRAMFÖR alla modaler */}
-      <div className="relative z-[60]">
-        <Navigation currentPage="admin" />
-      </div>
+      <Navigation currentPage="admin" />
 
       <main className="flex-grow p-6 flex justify-center">
         <div className="space-y-6 text-[var(--text-primary)] font-sans w-full max-w-6xl">
@@ -230,6 +222,7 @@ export default function Admin() {
               </button>
               <button
                 onClick={() => setIsAddUserOpen(true)}
+                data-testid="signup-button"
                 className="px-4 py-2 bg-[#75C07A] hover:bg-green-800 text-[var(--text-primary)] font-semibold rounded shadow transition-colors duration-300"
               >
                 + Lägg till Användare
@@ -359,6 +352,7 @@ export default function Admin() {
           <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)]">
             <button
               onClick={() => setIsAddUserOpen(false)}
+              data-testid="close-signup-window"
               className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
             >
               ✖
@@ -374,6 +368,7 @@ export default function Admin() {
                     placeholder="Förnamn"
                     value={signupFirstName}
                     onChange={(e) => setSignupFirstName(e.target.value)}
+                    data-testid="signup-set-first-name"
                     className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
                   />
                 </div>
@@ -383,6 +378,7 @@ export default function Admin() {
                     placeholder="Efternamn"
                     value={signupLastName}
                     onChange={(e) => setSignupLastName(e.target.value)}
+                    data-testid="signup-set-last-name"
                     className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
                   />
                 </div>
@@ -390,10 +386,11 @@ export default function Admin() {
 
               <div className="">
                 <input
-                  type="email"
+                  type="text"
                   placeholder="E-mail"
                   value={signupEmail}
                   onChange={(e) => setSignupEmail(e.target.value)}
+                  data-testid="signup-set-email"
                   className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
                 />
               </div>
@@ -406,11 +403,13 @@ export default function Admin() {
                     placeholder="Lösenord"
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
+                    data-testid="signup-set-password"
                     className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
                   />
                   <button
                     type="button"
                     onClick={() => setShowSignupPassword(!showSignupPassword)}
+                    data-testid="signup-password-eye-icon"
                     className="absolute right-3 top-2.5 text-[var(--text-secondary)] hover:text-black transition-colors"
                   >
                     {showSignupPassword ? <EyeSlashIcon /> : <EyeIcon />}
@@ -422,6 +421,7 @@ export default function Admin() {
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value as UserRole)}
+                  data-testid="signup-set-role"
                   className="bg-[var(--input-text)] text-[var(--text-secondary)] focus:outline-none rounded p-2 w-full"
                 >
                   <option value="">Välj roll</option>
@@ -437,13 +437,17 @@ export default function Admin() {
               <button
                 type="submit"
                 disabled={isSigningUp}
+                data-testid="signup-submit-button"
                 className="w-full mt-4 bg-[var(--button-submit)] text-[var(--text-primary)] p-3 rounded font-bold hover:bg-[var(--button-submit-hover)] transition-colors duration-300 disabled:opacity-50"
               >
                 {isSigningUp ? "Registrerar..." : "Registrera"}
               </button>
             </form>
             {signupResponse && (
-              <p className="mt-4 p-3 bg-[var(--secondary-element)]-100 border-l-4 border-[#75C07A] text-sm rounded">
+              <p
+                data-testid="signup-response"
+                className="mt-4 p-3 bg-[var(--secondary-element)]-100 border-l-4 border-[#75C07A]  text-sm rounded"
+              >
                 {signupResponse}
               </p>
             )}
@@ -572,7 +576,9 @@ export default function Admin() {
               ✖
             </button>
             <h3 className="font-bold text-2xl mb-1">{selectedUser.name}</h3>
-            <p className="text-[var(--text-secondary)] mb-6">{selectedUser.email}</p>
+            <p className="text-[var(--text-secondary)] mb-6">
+              {selectedUser.email}
+            </p>
             <div className="space-y-3 bg-[var(--secondary-element)]-50 p-4 rounded-lg">
               <p className="flex justify-between">
                 <strong>Distrikt:</strong> <span>{selectedUser.district}</span>

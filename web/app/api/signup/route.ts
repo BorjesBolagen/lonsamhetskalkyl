@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { getCurrentUser } from "@/lib/backend/utils";
-
-function validateEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
+import { validateEmail } from "@/lib/validation";
 
 /* QUeries the database with an email. Returns the user data if the user exists
     Returns on this format
@@ -24,7 +20,7 @@ export async function GET(request: Request) {
   }
 
   if (!validateEmail(email)) {
-    return NextResponse.json({ status: false, message: "Ogiltigt email-format" }, { status: 400 });
+    return NextResponse.json({ status: false, message: "Email är inte rätt formaterat" }, { status: 400 });
   }
 
   try {

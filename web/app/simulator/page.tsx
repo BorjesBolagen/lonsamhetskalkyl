@@ -3,27 +3,22 @@
 import { useEffect, useState } from "react";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import {
-	calculateSimulationProfitability,
-	type SimulationProfitabilityResponse,
-} from "@/lib/api";
+import { calculateProfitability, type ProfitabilityResponse } from "@/lib/api";
 
 type FormState = {
   kundnamn: string;
-  start: string;
-  slut: string;
+  taxeprel: string;
   vikt: string;
 };
 
 export default function ProfitCalculatorPage() {
   const [form, setForm] = useState<FormState>({
     kundnamn: "",
-    start: "",
-    slut: "",
+    taxeprel: "",
     vikt: "",
   });
 
-  const [result, setResult] = useState<SimulationProfitabilityResponse | null>(null);
+  const [result, setResult] = useState<ProfitabilityResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [isAnimating, setIsAnimating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,8 +37,7 @@ export default function ProfitCalculatorPage() {
   const handleReset = () => {
     setForm({
       kundnamn: "",
-      start: "",
-      slut: "",
+      taxeprel: "",
       vikt: "",
     });
     setResult(null);
@@ -68,14 +62,8 @@ export default function ProfitCalculatorPage() {
         setErrorMsg("Kundnamn måste fyllas i.");
         return;
       }
-
-      if (!form.start.trim()) {
-        setErrorMsg("Start måste fyllas i.");
-        return;
-      }
-
-      if (!form.slut.trim()) {
-        setErrorMsg("Slut måste fyllas i.");
+      if (!form.taxeprel.trim()) {
+        setErrorMsg("Taxerelation måste fyllas i.");
         return;
       }
 
@@ -87,29 +75,32 @@ export default function ProfitCalculatorPage() {
       const parsedWeight = Number(form.vikt);
 
       if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
-        setErrorMsg("Fraktgrundande vikt måste vara ett giltigt tal större än 0.");
+        setErrorMsg(
+          "Fraktgrundande vikt måste vara ett giltigt tal större än 0.",
+        );
         return;
       }
 
-      const data = await calculateSimulationProfitability(
-      form.kundnamn.trim(),
-      form.start.trim(),
-      form.slut.trim(),
-      parsedWeight
-       );
+      const data = await calculateProfitability(
+        form.kundnamn.trim(),
+        form.taxeprel.trim(),
+        parsedWeight,
+      );
 
-			if (!data.success) {
-				const detailText = Array.isArray(data.detail)
-					? data.detail
-							.map((d) => (typeof d?.msg === "string" ? d.msg : JSON.stringify(d)))
-							.join(", ")
-					: typeof data.detail === "string"
-					? data.detail
-					: "";
+      if (!data.success) {
+        const detailText = Array.isArray(data.detail)
+          ? data.detail
+              .map((d) =>
+                typeof d?.msg === "string" ? d.msg : JSON.stringify(d),
+              )
+              .join(", ")
+          : typeof data.detail === "string"
+            ? data.detail
+            : "";
 
-				setErrorMsg(data.error || detailText || "Beräkningen misslyckades.");
-				return;
-			}
+        setErrorMsg(data.error || detailText || "Beräkningen misslyckades.");
+        return;
+      }
 
       setResult(data);
       setIsAnimating(true);
@@ -129,9 +120,8 @@ export default function ProfitCalculatorPage() {
     estimatedRevenue !== null ? estimatedRevenue >= threshold : null;
 
   return (
-    <div className="">
-      <div className="min-h-screen flex flex-col bg-[var(--bg)]">
-        <Navigation currentPage="simulator" />
+    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
+      <Navigation currentPage="simulator" />
 
       <main className="flex-grow flex flex-col lg:flex-row justify-center p-6 gap-6">
         <div className="bg-[var(--primary-element)] max-w-md w-full rounded-xl shadow-md p-8 space-y-6">
@@ -153,7 +143,10 @@ export default function ProfitCalculatorPage() {
                 key={field.id}
                 className="flex flex-col bg-[var(--secondary-element)] p-4 rounded-lg shadow-sm"
               >
-                <label htmlFor={field.id} className="mb-1 text-[var(--text-primary)] text-sm font-medium">
+                <label
+                  htmlFor={field.id}
+                  className="mb-1 text-[var(--text-primary)] text-sm font-medium"
+                >
                   {field.label}
                 </label>
                 <input
@@ -217,12 +210,22 @@ export default function ProfitCalculatorPage() {
                 </div>
 
                 <div className="mt-4 text-left bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
-                  <p><strong>Steg:</strong> {result.value.step_used}</p>
-                  <p><strong>Taxeprel:</strong> {result.value.taxeprel}</p>
-                  <p><strong>Viktklass:</strong> {result.value.vklfgrv}</p>
-                  <p><strong>Beräknad intäkt:</strong> {result.value.estimated_revenue.toFixed(2)}</p>
-                  <p><strong>Tröskelvärde:</strong> {threshold.toFixed(2)}</p>
-                  <p><strong>Förklaring:</strong> {result.value.explanation}</p>
+                  <p>
+                    <strong>Steg:</strong> {result.value.step_used}
+                  </p>
+                  <p>
+                    <strong>Taxeprel:</strong> {form.taxeprel}
+                  </p>
+                  <p>
+                    <strong>Beräknad intäkt:</strong>{" "}
+                    {result.value.estimated_revenue.toFixed(2)}
+                  </p>
+                  <p>
+                    <strong>Tröskelvärde:</strong> {threshold.toFixed(2)}
+                  </p>
+                  <p>
+                    <strong>Detalj:</strong> {result.value.detail ?? "-"}
+                  </p>
                 </div>
               </>
             )}
@@ -230,8 +233,7 @@ export default function ProfitCalculatorPage() {
         </div>
       </main>
 
-        <Footer />
-      </div>
+      <Footer />
     </div>
   );
 }

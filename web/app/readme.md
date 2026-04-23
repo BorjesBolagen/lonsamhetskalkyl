@@ -1,26 +1,22 @@
 # App Routes
 
-Denna mapp innehåller alla Next.js routes för applikationen.
+Denna mapp innehåller alla Next.js-routes för webbappen.
 
 ## Sidor
 
-- **login** - Inloggningssida (utan Navigation)
-- **home** - Översikt/dashboard för trafikledare
-- **simulator** - Simuleringsverktyg för flera leveranser
-- **account** - Användarkontouppgifter
-- **settings** - Användarinställningar
-- **admin** - Admin-panel för systemhantering
+- `login` - inloggningssida
+- `home` - linjer, ekipage och bokningar för valt datum
+- `settings` - filter per kluster och tema
+- `simulator` - simulering
+- `notifications` - notiser
+- `admin` - adminfunktioner och historisk import
 
-## Layout
+## API-routes
 
-Huvudsidor (home, simulator, account, settings, admin):
+- `api/ilog/*` - iLog-proxy + mapping
+- `api/import-historical` - historisk CSV-import
+- `api/login`, `api/token`, `api/users`, `api/message` - auth/användare/support
 
-- Använder Navigation-komponenten
-- Har paddingTop för att ge plats åt sticky navbar
-- Har Footer längst ned
-- Använder flexbox-layout
+## Home-fördjupning
 
-Inloggningssida (login):
-
-- Ingen Navigation
-- Centrerad layout med Footer
+Se [home/README.md](home/README.md) för steg-för-steg-beskrivning av hämtning och filtrering.

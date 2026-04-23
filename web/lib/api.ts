@@ -3,15 +3,13 @@ import type {
 	ConsignmentListItem,
 	EquipageItem,
 	LineItem,
-	ZoneTreeNode,
 } from "@/lib/ilogTypes";
 import type { User } from "@/lib/databaseTypes";
-
 import type {
 	MessageResponse,
 	BasicResponse,
 	IlogResponse,
-	TokenResponse
+	TokenResponse,
 } from "@/lib/returnTypes";
 import { Json } from "./supabaseServerSchema";
 
@@ -19,9 +17,12 @@ type HistoricalImportResponse = {
 	columnsFound: number;
 	rowsFound: number;
 	insertedRows: number;
+	filteredOutRows: number;
 };
 
-
+// ============================================================
+// Messages
+// ============================================================
 
 export const sendMessage = async (message: string): Promise<MessageResponse> => {
 	const sentAt = new Date().toLocaleTimeString("sv-SE", {
@@ -42,6 +43,10 @@ export const sendMessage = async (message: string): Promise<MessageResponse> => 
 
 	return (await response.json()) as MessageResponse;
 };
+
+// ============================================================
+// Auth
+// ============================================================
 
 /**
  * Validerar om inloggningssession/token fortfarande är giltig.
@@ -68,6 +73,23 @@ export const signUpProcedure = async (email: string): Promise<BasicResponse<null
 
   return (await response.json()) as BasicResponse<null>;
 };
+
+export const loginProcedure = async (email: string, password: string, rememberMe: boolean): Promise<BasicResponse<null>> => {
+	const response = await fetch(`/api/login`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		}, body: JSON.stringify({email, password, rememberMe}),
+	});
+	
+	if (!response.ok) throw new Error((await response.json()).message);
+
+	return (await response.json()) as BasicResponse<null>;
+}
+
+// ============================================================
+// Users
+// ============================================================
 
 /**
  * Getter för alla användare i User-tabellen i supabase. Policies gäller, se Supabase
@@ -115,7 +137,7 @@ export const getUser = async (id: string): Promise<BasicResponse<User>> => {
 	const response = await fetch(`/api/users/get/user?userId=${encodeURIComponent(id)}`, {
 		method: "GET",
 	});
-	console.log("getUser raw response:", response);
+
 	if (!response.ok) throw new Error((await response.json()).message);
 	return (await response.json()) as BasicResponse<User>;
 }
@@ -181,7 +203,7 @@ export const setPassword = async (id: string, newPassword: string): Promise<Basi
 }
 
 /**
- * Deletes a uiser based on id. Only admins can do this.
+ * Deletes a user based on id. Only admins can do this.
  * VARNING: Odefinierat beteende om det inte är någon inloggad (alltså om ingen cookie med token finns)
  * @param id 
  * @returns 
@@ -197,6 +219,10 @@ export const deleteUser = async (id: string): Promise<BasicResponse<null>> => {
 	return (await response.json()) as BasicResponse<null>;
 }
 
+
+// ============================================================
+// iLog data
+// ============================================================
 
 
 /**
@@ -269,94 +295,51 @@ export const getIlogConsignment = async (
 };
 
 
-export type SimulationProfitabilityValue = {
-	step_used: number;
-	taxeprel: string;
-	vklfgrv: number;
-	estimated_revenue: number;
-	explanation: string;
+// ============================================================
+// Profitability simulation
+// ============================================================
+export type ProfitabilityValue = {
+  step_used: number;
+  estimated_revenue: number;
+  detail?: string;
 };
 
-export type SimulationProfitabilityResponse = {
-	success: boolean;
-	value?: SimulationProfitabilityValue;
-	error?: string;
-	detail?: string | Array<{ msg?: string; [key: string]: unknown }>;
+export type ProfitabilityResponse = {
+  success: boolean;
+  value?: ProfitabilityValue;
+  error?: string;
+  detail?: string;
 };
 
-/**
- * Kör simulatorns lönsamhetsberäkning via backend-route.
- */
-export const calculateSimulationProfitability = async (
-	kundnamn: string,
-	start: string,
-	slut: string,
-	chargeableWeight: number
-): Promise<SimulationProfitabilityResponse> => {
-	const response = await fetch("/api/profitability_simulation", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			kundnamn,
-			start,
-			slut,
-			chargeable_weight: chargeableWeight,
-		}),
-	});
+export const calculateProfitability = async (
+  kundnamn: string,
+  taxPointRelation: string,
+  chargeableWeight: number
+): Promise<ProfitabilityResponse> => {
+  const response = await fetch("/api/profitability", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      kundnamn,
+      taxPointRelation,
+      chargeable_weight: chargeableWeight,
+    }),
+  });
 
-	const contentType = response.headers.get("content-type") || "";
+  const contentType = response.headers.get("content-type") || "";
 
-	if (!contentType.includes("application/json")) {
-		throw new Error("API:t returnerade inte JSON.");
-	}
-
-	return (await response.json()) as SimulationProfitabilityResponse;
-};
-/**
- * Hämtar alla iLog-zoner for aktuell grupp.
- */
-export const getIlogZones = async (
-	date: string,
-	withEquipages: boolean = true
-): Promise<IlogResponse<ZoneTreeNode[]>> => {
-	const params = new URLSearchParams({
-		date,
-		withEquipages: String(withEquipages), // convert to "true"/"false"
-	});
-
-	const response = await fetch(`/api/ilog/zones?${params.toString()}`, {
-		method: "GET",
-	});
-
-	if (!response.ok) {
-		throw new Error("Request failed: " + (await response.text()));
-	}
-
-	return (await response.json()) as IlogResponse<ZoneTreeNode[]>;
+  if (!contentType.includes("application/json")) {
+    throw new Error("API:t returnerade inte JSON.");
+  }
+  
+  const data = await response.json();
+  console.log("API response:", JSON.stringify(data));
+  return data as ProfitabilityResponse;
 };
 
-/**
- * Hämtar alla iLog-distribution-zoner for aktuell grupp.
- */
-export const getIlogDistributionZones = async (
-	date: string,
-	withEquipages: boolean = true
-): Promise<IlogResponse<ZoneTreeNode[]>> => {
-	const params = new URLSearchParams({
-		date,
-		withEquipages: String(withEquipages),
-	});
-
-	const response = await fetch(`/api/ilog/distribution-zones?${params.toString()}`, {
-		method: "GET",
-	});
-
-	if (!response.ok) {
-		throw new Error("Request failed: " + (await response.text()));
-	}
-
-	return (await response.json()) as IlogResponse<ZoneTreeNode[]>;
-};
+// ============================================================
+// Historical import
+// ============================================================
 
 /**
  * Hämtar signerad upload-URL och jobId för historisk import.

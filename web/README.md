@@ -1,193 +1,128 @@
-# Lönsamhetskalkyl - Web Frontend
+# Lönsamhetskalkyl - Web
 
-Next.js fullstack webbapplikation för ett trafikledningssystem med lönsamhetskalkylering för leveranser.
+Next.js fullstack webbapplikation för trafikledning, linjefiltrering och visning av ekipage/bokningar.
 
-**Arkitektur & allmän info:** Se [../README.md](../README.md)
+Övergripande repo-info finns i [../README.md](../README.md).
 
-## Funktioner
-
-Webbappen erbjuder följande sidor för trafikledare och administratörer:
-
-- **Login** - Autentisering för trafikledare
-- **Översikt** - Dashboard med statusöversikt över nuvarande leveranser
-- **Simulator** - Planera och simulera flera leveranser samtidigt
-- **Inställningar** - Användarinställningar och områdeshantering
-- **Konto** - Användarkontouppgifter och profilinformation
-- **Admin** - Administrativ panel för användarhantering och system-testning
-
-## Installation & Startup
+## Snabbstart
 
 ```bash
 npm install
 npm run dev
 ```
 
-Öppna `http://localhost:3000`
+Öppna http://localhost:3000
 
-### Tillgängliga kommandon
+## Vanliga kommandon
 
-- `npm run dev` - Start dev server (Turbopack)
-- `npm run build` - Build för produktion
-- `npm run start` - Kör producerad build lokalt
+- `npm run dev` - startar utvecklingsservern
+- `npm run build` - bygger produktion
+- `npm run start` - kör byggd app lokalt
 
-## Mappstruktur
+## Aktuell mappstruktur
 
-```
+```text
 app/
-├── layout.tsx              # Root layout för alla sidor
-├── page.tsx                # Root page (/)
-├── login/                  # Inloggningssida
-├── home/                   # Översikt/dashboard
-├── simulator/              # Simuleringsverktyg
-├── account/                # Användarhantering
-├── settings/               # Inställningar
-├── admin/                  # Admin-panel
-└── api/
-  ├── login/              # API-endpoint för login/healthcheck
-    └── message/            # API-endpoint för meddelanden
+  layout.tsx
+  page.tsx
+  login/
+  home/
+  notifications/
+  settings/
+  simulator/
+  admin/
+  api/
+    ilog/
+    import-historical/
+    login/
+    message/
+    profitability_simulation/
+    signup/
+    test/
+    token/
+    users/
 
 components/
-├── Navigation.tsx          # Sticky navigationsbalk (alla sidor utom login)
-├── Footer.tsx              # Sidfot (alla sidor)
+  Navigation.tsx
+  Footer.tsx
+  LineCard.tsx
+  Card.tsx
 
 lib/
-├── api.ts                  # API-hjälpfunktioner (sendMessage)
-├── areas.ts                # Gemensam områdeskonfig (val i settings + filtrering i home)
-├── supabaseServer.ts       # Supabase server-klient
-├── readme.md               # Lib-dokumentation
-
-styles/
-├── constants.ts            # Centraliserade styling-konstanter
-└── globals.css             # Global CSS
-
-public/
-└── static files            # Publika assets
+  api.ts
+  areaLineConfig.ts
+  ilogClient.ts
+  ilogMappers.ts
+  ilogTypes.ts
+  taxPointLookup.ts
+  supabaseServer.ts
+  supabaseBrowser.ts
 ```
 
-## Områdesfilter (settings + home)
+## Hur linjehämtningen fungerar (Home)
 
-- Områdesalternativ och default-värden hanteras centralt i `lib/areas.ts`.
-- Lägg till nya områden i `AREA_OPTIONS` och `DEFAULT_AREAS` i samma fil.
-- `settings` läser och sparar `filters.areas` via den delade modellen.
-- `home` hämtar linjer och filtrerar endast på linjens `fromArea` (startområde).
+Home-flödet byggs i `app/home/useHomeDashboardData.ts` och ser ut så här:
 
-## API-Endpoints
+1. Läs in användarens sparade klusterfilter (`filters.areas`).
+2. Datum i UI använder `YYYY-MM-DD` (default imorgon).
+3. Vid "Hämta filtrerade linjer": hämta linjer och ekipage parallellt.
+4. Mappa linjer till kluster via `getLineCluster`.
+5. Behåll bara linjer som matchar valda kluster.
+6. Matcha ekipage mot dessa linjer via `linkedLineIds` eller `linkedLineNames`.
+7. Hämta bokningar per ekipage i batchar.
+8. Gör en enkel retry per consignments-anrop vid tillfälligt fel.
+9. Filtrera bort ekipage som saknar bokningar.
+10. Gruppera/sortera och visa i line cards + popup.
 
-### POST /api/import-historical
+## Cache i Home
 
-Action-baserad endpoint för historisk CSV-import.
+- Home använder `sessionStorage` med nyckel `home-lines-cache-v6`.
+- Senast hämtade resultat återläses i samma browserflik/session.
+- Cache rensas med "Rensa visning" eller när fliken stängs.
 
-**Action 1: create-upload-session**
-Skapar en import-session och genererar en signerad upload-URL för CSV-filen.
+## API-endpoints
 
-**Action 2: start-import**
-Startar importprocessen för en uppladdad CSV-fil baserat på ett `jobId`.
+### iLog
 
-### Felkoder för historisk import
+- `GET /api/ilog/lines`
+- `GET /api/ilog/equipages`
+- `GET /api/ilog/consignments?date=yyyyMMdd&equipageId=xyz`
+- `GET /api/ilog/consignment?consignmentId=xyz`
 
-- `400 Bad Request`: Ogiltig request, saknat `filename`/`jobId`, okänd `action`, fel CSV-format, saknade obligatoriska kolumner, eller valideringsfel i rader.
-- `401 Unauthorized`: Ingen giltig inloggning/session kunde verifieras.
-- `403 Forbidden`: Inloggad användare saknar admin-roll.
-- `404 Not Found`: Import-jobbet hittades inte (fel `jobId` eller jobb tillhör annan admin).
-- `500 Internal Server Error`: Serverfel, t.ex. Storage-nedladdning misslyckades, databasskrivning misslyckades eller saknad serverkonfiguration (`SUPABASE_SERVICE_ROLE_KEY`).
+### Historisk import
 
-Observera: CSV-filen i Storage raderas alltid efter importförsök (både vid lyckad import och fel).
+- `POST /api/import-historical`
+- `create-upload-session`
+- `start-import`
 
-### GET /api/ilog/equipages
+#### Felkoder (historisk import)
 
-Hämtar ekipage från iLog via endpointen `/ilog-api-web/driver/equipages`.
+- `400 Bad Request`: ogiltig request, saknat `filename`/`jobId`, okänd action, fel CSV-format, saknade obligatoriska kolumner eller valideringsfel i rader.
+- `401 Unauthorized`: ingen giltig inloggning/session kunde verifieras.
+- `403 Forbidden`: inloggad användare saknar admin-roll.
+- `404 Not Found`: importjobbet hittades inte (fel `jobId` eller jobb tillhör annan admin).
+- `500 Internal Server Error`: internt serverfel, t.ex. Storage-nedladdning, databasskrivning eller saknad serverkonfiguration.
 
-**Response (200):**
+Observera: CSV-filen i Storage raderas alltid efter importförsök, både vid lyckad import och vid fel.
 
-```json
-{
-  "status": true,
-  "message": "Equipages fetched",
-  "data": []
-}
-```
+#### Felkoder (iLog-endpoints)
 
-### GET /api/ilog/consignments?date=yyyyMMdd&equipageId=123
+- `400 Bad Request`: felaktiga eller saknade query-parametrar (t.ex. datumformat eller ID-fält).
+- `502 Bad Gateway`: iLog är inte nåbart eller svarar med upstream-fel.
+- `500 Internal Server Error`: oväntat serverfel i vår API-route.
 
-Hämtar bokningar för ett ekipage och datum via iLog endpointen `/ilog-api-web/equipage/consignments`.
+## Miljövariabler
 
-**Response (200):**
+Lägg i `.env.local`:
 
-```json
-{
-  "status": true,
-  "message": "Consignments fetched",
-  "data": []
-}
-```
-
-### GET /api/ilog/consignment?consignmentId=123
-
-Hämtar detaljinformation för en bokning via iLog endpointen `/ilog-api-web/consignment`.
-
-Valfria query-parametrar:
-
-- `includeHistory=true|false` (default `false`)
-- `includeEvents=true|false` (default `false`)
-
-**Response (200):**
-
-```json
-{
-  "status": true,
-  "message": "Consignment fetched",
-  "data": {}
-}
-```
-
-### POST /api/message
-
-Skapar ett nytt meddelande i Supabase.
-
-**Request Body:**
-
-```json
-{
-  "message": "Meddelande text",
-  "sentAt": "HH:MM:SS"
-}
-```
-
-**Response (200):**
-
-```json
-{
-  "received": "Meddelande text",
-  "sentAt": "HH:MM:SS"
-}
-```
-
-### GET /api/message
-
-Hälsokontroll för API-endpointen.
-
-**Response:**
-
-```json
-{
-  "status": "ok"
-}
-```
-
-### Miljövaribler
-
-Se rot-[README.md](../README.md#miljövaribler) för full dokumentation av miljövariabler.
-Dessa behövs och kan fås från Supabase om man vill ha möjlighet att köra och testa API-endpointen lokalt.
-
-Lokalt i `.env.local`:
-
-```
+```env
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 ILOG_BASE_URL=...
 ILOG_USERNAME=...
 ILOG_TRANSPORTER_NUMBER=...
 ILOG_PASSWORD=...
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` ska endast användas i server-only kod och ska inte krävas för att starta frontend lokalt.
+`SUPABASE_SERVICE_ROLE_KEY` får endast användas i serverkod.

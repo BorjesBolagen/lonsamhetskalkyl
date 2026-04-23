@@ -4,6 +4,7 @@ import type { User } from "../databaseTypes";
 import type { BasicResponse } from "../returnTypes";
 import { Database } from "../supabaseServerSchema";
 import { createServerClient } from "@supabase/ssr/dist/main/createServerClient";
+import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
 type SupabaseServerClient = ReturnType<typeof createServerClient<Database>>;
 
@@ -37,3 +38,26 @@ export async function getCurrentUser(supabase: SupabaseServerClient): Promise<Ba
 
   return { status: true, message: "Användare hämtad", data: userData };
 }
+
+/**
+ * Rundar upp en vikt till lägsta vikt i nästa viktklass
+ * @param weight vikt att hitta vikt+1 för
+ * @returns vikt som ett nummer, -1 om fel uppstår
+ */
+export async function roundUpWeight(weight: number): Promise<number> {
+
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase.rpc("round_up_weight", {
+    input_weight: weight
+  });
+
+  if (error) {
+    console.error("Kunde inte konvertera vikt till viktklass: ", error.message);
+    return -1;
+  }
+
+  const viktklass = Number(data);
+  return viktklass;
+
+}
+
