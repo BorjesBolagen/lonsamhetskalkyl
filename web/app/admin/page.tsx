@@ -142,7 +142,6 @@ export default function Admin() {
       return;
     }
 
-
     try {
       const supabase = getSupabaseBrowserClient();
 
@@ -151,7 +150,10 @@ export default function Admin() {
       if (!APIsignUpResponse.status) throw new Error(APIsignUpResponse.message);
 
       // signUpProcedure kollar om email är valid. Kolla om password också är valid
-      if (!validatePassword(signupPassword)) throw new Error("Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra")
+      if (!validatePassword(signupPassword))
+        throw new Error(
+          "Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra",
+        );
 
       // Supabase signup
       const { data, error } = await supabase.auth.signUp({
@@ -202,11 +204,7 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
-      
-      {/* Wrapper som tvingar navigationsbaren att alltid ligga FRAMFÖR alla modaler */}
-      <div className="relative z-[60]">
-        <Navigation currentPage="admin" />
-      </div>
+      <Navigation currentPage="admin" />
 
       <main className="flex-grow p-6 flex justify-center">
         <div className="space-y-6 text-[var(--text-primary)] font-sans w-full max-w-6xl">
@@ -448,7 +446,8 @@ export default function Admin() {
             {signupResponse && (
               <p
                 data-testid="signup-response"
-                className="mt-4 p-3 bg-[var(--secondary-element)]-100 border-l-4 border-[#75C07A]  text-sm rounded">
+                className="mt-4 p-3 bg-[var(--secondary-element)]-100 border-l-4 border-[#75C07A]  text-sm rounded"
+              >
                 {signupResponse}
               </p>
             )}
@@ -577,7 +576,9 @@ export default function Admin() {
               ✖
             </button>
             <h3 className="font-bold text-2xl mb-1">{selectedUser.name}</h3>
-            <p className="text-[var(--text-secondary)] mb-6">{selectedUser.email}</p>
+            <p className="text-[var(--text-secondary)] mb-6">
+              {selectedUser.email}
+            </p>
             <div className="space-y-3 bg-[var(--secondary-element)]-50 p-4 rounded-lg">
               <p className="flex justify-between">
                 <strong>Distrikt:</strong> <span>{selectedUser.district}</span>

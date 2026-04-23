@@ -5,48 +5,36 @@ Detta dokument beskriver hur sidan Home hämtar data från iLog, filtrerar resul
 ## Relevanta filer
 
 - `app/home/page.tsx`
-- `app/home/useHomeLines.ts`
-- `lib/areaLineConfig.ts`
-- `lib/api.ts`
-- `app/api/ilog/lines/route.ts`
-- `app/api/ilog/equipages/route.ts`
-- `app/api/ilog/consignments/route.ts`
+- `app/home/useHomeDashboardData.ts`
+- `app/home/hooks/homeTypesAndUtils.ts`
+- `app/home/hooks/useHomePreferences.ts`
+- `app/home/hooks/useHomeCache.ts`
+- `app/home/hooks/useHomeLineState.ts`
+- `app/home/hooks/useHomeProfitability.ts`
+- `app/home/hooks/useHomeLoader.ts`
 
-## Översikt av flödet
+## Arkitektur i korthet
 
-1. Home laddar användarens sparade filter (`filters.areas`) via `getCurrentlySignedInUser`.
+- `useHomeDashboardData` (i `useHomeDashboardData.ts`) är huvudhooken som kopplar ihop alla del-hooks.
+- `useHomePreferences` hanterar användarens sparade inställningar och datum.
+- `useHomeCacheRestore` laddar tidigare Home-resultat från sessionStorage.
+- `useHomeLineState` hanterar line/equipage-state och state-uppdateringar.
+- `useHomeLoader` hämtar linjer, ekipage och consignments samt refresh-flöden.
+- `useHomeProfitability` tilldelar consignments med prognosvärden.
+- `homeTypesAndUtils` innehåller typer och ren hjälplogik.
+
+## Översikt av dataflödet
+
+1. Home laddar användarens sparade filter via `getCurrentlySignedInUser`.
 2. Användaren väljer datum (default = imorgon) och klickar på "Hämta filtrerade linjer".
-3. Hooken hämtar linjer och ekipage parallellt.
+3. Linjer och ekipage hämtas parallellt.
 4. Linjer mappas till kluster med `getLineCluster`.
 5. Endast linjer i valda kluster behålls.
-6. Ekipage filtreras till de som är kopplade till de godkända linjerna (via lineId eller lineName).
-7. För varje kvarvarande ekipage hämtas bokningar (`consignments`) i batchar.
-8. Ekipage utan bokningar filtreras bort.
-9. Ekipage grupperas per visad linje och sorteras.
-10. Resultatet visas i LineCards + detaljmodal.
-
-## Klusterfiltrering
-
-`lib/areaLineConfig.ts` innehåller:
-
-- `LINE_TO_CLUSTER`: linjenamn -> kluster
-- `getLineCluster(lineName)`: hittar kluster för linjenamn, inklusive omvänt riktad linje
-- `AREA_OPTIONS`/`DEFAULT_AREAS`/`parseAreaState`: model för inställningsfilter
-
-## Ekipage-matchning
-
-Ett ekipage behålls om minst ett av följande stämmer:
-
-- `equipage.linkedLineIds` innehåller en godkänd linje-id
-- `equipage.linkedLineNames` matchar ett godkänt linjenamn (normaliserat)
-
-Detta gör matchningen robust även när iLog-data inte är helt konsekvent.
-
-## Bokningshämtning och robusthet
-
-- Bokningar hämtas via `getIlogConsignments(date, equipageId)`.
-- Hämtningen körs i batchar (`chunkArray`) med `Promise.allSettled`.
-- Varje bokningsanrop har en enkel retry (`getIlogConsignmentsWithRetry`).
+6. Ekipage matchas mot godkända linjer via lineId eller normaliserat lineName.
+7. Consignments hämtas i batchar per ekipage.
+8. Ekipage utan consignments filtreras bort.
+9. Ekipage grupperas/sorteras per visad linje.
+10. Profitability beräknas asynkront per consignment efter initial rendering.
 
 ## Detaljvy (Info-knappen)
 

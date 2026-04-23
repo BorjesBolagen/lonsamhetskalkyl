@@ -169,7 +169,7 @@ export function normalizeNumber(value: string | undefined): number | null {
     }
 
     // Normalize different types of minus signs to regular ASCII minus
-    let normalized = trimmed
+    const normalized = trimmed
         .replace(/\s/g, '')           // Remove whitespace
         .replace(/−/g, '-')            // Unicode minus sign → ASCII minus
         .replace(/–/g, '-')            // En-dash → ASCII minus
