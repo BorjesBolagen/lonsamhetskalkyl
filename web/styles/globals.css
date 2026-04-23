@@ -17,7 +17,7 @@
   --text-hover: #EEEEEE;
   --border-primary: #252525;
   --navbar: #FFFFFF;
-  --card-titel: #5e5e5e;
+  --card-titel: #FAC70C;
   --error: #FF0000;
   --notification-color: #a9dba9;
   --primary-color: #22a122;
@@ -44,7 +44,7 @@ html[data-theme="dark"] {
   --text-hover: #181818;
   --border-primary: #111111;
   --navbar: #121212;
-  --card-titel: #111111;
+  --card-titel: #FAC70C;
   --error: #FF0000;
   --notification-color: #69ad69;
   --primary-color: #1d5f1d;

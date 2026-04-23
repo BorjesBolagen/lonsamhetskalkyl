@@ -24,7 +24,7 @@ export default function EquipageCard({
   return (
     <div className="bg-[var(--secondary-element)] rounded-xl shadow-sm p-2 w-36 flex flex-col items-center hover:shadow-md transition">
       {/* Titel */}
-      <div className="bg-[var(--card-titel)] text-[var(--text-secondary)] text-sm font-semibold px-3 py-2 rounded-md mb-3 w-full text-center">
+      <div className="bg-[var(--card-titel)] text-[var(--text-primary)] text-sm font-bold px-3 py-2 rounded-md mb-3 w-full text-center">
         {title}
       </div>
 

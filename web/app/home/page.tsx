@@ -244,7 +244,7 @@ export default function Home() {
               </h2>
               <button
                 onClick={closePopup}
-                className="bg-[var(--primary-button)] text-[var(--text-primary)] px-3 py-1 rounded hover:bg-[var(--primary-button-hover)] transition"
+                className="bg-[var(--primary-button)] text-[var(--text-primary)] px-3 py-1 rounded cursor-pointer hover:bg-[var(--button-reset-hover)] transition"
               >
                 Stäng
               </button>
@@ -274,7 +274,7 @@ export default function Home() {
                 </p>
               </div>
 
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm text-[var(--text-secondary)] border-collapse" >
                 <thead>
                   <tr className="border-b-2 border-[var(--border-primary)]">
                     <th className="text-left py-2 pr-3">Destination</th>
