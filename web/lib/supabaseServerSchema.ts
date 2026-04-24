@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -430,6 +430,7 @@ export type Database = {
         Args: { in_kilometer: number; in_viktklass: number }
         Returns: number
       }
+      get_office_for_taxep: { Args: { in_taxep: number }; Returns: string }
       get_snitt_forh_se_radvis: {
         Args: { in_kundnamn: string; in_weight: number }
         Returns: number
@@ -490,6 +491,17 @@ export type Database = {
         Returns: {
           sum_kundnetto: number
           sum_vikt: number
+        }[]
+      }
+      steg_5: {
+        Args: {
+          in_receiver_taxep: number
+          in_sender_taxep: number
+          in_weight: number
+        }
+        Returns: {
+          forh_linjevis: number
+          medel_se: number
         }[]
       }
     }
