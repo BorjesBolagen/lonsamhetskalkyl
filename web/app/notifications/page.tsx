@@ -1,123 +1,151 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
+import { getMessages, getAmountOfUnreadMessages, deleteMessage, getAmountOfPages } from "../../lib/api";
 
-import {
-  Tables,
-} from "@/lib/supabaseServerSchema";
-
-import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
+type Notification = {
+  id: number;
+  body: string;
+  created_at: string;
+  created_by: string | null;
+};
 
 export default function NotificationsPage() {
-  const sup = getSupabaseBrowserClient();
+  const pageSize = 5;
 
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
 
-  // Fetch notifications
+
+
+
   useEffect(() => {
-    fetchNotifications();
-  }, []);
+    const loadTotalPages = async () => {
+      try {
+        const res = await getAmountOfPages(pageSize);
+        setTotalPages(Number(res.data)); // FULT tydlgien
+      } catch (error) {
+        console.error(error);
+      }
+    };
 
-  const fetchNotifications = async () => {
-    setLoading(true);
+    loadTotalPages();
+  }, [pageSize]);
 
-    const {
-      data: { user },
-    } = await sup.auth.getUser();
+  useEffect(() => {
+    const loadNotifications = async () => {
+      setLoading(true);
+      try {
+        const res = await getMessages(currentPage, pageSize);
+        setNotifications(res.messages);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    if (!user) return;
+    loadNotifications();
+  }, [currentPage, pageSize]);
 
-    // Fetch notifications the user has NOT read
-    const { data, error } = await sup
-      .from("notifications")
-      .select(
-        `
-        id,
-        title,
-        body,
-        created_at,
-        notification_reads!left(user_id)
-      `
-      )
-      .or(`notification_reads.user_id.is.null,notification_reads.user_id.neq.${user.id}`)
-      .order("created_at", { ascending: false });
+  const removeNotification = async (messageId: number) => {
+    try {
+      await deleteMessage(messageId);
 
-    if (!error && data) {
-      // Filter out notifications already read by this user
-      const unread = data.filter(
-        (n: any) =>
-          !n.notification_reads?.some((r: any) => r.user_id === user.id)
+      setNotifications(prev =>
+        prev.filter(note => note.id !== messageId)
       );
 
-      setNotifications(unread);
+      // Om sidan blir tom → gå tillbaka
+      if (notifications.length === 1 && currentPage > 1) {
+        setCurrentPage(prev => prev - 1);
+      }
+    } catch (error: any) {
+      alert(error.message);
     }
-
-    setLoading(false);
   };
 
-  // Mark notification as read
-  const removeNotification = async (notificationId: string) => {
-    const {
-      data: { user },
-    } = await sup.auth.getUser();
-
-    if (!user) return;
-
-    await sup.from("notification_reads").insert({
-      notification_id: notificationId,
-      user_id: user.id,
-    });
-
-    setNotifications((prev) =>
-      prev.filter((n) => n.id !== notificationId)
-    );
-  };
+  const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   return (
+
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="notifications" />
 
       <main className="flex-grow flex justify-center p-6">
         <div className="bg-[var(--primary-element)] max-w-4xl w-full rounded-xl shadow-md p-8 space-y-6">
 
-          <h1 className="text-3xl font-bold text-center text-[var(--text-primary)] mb-6 border-b-2 border-green-700 pb-2 flex items-center justify-center space-x-2">
-            <span>🔔</span>
-            <span>Notifikationer</span>
+          <h1 className="text-3xl font-bold text-center mb-6 border-b-2 border-green-700 pb-2">
+            🔔 Notifikationer
           </h1>
 
+          {/* Lista */}
           {loading ? (
-            <p className="text-center text-gray-400">Laddar notifikationer...</p>
-          ) : notifications.length === 0 ? (
-            <p className="text-center text-gray-400">Inga nya notifikationer 🎉</p>
+            <p className="text-center">Laddar...</p>
           ) : (
-            <ul className="space-y-4 text-[var(--text-primary)]">
-              {notifications.map((note) => (
+            <ul className="space-y-4">
+              {notifications.map(note => (
                 <li
                   key={note.id}
-                  className="p-4 bg-[var(--notification-color)] rounded-lg shadow-sm flex justify-between items-start gap-4"
+                  className="p-4 bg-[var(--notification-color)] rounded-lg flex justify-between items-center"
                 >
                   <div>
-                    <p className="font-semibold">{note.title}</p>
-                    <p className="text-sm opacity-90">{note.body}</p>
+                    <p>{note.body}</p>
+                    <small className="opacity-70">
+                      {new Date(note.created_at).toLocaleString()}
+                    </small>
                   </div>
 
                   <button
                     onClick={() => removeNotification(note.id)}
                     className="text-sm px-3 py-1 rounded hover:bg-gray-600"
-                    title="Markera som läst"
                   >
-                    Remove
+                    🗑️
                   </button>
                 </li>
               ))}
             </ul>
           )}
+
+          {/* Pagination */}
+          <div className="flex justify-center items-center gap-2 flex-wrap mt-6">
+            <button
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(p => p - 1)}
+              className="px-3 py-1 rounded bg-gray-700 disabled:opacity-50"
+            >
+              ‹
+            </button>
+
+            {pages.map(page => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`px-3 py-1 rounded ${page === currentPage
+                  ? "bg-green-700 font-bold"
+                  : "bg-gray-700 hover:bg-gray-600"
+                  }`}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(p => p + 1)}
+              className="px-3 py-1 rounded bg-gray-700 disabled:opacity-50"
+            >
+              ›
+            </button>
+          </div>
         </div>
       </main>
+
 
       <Footer />
     </div>
