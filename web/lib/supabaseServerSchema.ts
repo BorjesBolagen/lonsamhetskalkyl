@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -258,24 +258,32 @@ export type Database = {
       }
       messages: {
         Row: {
+          body: string
           created_at: string
+          created_by: string | null
           id: number
-          message: string | null
-          sent_at: string | null
         }
         Insert: {
+          body: string
           created_at?: string
+          created_by?: string | null
           id?: number
-          message?: string | null
-          sent_at?: string | null
         }
         Update: {
+          body?: string
           created_at?: string
+          created_by?: string | null
           id?: number
-          message?: string | null
-          sent_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "messages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "User"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pricing_parameter: {
         Row: {
@@ -365,8 +373,8 @@ export type Database = {
           first_name: string | null
           id: string
           last_name: string | null
+          last_read_messages_at: string | null
           role: Database["public"]["Enums"]["User_specialization_types"] | null
-          threshold: number | null
         }
         Insert: {
           email: string
@@ -375,8 +383,8 @@ export type Database = {
           first_name?: string | null
           id: string
           last_name?: string | null
+          last_read_messages_at?: string | null
           role?: Database["public"]["Enums"]["User_specialization_types"] | null
-          threshold?: number | null
         }
         Update: {
           email?: string
@@ -385,8 +393,8 @@ export type Database = {
           first_name?: string | null
           id?: string
           last_name?: string | null
+          last_read_messages_at?: string | null
           role?: Database["public"]["Enums"]["User_specialization_types"] | null
-          threshold?: number | null
         }
         Relationships: []
       }
@@ -413,6 +421,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_amount_of_unread_messages: {
+        Args: { user_id: string }
+        Returns: number
+      }
       get_distance: {
         Args: { in_receiver_taxep: number; in_sender_taxep: number }
         Returns: number
@@ -430,6 +442,7 @@ export type Database = {
         Args: { in_kilometer: number; in_viktklass: number }
         Returns: number
       }
+      get_office_for_taxep: { Args: { in_taxep: number }; Returns: string }
       get_snitt_forh_se_radvis: {
         Args: { in_kundnamn: string; in_weight: number }
         Returns: number
@@ -491,6 +504,21 @@ export type Database = {
           sum_kundnetto: number
           sum_vikt: number
         }[]
+      }
+      steg_5: {
+        Args: {
+          in_receiver_taxep: number
+          in_sender_taxep: number
+          in_weight: number
+        }
+        Returns: {
+          forh_linjevis: number
+          medel_se: number
+        }[]
+      }
+      update_last_read_messages: {
+        Args: { user_id: string }
+        Returns: undefined
       }
     }
     Enums: {

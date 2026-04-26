@@ -157,6 +157,8 @@ export default function SimulatorPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="simulator" />
+    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
+      <Navigation currentPage="simulator" />
 
       <main className="flex-grow p-4 xl:p-5 space-y-4 overflow-hidden">
         <section className="bg-[var(--primary-element)] rounded-2xl shadow-md border border-[var(--seperating-gray)] p-4">
