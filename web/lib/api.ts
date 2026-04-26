@@ -425,3 +425,18 @@ export const runHistoricalImport = async (jobId: string): Promise<{
 	};
 };
 
+export async function getIlogUnassignedConsignments(
+  date: string,
+  lineId: number,
+  lineType: "ZONE" | "ZONEFILTER" | "ZONEGROUP",
+) {
+  const response = await fetch(
+    `/api/ilog/unassigned-consignments?date=${encodeURIComponent(date)}&lineId=${lineId}&lineType=${encodeURIComponent(lineType)}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+
+  return response.json();
+}
