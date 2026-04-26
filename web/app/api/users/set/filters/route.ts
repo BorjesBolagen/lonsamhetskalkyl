@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     try {
         payload = (await request.json()) as FiltersPayload;
     } catch {
-        return NextResponse.json({ error: "Ogiltig JSON" }, { status: 400 });
+        return NextResponse.json({ status: false, message: "Ogiltig JSON" }, { status: 400 });
     }
 
     const { userId, filters } = payload;

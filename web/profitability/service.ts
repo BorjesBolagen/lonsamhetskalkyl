@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { ProfitabilityInput, ProfitabilityResult } from "./types";
-import { try_steg_1, try_steg_2, try_steg_3, try_steg_4 } from "./trappsteg_steg";
+import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
 /**
@@ -121,7 +121,26 @@ export async function calculateProfitability(
     }
   }
 
-  // Gör steg 4 och 5. nu bara returnera 0 och 0
+  // Försök göra steg 5
+  try {
+    const steg5Estimated = await try_steg_5(input);
+
+    // Om steg 5 gav null så fick vi ingen träff. Då har vi testat alla steg i modellen
+    if (steg5Estimated !== null) {
+      return {
+        step_used: 5,
+        estimated_revenue: steg5Estimated
+      }
+    }
+  } catch (error) {
+    console.error("Fel i steg 5. Felmeddelande:", error instanceof Error ? error.message : error);
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail: "Något gick fel i steg 5"
+    }
+  }
+
   return {
     step_used: -1,
     estimated_revenue: 0,

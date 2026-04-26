@@ -4,11 +4,11 @@ import type {
 	EquipageItem,
 	LineItem,
 } from "@/lib/ilogTypes";
-import type { User } from "@/lib/databaseTypes";
+import type { User, Message } from "@/lib/databaseTypes";
 import type {
-	MessageResponse,
 	BasicResponse,
 	IlogResponse,
+	MessageResponse,
 	TokenResponse,
 } from "@/lib/returnTypes";
 import { Json } from "./supabaseServerSchema";
@@ -18,30 +18,6 @@ type HistoricalImportResponse = {
 	rowsFound: number;
 	insertedRows: number;
 	filteredOutRows: number;
-};
-
-// ============================================================
-// Messages
-// ============================================================
-
-export const sendMessage = async (message: string): Promise<MessageResponse> => {
-	const sentAt = new Date().toLocaleTimeString("sv-SE", {
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-	});
-
-	const response = await fetch("/api/message", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ message, sentAt }),
-	});
-
-	if (!response.ok) {
-		throw new Error("Request failed");
-	}
-
-	return (await response.json()) as MessageResponse;
 };
 
 // ============================================================
@@ -142,23 +118,6 @@ export const getUser = async (id: string): Promise<BasicResponse<User>> => {
 	return (await response.json()) as BasicResponse<User>;
 }
 
-/**
- * Sätter threshold fär angivet userId. Admin kan sätta threshold för alla användare, vanliga användare kan bara sätta för sig själva.
- * VARNING: Odefinierat beteende om det inte är någon inloggad (alltså om ingen cookie med token finns)
- * @param id - id för användaren som ska få sin threshold uppdaterad
- * @param threshold - det nya threshold-värdet
- * @returns BasicResponse<null>
- */
-export const setThreshold = async (id: string, threshold: number): Promise<BasicResponse<null>> => {
-	const response = await fetch("/api/users/set/threshold", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ userId: id, threshold }),
-	});
-
-	if (!response.ok) throw new Error((await response.json()).message);
-	return (await response.json()) as BasicResponse<null>;
-}
 
 // NOT DONE YET
 export const setEmail = async (id: string, newEmail: string): Promise<BasicResponse<null>> => {
@@ -425,3 +384,106 @@ export const runHistoricalImport = async (jobId: string): Promise<{
 	};
 };
 
+
+// ============================================================
+// Messaging system
+// ============================================================
+
+/**
+ * Skickar ett meddelande. Bara admins kan skicka meddelanden. 
+ * @param body sträng på meddelandets innehåll. Max 1000 tecken, annars nekas requesten
+ * @returns Promise på BasicResponse<null>. Hur det gick att skicka meddelandet
+ * @throws Error med felmeddelande från API:t om HTTP status inte är 2xx, t.ex. om body är för långt eller om användaren inte är admin.
+ */
+export const addMessage = async (body: string): Promise<BasicResponse<null>> => {
+
+	const response = await fetch("/api/messages/add", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ body })
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+
+	return (await response.json()) as BasicResponse<null>;
+}
+
+/**
+ * Hämtar alla meddelanden inom angiven page sorterat efter datum skickat. Uppdaterar när inloggade användaren senast läste meddelanden
+ * @param page sida att hämta. Börjar på 1 sedan 2 osv.
+ * @param pageSize Hur många meddelanden som finns på en sida. Max 100 annars nekas requesten
+ * @returns Promise på MessageResponse. De två viktigaste attributerna är:
+ * 		- last_read_messages vilket är tiden användaren senast anropade getMessages. Borde kunna översättas till riktig tid med "new Date(last_read_message)"
+ * 		- messages lista på alla meddelanden på denna page. Denna lista är pageSize lång
+ * @throws Error med felmeddelande från API:t om HTTP status inte är 2xx, t.ex om pageSize är för stor
+ */
+export const getMessages = async (page: number, pageSize: number): Promise<MessageResponse> => {
+
+	const params = new URLSearchParams({
+		page: String(page),
+		pageSize: String(pageSize),
+	});
+
+	const response = await fetch(`/api/messages/get/messages?${params.toString()}`, {
+		method: "GET"
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+
+	return (await response.json()) as MessageResponse;
+
+
+}
+
+/**
+ * Hämtar hur många olästa meddelanden den inloggade användaren har.
+ * @returns Promise på BasicResponse där data-fältet har antal olästa meddelanden
+ * @throws Error med felmeddelande från API:t om HTTP status inte är 2xx
+ */
+export const getAmountOfUnreadMessages = async (): Promise<BasicResponse<number>> => {
+
+	const response = await fetch("/api/messages/get/unreadMessages", {
+		method: "GET"
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+
+	return (await response.json()) as BasicResponse<number>;
+}
+
+
+/**
+ * Tar bort ett meddelande baserat på messageId. Bara admins kan göra detta.
+ * @param messageId ID för meddelandet som ska raderas
+ * @returns Promise på BasicResponse<null>. Hur det gick att radera meddelandet
+ * @throws Error med felmeddelande från API:t om HTTP status inte är 2xx, t.ex. om messageId inte finns eller om användaren inte är admin.
+ */
+export const deleteMessage = async (messageId: number): Promise<BasicResponse<null>> => {
+
+	const paramMessageId = encodeURIComponent(String(messageId));
+	const response = await fetch(`/api/messages/delete?messageId=${paramMessageId}`, {
+		method: "DELETE",
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+
+	return (await response.json()) as BasicResponse<null>;
+}
+
+/**
+ * Hämtar hur många sidor som finns givet hur många meddelanden som finns på en sida (pageSize)
+ * @param pageSize Antal meddelanden som visas på varje sida. Max 100 (lib/backend/utils:MAX_NUMBER_OF_MESSAGES_PER_PAGE), annars nekas requesten.
+ * @return Promise på BasicResponse<number>. Antal sidor som finns givet pageSize. Returnernas i data-fältet
+ * @throws Error med felmeddelande från API:t om HTTP status inte är 2xx, t.ex. om pageSize är större än 100.
+ */
+export const getAmountOfPages = async (pageSize: number): Promise<BasicResponse<number>> => {
+
+	const paramPageSize = encodeURIComponent(String(pageSize));
+	const response = await fetch(`/api/messages/get/amountOfPages?pageSize=${paramPageSize}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+
+	return (await response.json()) as BasicResponse<number>;
+}
