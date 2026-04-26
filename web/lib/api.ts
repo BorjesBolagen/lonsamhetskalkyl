@@ -41,13 +41,13 @@ export const tokenCheck = async (): Promise<TokenResponse> => {
  * Sign up funktion för supabase
  */
 export const signUpProcedure = async (email: string): Promise<BasicResponse<null>> => {
-  const response = await fetch(`/api/signup?email=${encodeURIComponent(email)}`, {
-    method: "GET",
-  });
+	const response = await fetch(`/api/signup?email=${encodeURIComponent(email)}`, {
+		method: "GET",
+	});
 
-  if (!response.ok) throw new Error((await response.json()).message);
+	if (!response.ok) throw new Error((await response.json()).message);
 
-  return (await response.json()) as BasicResponse<null>;
+	return (await response.json()) as BasicResponse<null>;
 };
 
 export const loginProcedure = async (email: string, password: string, rememberMe: boolean): Promise<BasicResponse<null>> => {
@@ -55,9 +55,9 @@ export const loginProcedure = async (email: string, password: string, rememberMe
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
-		}, body: JSON.stringify({email, password, rememberMe}),
+		}, body: JSON.stringify({ email, password, rememberMe }),
 	});
-	
+
 	if (!response.ok) throw new Error((await response.json()).message);
 
 	return (await response.json()) as BasicResponse<null>;
@@ -258,42 +258,42 @@ export const getIlogConsignment = async (
 // Profitability simulation
 // ============================================================
 export type ProfitabilityValue = {
-  step_used: number;
-  estimated_revenue: number;
-  detail?: string;
+	step_used: number;
+	estimated_revenue: number;
+	detail?: string;
 };
 
 export type ProfitabilityResponse = {
-  success: boolean;
-  value?: ProfitabilityValue;
-  error?: string;
-  detail?: string;
+	success: boolean;
+	value?: ProfitabilityValue;
+	error?: string;
+	detail?: string;
 };
 
 export const calculateProfitability = async (
-  kundnamn: string,
-  taxPointRelation: string,
-  chargeableWeight: number
+	kundnamn: string,
+	taxPointRelation: string,
+	chargeableWeight: number
 ): Promise<ProfitabilityResponse> => {
-  const response = await fetch("/api/profitability", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      kundnamn,
-      taxPointRelation,
-      chargeable_weight: chargeableWeight,
-    }),
-  });
+	const response = await fetch("/api/profitability", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			kundnamn,
+			taxPointRelation,
+			chargeable_weight: chargeableWeight,
+		}),
+	});
 
-  const contentType = response.headers.get("content-type") || "";
+	const contentType = response.headers.get("content-type") || "";
 
-  if (!contentType.includes("application/json")) {
-    throw new Error("API:t returnerade inte JSON.");
-  }
-  
-  const data = await response.json();
-  console.log("API response:", JSON.stringify(data));
-  return data as ProfitabilityResponse;
+	if (!contentType.includes("application/json")) {
+		throw new Error("API:t returnerade inte JSON.");
+	}
+
+	const data = await response.json();
+	console.log("API response:", JSON.stringify(data));
+	return data as ProfitabilityResponse;
 };
 
 // ============================================================

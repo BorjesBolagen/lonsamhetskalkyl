@@ -3,8 +3,8 @@
 :root {
   --bg: #EEEEEE;
   --text-heading: #000000;
-  --text-primary: #000000;
-  --text-secondary: #111111;
+  --text-primary: #111111;
+  --text-secondary: #3b3b3b;
   --primary-element: #ffffff;
   --secondary-element: #F2F2F2;
   --button-submit: #22c55e;
@@ -30,8 +30,8 @@
 html[data-theme="dark"] {
   --bg: #212121;
   --text-heading: #ffffff;
-  --text-primary: #FFFFFF;
-  --text-secondary: #CCCCCC;
+  --text-primary: #CCCCCC;
+  --text-secondary: #b8b8b8;
   --primary-element: #121212;
   --secondary-element: #202020;
   --button-submit: #22c55e;
