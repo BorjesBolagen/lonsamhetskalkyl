@@ -1,43 +1,33 @@
-# Simulator: Linjer, Ekipage och Oplacerade Bokningar
+# Simulator
 
-Detta dokument beskriver hur Simulator-sidan hämtar data, filtrerar linjer och ekipage enligt samma princip som Home, samt beräknar extra körkostnad för oplacerade bokningar.
+Simulatorn används för att testa om oplacerade bokningar bör läggas på ett valt ekipage.
 
-## Relevanta filer
+## Huvudflöde
 
-- `app/simulator/page.tsx`
-- `app/simulator/useSimulatorPlanner.ts`
-- `lib/backend/transportPlanningUtils.ts`
-- `lib/areaLineConfig.ts`
-- `lib/api.ts`
-- `app/api/ilog/unassigned-consignments/route.ts`
-- `app/api/ilog/consignments/route.ts`
-- `app/api/distance-map/route.ts`
+1. Användaren väljer datum.
+2. Simulatorn hämtar linjer och ekipage med samma filtreringslogik som Home.
+3. Användaren väljer linje.
+4. Simulatorn visar endast ekipage som faktiskt hör till vald linje enligt Home-logiken.
+5. Användaren väljer ekipage.
+6. Simulatorn hämtar ekipagets nuvarande bokningar.
+7. Simulatorn hämtar oplacerade bokningar för vald linje.
+8. Användaren väljer en eller flera oplacerade bokningar.
+9. Vid simulering beräknas:
+   - extra km
+   - extra körkostnad
+   - intäkt
+   - prognos/marginal
 
-## Översikt av flödet
+## Linjer och ekipage
 
-1. Simulatorn laddar användarens sparade områdesfilter via `getCurrentTransportPlanningUserSettings`.
-2. Datum sätts automatiskt till imorgon som standard.
-3. Linjer och ekipage hämtas och filtreras på valda kluster.
-4. Simulatorn bygger sedan en Home-lik synlig linjelista genom att kontrollera vilka linjer som faktiskt får ekipage på valt datum.
-5. När användaren väljer linje hämtas endast ekipage som placeras på den linjen enligt samma logik som Home.
-6. När användaren väljer ekipage hämtas ekipagets nuvarande bokningar.
-7. Oplacerade bokningar hämtas för vald linje och datum.
-8. Användaren markerar en eller flera oplacerade bokningar.
-9. Vid simulering hämtas avstånd från `distance_map` baserat på bokningens `taxPointRelation`.
-10. Extra körkostnad beräknas som `distanceKm / 10 * MILPRIS_PER_MIL`.
+Simulatorn använder samma gemensamma funktioner som Home:
 
-## Linjefiltrering
+- `getFilteredLinesAndEquipagesForAreas`
+- `getEquipageLinePlacement`
+- `equipagePlacementMatchesLine`
 
-Först hämtas alla linjer och ekipage. Därefter filtreras linjerna med användarens valda kluster.
-
-Ett ekipage räknas först som kandidat om det är kopplat till en godkänd linje via:
-
-- `linkedLineIds`
-- `linkedLineNames`
-
-Därefter görs en hårdare kontroll genom att hämta ekipagets bokningar för valt datum och placera ekipaget med samma logik som Home.
+Det innebär att simulatorn inte bara går på kopplade `linkedLineIds` eller `linkedLineNames`, utan även kontrollerar faktiska bokningar på ekipaget för valt datum.
 
 ## Oplacerade bokningar
 
-Oplacerade bokningar hämtas via:
-/api/ilog/unassigned-consignments
+Oplacerade bokningar hämtas via: /api/ilog/unassigned-consignments
