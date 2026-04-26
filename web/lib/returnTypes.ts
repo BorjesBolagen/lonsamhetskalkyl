@@ -1,7 +1,4 @@
-export type MessageResponse = {
-	received: string;
-	sentAt?: string;
-};
+import { Message } from "./databaseTypes";
 
 // Responstyp för de flesta API-anrop i applikationen.
 export type BasicResponse<T> = {
@@ -21,4 +18,11 @@ export type TokenResponse = {
 	success: boolean;
 	message: string;
 	token?: object
+}
+
+export type MessageResponse = {
+	status: boolean;
+	message: string;
+	last_read_messages: string
+	messages: Message[]
 }

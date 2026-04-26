@@ -2,7 +2,7 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState } from "react";
-import { sendMessage, signUpProcedure } from "@/lib/api";
+import { addMessage, signUpProcedure } from "@/lib/api";
 import { Enums, Constants, TablesUpdate } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
@@ -118,8 +118,8 @@ export default function Admin() {
     if (!adminMessage.trim()) return;
     setIsSending(true);
     try {
-      const data = await sendMessage(adminMessage);
-      setAdminResponse(`Backend svarade: ${data.received}`);
+      const data = await addMessage(adminMessage);
+      setAdminResponse(data.message);
       setAdminMessage("");
     } catch (error) {
       setAdminResponse("Fel: " + (error as Error).message);
