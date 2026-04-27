@@ -1,8 +1,9 @@
 "use client";
-import Link from "next/link";
 import GuardedLink from "./GuardedLink";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
+import { useEffect, useState } from "react";
+import { getCurrentlySignedInUser } from "@/lib/api";
 
 interface NavigationProps {
   currentPage?: string;
@@ -15,11 +16,38 @@ export default function Navigation({
 }: NavigationProps) {
   const router = useRouter();
 
-  const confirmNavigation = () => {
-    if (!hasUnsavedChanges) return true;
+  const [userRole, setUserRole] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return window.localStorage.getItem("userRole");
+    } catch {
+      return null;
+    }
+  });
 
-    return confirm("Du har osparade ändringar. Vill du verkligen lämna sidan?");
-  };
+  useEffect(() => {
+    if (userRole) return;
+
+    const fetchUserRole = async () => {
+      try {
+        const response = await getCurrentlySignedInUser();
+        if (response.status && response.data) {
+          setUserRole(response.data.role);
+          if (response.data.role) {
+            try {
+              window.localStorage.setItem("userRole", response.data.role);
+            } catch {
+              // ignore storage errors
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user role:", error);
+      }
+    };
+
+    fetchUserRole();
+  }, [userRole]);
 
   const handleLogout = async () => {
     if (hasUnsavedChanges) {
@@ -32,6 +60,11 @@ export default function Navigation({
     try {
       const supabase = getSupabaseBrowserClient();
       await supabase.auth.signOut();
+      try {
+        window.localStorage.removeItem("userRole");
+      } catch {
+        // ignore storage errors
+      }
       console.log("User signed out successfully");
       router.push("/login");
     } catch (error) {
@@ -68,13 +101,15 @@ export default function Navigation({
               Simulator
             </GuardedLink>
 
-            <GuardedLink
-              href="/admin"
-              className={getLinkClasses(currentPage === "admin")}
-              hasUnsavedChanges={hasUnsavedChanges}
-            >
-              Admin
-            </GuardedLink>
+            {userRole === "admin" && (
+              <GuardedLink
+                href="/admin"
+                className={getLinkClasses(currentPage === "admin")}
+                hasUnsavedChanges={hasUnsavedChanges}
+              >
+                Admin
+              </GuardedLink>
+            )}
           </div>
 
           {/* RIGHT SIDE */}
