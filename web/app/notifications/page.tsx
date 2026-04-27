@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { getMessages, deleteMessage, getAmountOfPages } from "../../lib/api";
+import { getMessages, deleteMessage, getAmountOfPages, getCurrentlySignedInUser } from "../../lib/api";
 
 type Notification = {
   id: number;
@@ -20,6 +20,14 @@ export default function NotificationsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Kolla om inloggad användare är admin
+  useEffect(() => {
+    getCurrentlySignedInUser()
+      .then((res) => setIsAdmin(res.data?.role === "admin"))
+      .catch(console.error);
+  }, []);
 
   const loadTotalPages = useCallback(async (): Promise<number> => {
     const res = await getAmountOfPages(PAGE_SIZE);
@@ -70,7 +78,7 @@ export default function NotificationsPage() {
         <div className="bg-[var(--primary-element)] max-w-4xl w-full rounded-xl shadow-md p-8 flex flex-col">
 
           {/* Header */}
-          <h1 className="flex-shrink-0 text-3xl text-[var(--text-primary)] font-bold text-center mb-6 border-b-2 pb-2">
+          <h1 className="flex-shrink-0 text-3xl text-[var(--text-heading)] font-bold text-center mb-6 border-b-2 pb-2">
             Notifikationer
           </h1>
 
@@ -83,7 +91,7 @@ export default function NotificationsPage() {
                 ))}
               </div>
             ) : notifications.length === 0 ? (
-              <p className="text-center text-gray-400 py-16 text-sm">
+              <p className="text-center text-[var(--text-primary)] py-16 text-sm">
                 Inga notifikationer att visa.
               </p>
             ) : (
@@ -98,7 +106,7 @@ export default function NotificationsPage() {
                   >
                     <div className="flex items-start gap-3 min-w-0">
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-[var(--text-primary)] leading-snug">
+                        <p className="text-sm font-bold text-[var(--text-heading)] leading-snug">
                           {note.body}
                         </p>
                         <p className="text-xs text-[var(--text-secondary)] mt-0.5">
@@ -117,23 +125,26 @@ export default function NotificationsPage() {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setConfirmId(note.id)}
-                      title="Ta bort"
-                      className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-md
-                        text-gray-700 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20
-                        opacity-0 group-hover:opacity-100"
-                    >
-                      <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
-                        <path
-                          d="M1 3.5h12M5 3.5V2.5a.5.5 0 01.5-.5h3a.5.5 0 01.5.5v1M5.5 6.5v4M8.5 6.5v4M2.5 3.5l.8 8a.5.5 0 00.5.5h6.4a.5.5 0 00.5-.5l.8-8"
-                          stroke="currentColor"
-                          strokeWidth="1.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
+                    {/* Endast synlig för admins */}
+                    {isAdmin && (
+                      <button
+                        onClick={() => setConfirmId(note.id)}
+                        title="Ta bort"
+                        className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-md
+                          text-gray-700 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20
+                          opacity-0 group-hover:opacity-100"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
+                          <path
+                            d="M1 3.5h12M5 3.5V2.5a.5.5 0 01.5-.5h3a.5.5 0 01.5.5v1M5.5 6.5v4M8.5 6.5v4M2.5 3.5l.8 8a.5.5 0 00.5.5h6.4a.5.5 0 00.5-.5l.8-8"
+                            stroke="currentColor"
+                            strokeWidth="1.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -180,8 +191,8 @@ export default function NotificationsPage() {
 
       <Footer />
 
-      {/* Delete confirmation modal */}
-      {confirmId !== null && (
+      {/* Delete confirmation modal — bara admins kan nå hit */}
+      {isAdmin && confirmId !== null && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
           onClick={() => setConfirmId(null)}
