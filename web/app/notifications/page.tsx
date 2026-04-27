@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { getMessages, deleteMessage, getAmountOfPages, getCurrentlySignedInUser } from "../../lib/api";
+import { getMessages, deleteMessage, getAmountOfPages, getCurrentlySignedInUser, getUser } from "../../lib/api";
 
 type Notification = {
   id: number;
@@ -22,12 +22,37 @@ export default function NotificationsPage() {
   const [confirmId, setConfirmId] = useState<number | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  // Cache: userId → "Förnamn Efternamn"
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
+
   // Kolla om inloggad användare är admin
   useEffect(() => {
     getCurrentlySignedInUser()
       .then((res) => setIsAdmin(res.data?.role === "admin"))
       .catch(console.error);
   }, []);
+
+  // Hämta namn för nya created_by-IDs när notifications ändras
+  useEffect(() => {
+    const unknownIds = notifications
+      .map((n) => n.created_by)
+      .filter((id): id is string => id !== null && !(id in userNames));
+
+    const uniqueIds = [...new Set(unknownIds)];
+    if (uniqueIds.length === 0) return;
+
+    uniqueIds.forEach(async (id) => {
+      try {
+        const res = await getUser(id);
+        const first = res.data?.first_name ?? "";
+        const last = res.data?.last_name ?? "";
+        const fullName = `${first} ${last}`.trim() || id;
+        setUserNames((prev) => ({ ...prev, [id]: fullName }));
+      } catch {
+        setUserNames((prev) => ({ ...prev, [id]: id }));
+      }
+    });
+  }, [notifications]);
 
   const loadTotalPages = useCallback(async (): Promise<number> => {
     const res = await getAmountOfPages(PAGE_SIZE);
@@ -99,40 +124,40 @@ export default function NotificationsPage() {
                 {notifications.map((note) => (
                   <li
                     key={note.id}
-                    className="group flex items-center justify-between gap-4 px-5 py-4 rounded-lg
-                      bg-[var(--secondary-element)]
-                      border border-transparent
-                      hover:border-[var(--button-submit-hover)]"
+                    className="group flex items-center justify-between gap-4 px-5 py-5 rounded-lg
+    bg-[var(--secondary-element)]
+    border border-transparent
+    hover:border-[var(--button-submit-hover)]"
                   >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-[var(--text-heading)] leading-snug">
-                          {note.body}
+                    {/* Vänster: meddelande */}
+                    <p className="text-sm font-bold text-[var(--text-heading)] leading-snug min-w-0 flex-1">
+                      {note.body}
+                    </p>
+
+                    {/* Höger: namn + datum staplade */}
+                    <div className="flex-shrink-0 text-right">
+                      {note.created_by && (
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          {userNames[note.created_by] ?? "…"}
                         </p>
-                        <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                          {new Date(note.created_at).toLocaleString("sv-SE", {
-                            day: "numeric",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                          {note.created_by && (
-                            <span className="ml-2 text-[var(--text-secondary)]">
-                              · {note.created_by}
-                            </span>
-                          )}
-                        </p>
-                      </div>
+                      )}
+                      <p className="text-xs text-[var(--text-secondary)]">
+                        {new Date(note.created_at).toLocaleString("sv-SE", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
                     </div>
 
-                    {/* Endast synlig för admins */}
                     {isAdmin && (
                       <button
                         onClick={() => setConfirmId(note.id)}
                         title="Ta bort"
                         className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-md
-                          text-gray-700 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20
-                          opacity-0 group-hover:opacity-100"
+        text-gray-700 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20
+        opacity-0 group-hover:opacity-100"
                       >
                         <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
                           <path
@@ -191,7 +216,6 @@ export default function NotificationsPage() {
 
       <Footer />
 
-      {/* Delete confirmation modal — bara admins kan nå hit */}
       {isAdmin && confirmId !== null && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
