@@ -117,6 +117,21 @@ async function handleStartImport(adminId: string, jobId: string) {
 
     await supabaseAdmin
       .from('import_jobs')
+      .update({ status: 'deduplicating' })
+      .eq('id', jobId);
+    const { data: dedupedRows, error: dedupeError } = await supabaseAdmin.rpc(
+      'dedupe_historical_shipment_after_import',
+      { in_source_file_name: storagePath },
+    );
+    if (dedupeError) {
+      throw new ImportHttpError(
+        500,
+        `Import misslyckades vid deduplicering: ${dedupeError.message}`,
+      );
+    }
+
+    await supabaseAdmin
+      .from('import_jobs')
       .update({
         status: 'completed',
         rows_total: result.rowsFound,
@@ -131,7 +146,10 @@ async function handleStartImport(adminId: string, jobId: string) {
     return {
       jobId,
       status: 'completed',
-      result,
+      result: {
+        ...result,
+        replacedRows: typeof dedupedRows === 'number' ? dedupedRows : 0,
+      },
     };
   } catch (error) {
     const errorMessage =

@@ -413,6 +413,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      dedupe_historical_shipment_after_import: {
+        Args: { in_source_file_name?: string }
+        Returns: number
+      }
       get_distance: {
         Args: { in_receiver_taxep: number; in_sender_taxep: number }
         Returns: number
