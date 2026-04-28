@@ -143,32 +143,20 @@ export async function try_steg_2(input: ProfitabilityInput): Promise<number | nu
 
     // --------- Se om vi fick träff och beräkna estimerat pris om vi fick träff
     // Beräkna först estimerat pris för orginalvikt
-    const { medel_se_faktor, snitt_kund_vkl_forh_se } = data_orginal;
+    const calculatePris = (d: { medel_se_faktor: number | null, snitt_kund_vkl_forh_se: number | null } | null): number | null => {
+        if (!d || d.medel_se_faktor === null || d.snitt_kund_vkl_forh_se === null) return null;
 
-    const results_orginal = [];
-    if (medel_se_faktor !== null) { results_orginal.push(medel_se_faktor) }
-    else { return null }
-    if (snitt_kund_vkl_forh_se !== null) { results_orginal.push(snitt_kund_vkl_forh_se) }
-    else { return null }
+        // Beräkna pris som medel_se_faktor * snitt_kund_vkl_forh_se * vikt
+        return d.medel_se_faktor * d.snitt_kund_vkl_forh_se * weight;
+    };
 
-    // Beräkna estimerat pris som medel_se_faktor * snitt_kund_vkl_forh_se * vikt.
-    const estimeratPris_orginal = results_orginal.reduce((acc, val) => acc * val, 1) * weight;
+    const estimeratPris_orginal = calculatePris(data_orginal);
+    const estimeratPris_plus_ett = calculatePris(data_plus_ett);
 
-    // Beräkna sedan estimerat pris för vikt+1
-    const { medel_se_faktor: medel_se_faktor_plus_ett, snitt_kund_vkl_forh_se: snitt_kund_vkl_forh_se_plus_ett } = data_plus_ett;
-
-    const results_plus_ett = [];
-    if (medel_se_faktor_plus_ett !== null) { results_plus_ett.push(medel_se_faktor_plus_ett) }
-    else { return null }
-    if (snitt_kund_vkl_forh_se_plus_ett !== null) { results_plus_ett.push(snitt_kund_vkl_forh_se_plus_ett) }
-    else { return null }
-
-    // Beräkna estimerat pris som medel_se_faktor * snitt_kund_vkl_forh_se * vikt.
-    // Fråga - ska man ta multiplicerat med orginalvikt eller vikt+1 här?
-    const estimeratPris_plus_ett = results_plus_ett.reduce((acc, val) => acc * val, 1) * weight;
-
-    // Returnera det lägsta av de estimerade priserna
-    return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
+    if (estimeratPris_orginal !== null && estimeratPris_plus_ett !== null) {
+        return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
+    }
+    return estimeratPris_orginal ?? estimeratPris_plus_ett ?? null;
 }
 
 /**
@@ -216,31 +204,20 @@ export async function try_steg_3(input: ProfitabilityInput): Promise<number | nu
     }
 
     // -------- Se om vi fick träff och estimera pris om vi fick träff
-    // Beräkna först estimerat pris för orginalvikt
-    const { medel_se_faktor, medel_forh_se_kundvis } = data_orginal;
-    const results_orginal = [];
-    if (medel_se_faktor !== null) { results_orginal.push(medel_se_faktor) }
-    else { return null }
-    if (medel_forh_se_kundvis !== null) { results_orginal.push(medel_forh_se_kundvis) }
-    else { return null }
+    const calculatePris_3 = (d: { medel_se_faktor: number | null, medel_forh_se_kundvis: number | null } | null): number | null => {
+        if (!d || d.medel_se_faktor === null || d.medel_forh_se_kundvis === null) return null;
 
-    // Beräkna estimerat pris som medel_se_faktor * medel_forh_se_kundvis * vikt
-    const estimeratPris_orginal = results_orginal.reduce((acc, val) => acc * val, 1) * weight;
+        // Beräkna pris som medel_se_faktor * medel_forh_se_kundvis * vikt
+        return d.medel_se_faktor * d.medel_forh_se_kundvis * weight;
+    };
 
-    // Beräkna sedan estimerat pris för vikt+1
-    const { medel_se_faktor: medel_se_faktor_plus_ett, medel_forh_se_kundvis: medel_forh_se_kundvis_plus_ett } = data_plus_ett;
-    const results_plus_ett = [];
-    if (medel_se_faktor_plus_ett !== null) { results_plus_ett.push(medel_se_faktor_plus_ett) }
-    else { return null }
-    if (medel_forh_se_kundvis_plus_ett !== null) { results_plus_ett.push(medel_forh_se_kundvis_plus_ett) }
-    else { return null }
+    const estimeratPris_orginal = calculatePris_3(data_orginal);
+    const estimeratPris_plus_ett = calculatePris_3(data_plus_ett);
 
-    // Beräkna estimerat pris som medel_se_faktor * medel_forh_se_kundvis * vikt
-    // Fråga - ska man ta multiplicerat med orginalvikt eller vikt+1 här?
-    const estimeratPris_plus_ett = results_plus_ett.reduce((acc, val) => acc * val, 1) * weight;
-
-    // Returnera det lägsta av de estimerade priserna
-    return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
+    if (estimeratPris_orginal !== null && estimeratPris_plus_ett !== null) {
+        return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
+    }
+    return estimeratPris_orginal ?? estimeratPris_plus_ett ?? null;
 
 }
 
@@ -286,23 +263,69 @@ export async function try_steg_4(input: ProfitabilityInput): Promise<number | nu
     }
 
     // -------- Se om vi fick träff och estimera pris om vi fick träff
-    // Beräkna först estimerat pris för orginalvikt
-    let data = data_orginal[0] as { sum_kundnetto: number; sum_vikt: number };
-    const { sum_kundnetto, sum_vikt } = data;
-    if (sum_kundnetto === null) { return null }
-    if (sum_vikt === null) { return null }
+    const calculatePris = (d: { sum_kundnetto: number, sum_vikt: number } | null, weight: number): number | null => {
+        if (!d || d.sum_kundnetto === null || d.sum_vikt === null) return null;
 
-    // Beräkna estimerat pris enligt sum_kundnetto / sum_vikt * vikt
-    const estimeratPris_orginal = (sum_kundnetto / sum_vikt) * weight;
+        // Räkna ut pris som sum_kundnetto / sum_vikt * vikt
+        return (d.sum_kundnetto / d.sum_vikt) * weight;
+    };
 
-    // Beräkna sedan estimerat pris för vikt+1
-    data = data_plus_ett[0] as { sum_kundnetto: number; sum_vikt: number };
-    const { sum_kundnetto: sum_kundnetto_plus_ett, sum_vikt: sum_vikt_plus_ett } = data;
-    if (sum_kundnetto_plus_ett === null) { return null }
-    if (sum_vikt_plus_ett === null) { return null }
+    const estimeratPris_orginal = calculatePris(data_orginal?.[0], weight);
+    const estimeratPris_plus_ett = calculatePris(data_plus_ett?.[0], weight);
 
-    const estimeratPris_plus_ett = (sum_kundnetto_plus_ett / sum_vikt_plus_ett) * weight;
+    // Returnera minimum eller det som inte är null, eller null om båda är null
+    if (estimeratPris_orginal !== null && estimeratPris_plus_ett !== null) {
+        return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
+    }
+    return estimeratPris_orginal ?? estimeratPris_plus_ett ?? null;
+}
 
-    // Returnera det lägsta av de estimerade priserna
-    return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
+export async function try_steg_5(input: ProfitabilityInput): Promise<number | null> {
+    
+    valideraInput(input);
+
+    // Hämta variabler
+    const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
+    const weight = Number(input.chargeable_weight);
+    const weight_plus_one = await roundUpWeight(weight);
+
+    const supabase = await getSupabaseServerClient();
+    const { data: data_orginal, error: error_orginal } = await supabase.rpc("steg_5", {
+        in_sender_taxep: sender_taxep,
+        in_receiver_taxep: receiver_taxep,
+        in_weight: weight
+    })
+
+    if (error_orginal) {
+        throw new Error("Fel vid steg 5: " + JSON.stringify(error_orginal, null, 2));
+    }
+
+    const { data: data_plus_ett, error: error_plus_ett } = await supabase.rpc("steg_5", {
+        in_sender_taxep: sender_taxep,
+        in_receiver_taxep: receiver_taxep,
+        in_weight: weight_plus_one
+    })
+
+    if (error_plus_ett) {
+        throw new Error("Fel vid steg 5: " + JSON.stringify(error_plus_ett, null, 2));
+    }
+
+    console.log(input.kundnamn, data_orginal, data_plus_ett);
+
+    // -------- Se om vi fick träff och estimera pris om vi fick träff
+    const calculatePris = (d: { medel_se: number, forh_linjevis: number } | null, weight: number): number | null => {
+        if (!d || d.medel_se === null || d.forh_linjevis === null) return null;
+
+        // Räkna ut pris som medel_se * forh_linjevis * vikt
+        return d.medel_se * d.forh_linjevis * weight;
+    };
+
+    const estimeratPris_orginal = calculatePris(data_orginal?.[0], weight);
+    const estimeratPris_plus_ett = calculatePris(data_plus_ett?.[0], weight);
+
+    // Returnera minimum eller det som inte är null, eller null om båda är null
+    if (estimeratPris_orginal !== null && estimeratPris_plus_ett !== null) {
+        return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
+    }
+    return estimeratPris_orginal ?? estimeratPris_plus_ett ?? null;
 }
