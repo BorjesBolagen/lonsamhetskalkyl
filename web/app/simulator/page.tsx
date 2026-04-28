@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useSimulatorPlanner } from "./useSimulatorPlanner";
@@ -48,35 +50,48 @@ export default function SimulatorPage() {
     milprisPerMil,
   } = useSimulatorPlanner();
 
+  const [showCalculatedParts, setShowCalculatedParts] = useState(false);
+
   const selectedBookingCount = selectedConsignmentIds.length;
 
-  const simulatedSelectedConsignments = selectedConsignments.filter(
-    (consignment) => {
-      const data = consignment as RevenueFields;
-      return (
-        data.extraDistanceKm !== undefined ||
-        data.extraDrivingCost !== undefined ||
-        data.simulatedProfitability !== undefined
-      );
-    },
-  );
+  const simulatedSelectedConsignments = showCalculatedParts
+    ? selectedConsignments.filter((consignment) => {
+        const data = consignment as RevenueFields;
+        return (
+          data.extraDistanceKm !== undefined ||
+          data.extraDrivingCost !== undefined ||
+          data.simulatedProfitability !== undefined
+        );
+      })
+    : [];
 
   const primaryRoute = [...simulatedSelectedConsignments]
     .reverse()
     .find((consignment) => {
       const data = consignment as RevenueFields;
       return (data.optimizedRouteStops?.length ?? 0) > 0;
-    }) as (typeof simulatedSelectedConsignments[number] & RevenueFields) | undefined;
+    }) as
+    | ((typeof simulatedSelectedConsignments)[number] & RevenueFields)
+    | undefined;
+
+  const displayedSimulationSummary = showCalculatedParts
+    ? simulationSummary
+    : {
+        totalExtraDrivingCost: 0,
+        totalEstimatedRevenue: 0,
+        totalExtraDistanceKm: 0,
+        simulatedMargin: 0,
+      };
 
   const revenueCoveragePercent =
-    simulationSummary.totalExtraDrivingCost > 0
+    displayedSimulationSummary.totalExtraDrivingCost > 0
       ? Math.min(
           100,
-          (simulationSummary.totalEstimatedRevenue /
-            simulationSummary.totalExtraDrivingCost) *
+          (displayedSimulationSummary.totalEstimatedRevenue /
+            displayedSimulationSummary.totalExtraDrivingCost) *
             100,
         )
-      : simulationSummary.totalEstimatedRevenue > 0
+      : displayedSimulationSummary.totalEstimatedRevenue > 0
         ? 100
         : 0;
 
@@ -100,6 +115,25 @@ export default function SimulatorPage() {
     return consignment.simulatedProfitability?.estimated_revenue ?? 0;
   }
 
+  function getSelectedConsignmentRowColor(
+    revenue: number,
+    cost?: number | null,
+  ): string {
+    if (cost == null) {
+      return "bg-gray-300/40";
+    }
+
+    if (revenue > cost) {
+      return "bg-green-300/40";
+    }
+
+    if (cost > revenue) {
+      return "bg-red-300/40";
+    }
+
+    return "bg-gray-300/40";
+  }
+
   function getRevenueStepText(consignment: RevenueFields): string {
     if (
       consignment.simulatedProfitability?.estimated_revenue == null ||
@@ -117,18 +151,18 @@ export default function SimulatorPage() {
       return "Kör simuleringen för att få prognos.";
     }
 
-    if (simulationSummary.totalEstimatedRevenue <= 0) {
+    if (displayedSimulationSummary.totalEstimatedRevenue <= 0) {
       return "Inget steg gav träff";
     }
 
-    if (simulationSummary.simulatedMargin >= 0) {
+    if (displayedSimulationSummary.simulatedMargin >= 0) {
       return `Prognos: lönsam med ${formatNumber(
-        simulationSummary.simulatedMargin,
+        displayedSimulationSummary.simulatedMargin,
       )} kr i marginal.`;
     }
 
     return `Prognos: inte lönsam. Saknar ${formatNumber(
-      Math.abs(simulationSummary.simulatedMargin),
+      Math.abs(displayedSimulationSummary.simulatedMargin),
     )} kr.`;
   }
 
@@ -137,26 +171,100 @@ export default function SimulatorPage() {
       return "bg-[var(--secondary-element)] text-[var(--text-primary)]";
     }
 
-    return simulationSummary.simulatedMargin >= 0
+    return displayedSimulationSummary.simulatedMargin >= 0
       ? "bg-[var(--notification-color)] text-[var(--text-primary)]"
       : "bg-red-100 text-red-800";
   }
 
-  function getRouteStopLabel(stop: string, index: number): string {
-    if (index === primaryRoute?.insertionPickupIndex) {
-      return `Pickup: ${stop}`;
+  function normalizeRouteValue(value?: string | null): string {
+    return (value ?? "").toString().trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function addMarkerCandidate(
+    markerMap: Map<string, number>,
+    value?: string | null,
+  ): void {
+    const normalizedValue = normalizeRouteValue(value);
+
+    if (!normalizedValue) {
+      return;
     }
 
-    if (index === primaryRoute?.insertionDeliveryIndex) {
-      return `Delivery: ${stop}`;
+    markerMap.set(normalizedValue, (markerMap.get(normalizedValue) ?? 0) + 1);
+  }
+
+  function takeMarkerCandidate(
+    markerMap: Map<string, number>,
+    location: string,
+  ): boolean {
+    const normalizedLocation = normalizeRouteValue(location);
+
+    for (const [candidate, count] of markerMap.entries()) {
+      if (count <= 0) {
+        continue;
+      }
+
+      const isMatch =
+        normalizedLocation === candidate ||
+        normalizedLocation.includes(candidate) ||
+        candidate.includes(normalizedLocation);
+
+      if (isMatch) {
+        if (count === 1) {
+          markerMap.delete(candidate);
+        } else {
+          markerMap.set(candidate, count - 1);
+        }
+
+        return true;
+      }
     }
 
-    return `Stopp: ${stop}`;
+    return false;
+  }
+
+  const selectedPickupMarkers = new Map<string, number>();
+  const selectedDeliveryMarkers = new Map<string, number>();
+
+  simulatedSelectedConsignments.forEach((consignment) => {
+    const [pickupTaxPoint, deliveryTaxPoint] =
+      consignment.taxPointRelation?.split("-").map((part) => part.trim()) ?? [];
+
+    addMarkerCandidate(selectedPickupMarkers, pickupTaxPoint);
+    addMarkerCandidate(selectedPickupMarkers, consignment.pickupLocationCity);
+
+    addMarkerCandidate(selectedDeliveryMarkers, deliveryTaxPoint);
+    addMarkerCandidate(selectedDeliveryMarkers, consignment.destinationCity);
+  });
+
+  const proposedRouteEntries = (primaryRoute?.optimizedRouteStops ?? []).map(
+    (location, index) => {
+      const isPickup = takeMarkerCandidate(selectedPickupMarkers, location);
+      const isDelivery = !isPickup
+        ? takeMarkerCandidate(selectedDeliveryMarkers, location)
+        : false;
+      const type = isPickup ? "pickup" : isDelivery ? "delivery" : "stop";
+
+      return {
+        key: `${index}-${location}`,
+        index,
+        type,
+        location,
+        isSimulatedBookingStop: type !== "stop",
+      };
+    },
+  );
+
+  async function handleRunSimulation() {
+    setShowCalculatedParts(true);
+    await runSimulation();
+  }
+
+  function resetCalculatedParts() {
+    setShowCalculatedParts(false);
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
-      <Navigation currentPage="simulator" />
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="simulator" />
 
@@ -275,7 +383,7 @@ export default function SimulatorPage() {
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-[0.85fr_1.55fr_0.9fr] gap-4 min-h-0 flex-1 items-start">
-         <div className="bg-[var(--primary-element)] rounded-2xl shadow-md border border-[var(--seperating-gray)] p-4 flex flex-col min-h-0 h-full min-w-0">
+          <div className="bg-[var(--primary-element)] rounded-2xl shadow-md border border-[var(--seperating-gray)] p-4 flex flex-col min-h-0 h-full min-w-0">
             <div className="mb-4 min-w-0">
               <h2 className="text-xl font-bold text-[var(--text-primary)]">
                 Valt ekipage
@@ -363,7 +471,7 @@ export default function SimulatorPage() {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={runSimulation}
+                  onClick={handleRunSimulation}
                   disabled={
                     !selectedEquipageId ||
                     selectedBookingCount === 0 ||
@@ -376,11 +484,23 @@ export default function SimulatorPage() {
 
                 <button
                   type="button"
-                  onClick={clearSimulationSelection}
+                  onClick={() => {
+                    clearSimulationSelection();
+                    resetCalculatedParts();
+                  }}
                   disabled={selectedBookingCount === 0}
                   className="bg-[var(--button-reset)] hover:bg-[var(--button-reset-hover)] disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-xl transition"
                 >
                   Rensa val
+                </button>
+
+                <button
+                  type="button"
+                  onClick={resetCalculatedParts}
+                  disabled={!showCalculatedParts}
+                  className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-xl transition"
+                >
+                  Återställ
                 </button>
               </div>
             </div>
@@ -418,16 +538,28 @@ export default function SimulatorPage() {
                         consignment.consignmentId,
                       );
                       const data = consignment as RevenueFields;
-                      const revenue = getRevenue(data);
+                      const shouldShowCalculatedParts =
+                        showCalculatedParts && isSelected;
+                      const revenue = shouldShowCalculatedParts
+                        ? getRevenue(data)
+                        : 0;
+                      const extraDrivingCost = shouldShowCalculatedParts
+                        ? data.extraDrivingCost
+                        : null;
+                      const extraDistanceKm = shouldShowCalculatedParts
+                        ? data.extraDistanceKm
+                        : null;
+                      const rowColor = isSelected
+                        ? getSelectedConsignmentRowColor(
+                            revenue,
+                            extraDrivingCost,
+                          )
+                        : "bg-[var(--primary-element)]";
 
                       return (
                         <tr
                           key={consignment.consignmentId}
-                          className={`border-b border-[var(--seperating-gray)] transition ${
-                            isSelected
-                              ? "bg-[var(--primary-color-background)]/40"
-                              : "bg-[var(--primary-element)]"
-                          }`}
+                          className={`border-b border-[var(--seperating-gray)] transition ${rowColor}`}
                         >
                           <td className="p-3">
                             <input
@@ -467,8 +599,8 @@ export default function SimulatorPage() {
                           </td>
 
                           <td className="p-3 text-right text-[var(--text-primary)]">
-                            {data.extraDistanceKm != null
-                              ? `${formatDecimal(data.extraDistanceKm)} km`
+                            {extraDistanceKm != null
+                              ? `${formatDecimal(extraDistanceKm)} km`
                               : "-"}
                           </td>
 
@@ -477,14 +609,15 @@ export default function SimulatorPage() {
                           </td>
 
                           <td className="p-3 text-left text-[var(--text-primary)]">
-                            {data.simulatedProfitability !== undefined
+                            {shouldShowCalculatedParts &&
+                            data.simulatedProfitability !== undefined
                               ? getRevenueStepText(data)
                               : "-"}
                           </td>
 
                           <td className="p-3 text-right font-semibold text-[var(--text-primary)]">
-                            {data.extraDrivingCost != null
-                              ? `${formatNumber(data.extraDrivingCost)} kr`
+                            {extraDrivingCost != null
+                              ? `${formatNumber(extraDrivingCost)} kr`
                               : "-"}
                           </td>
                         </tr>
@@ -539,7 +672,9 @@ export default function SimulatorPage() {
                       Extra km
                     </p>
                     <p className="text-2xl font-bold text-[var(--text-primary)]">
-                      {formatDecimal(simulationSummary.totalExtraDistanceKm)}
+                      {formatDecimal(
+                        displayedSimulationSummary.totalExtraDistanceKm,
+                      )}
                     </p>
                     <p className="text-sm text-[var(--text-primary)] opacity-75">
                       km
@@ -551,7 +686,9 @@ export default function SimulatorPage() {
                       Körkostnad
                     </p>
                     <p className="text-2xl font-bold text-[var(--text-primary)]">
-                      {formatNumber(simulationSummary.totalExtraDrivingCost)}
+                      {formatNumber(
+                        displayedSimulationSummary.totalExtraDrivingCost,
+                      )}
                     </p>
                     <p className="text-sm text-[var(--text-primary)] opacity-75">
                       kr
@@ -563,7 +700,9 @@ export default function SimulatorPage() {
                       Total intäkt
                     </p>
                     <p className="text-2xl font-bold text-[var(--text-primary)]">
-                      {formatNumber(simulationSummary.totalEstimatedRevenue)}
+                      {formatNumber(
+                        displayedSimulationSummary.totalEstimatedRevenue,
+                      )}
                     </p>
                     <p className="text-sm text-[var(--text-primary)] opacity-75">
                       kr
@@ -604,14 +743,19 @@ export default function SimulatorPage() {
                     <div className="rounded-xl bg-[var(--primary-element)] p-3">
                       <p className="text-xs uppercase opacity-70">Intäkt</p>
                       <p className="font-bold text-[var(--text-primary)]">
-                        {formatNumber(simulationSummary.totalEstimatedRevenue)}{" "}
+                        {formatNumber(
+                          displayedSimulationSummary.totalEstimatedRevenue,
+                        )}{" "}
                         kr
                       </p>
                     </div>
+
                     <div className="rounded-xl bg-[var(--primary-element)] p-3">
                       <p className="text-xs uppercase opacity-70">Kostnad</p>
                       <p className="font-bold text-[var(--text-primary)]">
-                        {formatNumber(simulationSummary.totalExtraDrivingCost)}{" "}
+                        {formatNumber(
+                          displayedSimulationSummary.totalExtraDrivingCost,
+                        )}{" "}
                         kr
                       </p>
                     </div>
@@ -624,38 +768,43 @@ export default function SimulatorPage() {
                   </div>
                 </div>
 
-                {primaryRoute ? (
+                {primaryRoute && proposedRouteEntries.length > 0 ? (
                   <div className="rounded-2xl bg-[var(--secondary-element)] border border-[var(--seperating-gray)] p-4 space-y-3">
                     <div>
                       <h3 className="text-lg font-bold text-[var(--text-primary)]">
                         Föreslagen rutt
                       </h3>
                       <p className="text-sm text-[var(--text-primary)] opacity-80">
-                        Pickup ligger alltid före delivery.
+                        Visar hela rutten. Markerade oplacerade bokningar visas
+                        som pickup och delivery.
                       </p>
                     </div>
 
                     <div className="max-h-72 overflow-auto rounded-xl border border-[var(--seperating-gray)] bg-[var(--primary-element)]">
-                      {(primaryRoute.optimizedRouteStops ?? []).map(
-                        (stop, index) => (
-                          <div
-                            key={`${stop}-${index}`}
-                            className={`flex items-center gap-3 px-3 py-2 border-b border-[var(--seperating-gray)] text-sm ${
-                              index === primaryRoute.insertionPickupIndex ||
-                              index === primaryRoute.insertionDeliveryIndex
-                                ? "bg-[var(--notification-color)]/60 font-semibold"
-                                : ""
-                            }`}
-                          >
-                            <span className="h-7 w-7 rounded-full bg-[var(--secondary-element)] flex items-center justify-center text-xs font-bold">
-                              {index + 1}
-                            </span>
-                            <span className="text-[var(--text-primary)]">
-                              {getRouteStopLabel(stop, index)}
-                            </span>
+                      {proposedRouteEntries.map((entry, displayIndex) => (
+                        <div
+                          key={entry.key}
+                          className={`flex items-center gap-3 px-3 py-2 border-b border-[var(--seperating-gray)] text-sm ${
+                            entry.isSimulatedBookingStop
+                              ? "bg-gray-300/40 font-semibold"
+                              : "bg-[var(--primary-element)]"
+                          }`}
+                        >
+                          <span className="h-7 w-7 rounded-full bg-[var(--secondary-element)] flex items-center justify-center text-xs font-bold">
+                            {displayIndex + 1}
+                          </span>
+                          <div className="min-w-0 text-[var(--text-primary)]">
+                            <p className="truncate">
+                              {entry.type === "pickup"
+                                ? "Pickup"
+                                : entry.type === "delivery"
+                                  ? "Delivery"
+                                  : "Stop"}
+                              : {entry.location}
+                            </p>
                           </div>
-                        ),
-                      )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ) : (
