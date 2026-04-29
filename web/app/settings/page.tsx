@@ -115,7 +115,7 @@ export default function Settings() {
   // What the user is editing (draft)
   const [draftTheme, setDraftTheme] = useState<ThemeMode>(DEFAULT_THEME);
   const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
-    useState<number>(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
+    useState<number | "">(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
 
   const clusterGroups = useMemo(() => {
     const sortedKeys = [...AREA_KEYS].sort((a, b) =>
@@ -252,11 +252,17 @@ export default function Settings() {
       setFiltersStatus(null);
 
       // Keep other filter fields and only overwrite areas + theme from this form.
+      // Om rutan är tom eller ogiltig när man klickar spara, fallback till 15000
+      const validReferenceValue = 
+        profitabilityReferenceValue === "" || profitabilityReferenceValue <= 0
+        ? DEFAULT_PROFITABILITY_REFERENCE_VALUE
+        : profitabilityReferenceValue;
+
       const nextFilters: Record<string, unknown> = {
         ...storedFilters,
         areas: districts,
         theme: draftTheme,
-        profitabilityReferenceValue,
+        profitabilityReferenceValue: validReferenceValue,
       };
 
       await setFilters(userId, nextFilters as Json);
@@ -455,13 +461,16 @@ export default function Settings() {
                           step={100}
                           value={profitabilityReferenceValue}
                           onChange={(e) => {
+                            // Tillåt fältet att vara tomt när användaren suddar
+                            if (e.target.value === "") {
+                              setProfitabilityReferenceValue("");
+                              return;
+                            }
+  
                             const parsed = Number(e.target.value);
-                            setProfitabilityReferenceValue(
-                              Number.isFinite(parsed) && parsed > 0
-                                ? parsed
-                                : DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-                            );
+                            setProfitabilityReferenceValue(parsed);
                           }}
+                          
                           className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                         />
                       </div>
