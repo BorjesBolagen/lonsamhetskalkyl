@@ -3,9 +3,7 @@ import GuardedLink from "./GuardedLink";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
-import { useEffect, useState } from "react";
-import { getCurrentlySignedInUser } from "@/lib/api";
-import { getAmountOfUnreadMessages } from "@/lib/api";
+import { getCurrentlySignedInUser, getAmountOfUnreadMessages } from "@/lib/api";
 
 interface NavigationProps {
   currentPage?: string;
@@ -36,7 +34,6 @@ export default function Navigation({
     const timer = setInterval(fetchUnread, 20_000);
     return () => clearInterval(timer);
   }, [currentPage]);
-
 
   const [userRole, setUserRole] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
