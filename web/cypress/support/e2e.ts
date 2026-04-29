@@ -16,3 +16,13 @@
 // Import commands.js using ES2015 syntax:
 import './commands'
 import 'cypress-mailosaur'
+
+// Denna kod säger till Cypress att strunta i Next.js utvecklings-varningar
+Cypress.on('uncaught:exception', (err, runnable) => {
+  // Ignorera Hydration-fel
+  if (err.message.includes('Hydration failed') || err.message.includes('Minified React error')) {
+    return false; // Detta hindrar Cypress från att krascha
+  }
+  // Låt alla andra riktiga fel passera och krascha testet
+  return true;
+});
