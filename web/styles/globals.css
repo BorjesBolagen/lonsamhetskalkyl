@@ -3,15 +3,15 @@
 :root {
   --bg: #EEEEEE;
   --text-heading: #000000;
-  --text-primary: #000000;
-  --text-secondary: #111111;
+  --text-primary: #111111;
+  --text-secondary: #3b3b3b;
   --primary-element: #ffffff;
   --secondary-element: #F2F2F2;
   --button-submit: #22c55e;
   --button-submit-hover: #5ad489;
   --button-fetch: #25a3dd;
   --button-fetch-hover: #64aef3;
-  --button-reset: #575757;
+  --button-reset: #7e7e7e;
   --button-reset-hover: #c2c2c2;
   --disabled-button: #7a7a7a;
   --text-hover: #EEEEEE;
@@ -30,8 +30,8 @@
 html[data-theme="dark"] {
   --bg: #212121;
   --text-heading: #ffffff;
-  --text-primary: #FFFFFF;
-  --text-secondary: #CCCCCC;
+  --text-primary: #CCCCCC;
+  --text-secondary: #b8b8b8;
   --primary-element: #121212;
   --secondary-element: #202020;
   --button-submit: #22c55e;
