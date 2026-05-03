@@ -8,8 +8,13 @@ describe('Settings Page', () => {
     cy.loginAs('admin');
     cy.visit('/settings');
     
-    // Liten wait för att låta React ladda in data från Supabase
     cy.wait(1000); 
+  });
+
+  it('displays the correct user profile information', () => {
+    // Kolla användarinformation
+    cy.contains('adminborjes@gmail.com').should('be.visible');
+    cy.contains('Admin').should('be.visible'); 
   });
 
   it('renders the account page and can toggle between tabs', () => {
@@ -30,51 +35,52 @@ describe('Settings Page', () => {
     cy.contains('Din Profil').should('be.visible');
   });
 
-  it('can update reference value, save, and persist after relogin', () => {
+  it('can update reference value, save, and persist empty fallback', () => {
     const newValue = '18500';
     const originalValue = '15000'; 
 
-    // Låt React stabilisera sig och ladda data
     cy.wait(1500);
     cy.contains('button', 'Spara inställningar').should('not.be.disabled');
     cy.get('input#profitabilityReferenceValue').should('have.value', originalValue);
 
-    // Skriv in nytt värde med markera-allt metoden
+    // Ändra värde
     cy.get('input#profitabilityReferenceValue').type('{selectAll}' + newValue);
     cy.get('input#profitabilityReferenceValue').should('have.value', newValue);
 
-    // Spara
     cy.contains('button', 'Spara inställningar').click();
     cy.contains('Inställningar sparade.').should('be.visible');
 
-    // Ge databasen tid
     cy.wait(1000);
 
-    // Logga ut och in
+    // Logga ut och in för att se så värdet sparas
     cy.get('[data-testid="logout-button"]').click();
     cy.url().should('include', '/login');
     cy.loginAs('admin');
     cy.visit('/settings');
     
-    // VIKTIGT: Låt React få sin Hydration-panik ifred innan cleanup
     cy.wait(1500);
     cy.contains('button', 'Spara inställningar').should('not.be.disabled');
 
-    // Verifiera att värdet hämtades (Detta vet vi redan fungerar!)
+    // Verifiera att 18500 hämtades
     cy.get('input#profitabilityReferenceValue').should('have.value', newValue);
 
-    // CLEANUP: Återställ
-    cy.get('input#profitabilityReferenceValue').type('{selectAll}' + originalValue);
-    cy.get('input#profitabilityReferenceValue').should('have.value', originalValue);
+    // Rensa fältet helt så det blir en tom sträng
+    cy.get('input#profitabilityReferenceValue').clear().should('have.value', '');
       
     cy.contains('button', 'Spara inställningar').click();
     cy.contains('Inställningar sparade.').should('be.visible');
 
-    // Låt databas-anropet gå klart innan Cypress stänger fönstret
-    cy.wait(1500); 
+    cy.wait(1000); 
+
+    // Verifiera att fallbacken fungerade genom att ladda om
+    cy.visit('/settings');
+    cy.wait(1500);
+    
+    // Om allt fungerar ska värdet nu vara magiskt återställt till 15000
+    cy.get('input#profitabilityReferenceValue').should('have.value', originalValue);
   });
 
-  it('shows validation errors when passwords do not match (WILL FAIL TEMPORARILY)', () => {
+  it('shows validation errors when passwords do not match', () => {
     // Gå till lösenordsfliken
     cy.contains('button', 'Lösenord').click();
 
@@ -84,20 +90,19 @@ describe('Settings Page', () => {
     cy.contains('label', 'Nytt lösenord').parent().find('input').type('NyttLösenord1!');
     cy.contains('label', 'Repetera nytt lösenord').parent().find('input').type('FelLösenord1!');
 
-    // Klicka på spara
+    // Spara
     cy.contains('button', 'Spara lösenord').click();
 
     // Verifiera att ett felmeddelande visas i UI:t.
-    // TODO: När ni bygger funktionen, se till att Cypress letar efter rätt felmeddelande eller data-testid.
-    // Detta kommer krascha nu eftersom felmeddelandet inte existerar i koden än.
+    // OBS: Detta kommer krascha nu eftersom felmeddelandet inte finns än.
     cy.contains('Lösenorden matchar inte').should('be.visible');
   });
 
-  it('can interact with cluster filters and save them', () => {
+  it('can interact with filters and save them', () => {
     // Verifiera att kluster-sektionen finns
     cy.contains('Filtrera dina kluster').should('be.visible');
 
-    // Hitta en specifik checkbox (t.ex. SML-Borlänge) och klicka på dess label
+    // Hitta en specifik checkbox och markera den
     cy.contains('label', 'SML-Borlänge').click();
     
     // Klicka Spara
@@ -106,11 +111,61 @@ describe('Settings Page', () => {
     // Verifiera success message
     cy.contains('Inställningar sparade.').should('be.visible');
 
-    // Klicka igen för att återställa state (cleanup)
+    // Klicka igen för att återställa (cleanup)
     cy.contains('label', 'SML-Borlänge').click();
     cy.contains('button', 'Spara inställningar').click();
     
     // Verifiera sista meddelandet för att veta att cleanup är klar
     cy.contains('Inställningar sparade.').should('be.visible');
+  });
+
+  it('can toggle between Light and Dark theme', () => {
+    // Vi vet att laddningen är klar när spara-knappen går att klicka på
+    cy.contains('button', 'Spara inställningar').should('not.be.disabled');
+    cy.wait(1000);
+
+    // KLicka på darkmode
+    cy.contains('button', 'Dark').click();
+    
+    // Verifiera att Dark-knappen ser "aktiv" ut
+    cy.contains('button', 'Dark').should('have.class', 'bg-[var(--button-fetch)]');
+    
+    // Spara inställningen
+    cy.contains('button', 'Spara inställningar').click();
+    cy.contains('Inställningar sparade.').should('be.visible');
+
+    // Verifiera att HTML-taggen fick dark mode
+    cy.document().its('documentElement').should('have.attr', 'data-theme', 'dark');
+
+    // Återställ till Light
+    cy.contains('button', 'Light').click();
+    cy.contains('button', 'Spara inställningar').click();
+    cy.contains('Inställningar sparade.').should('be.visible');
+    
+    // Verifiera att det blev ljust igen
+    cy.document().its('documentElement').should('have.attr', 'data-theme', 'light');
+  });
+
+  it('can toggle password visibility', () => {
+    cy.contains('button', 'Lösenord').click();
+
+    // Hitta input-fältet och verifiera att det är dolt som standard
+    cy.contains('label', 'Nuvarande lösenord')
+      .parent()
+      .find('input')
+      .should('have.attr', 'type', 'password')
+      .type('hemligt123');
+
+    // Klicka på ögon-ikonen (hittas genom att leta efter en button bredvid input-fältet)
+    cy.contains('label', 'Nuvarande lösenord')
+      .parent()
+      .find('button')
+      .click();
+
+    // Verifiera att texten nu är synlig
+    cy.contains('label', 'Nuvarande lösenord')
+      .parent()
+      .find('input')
+      .should('have.attr', 'type', 'text');
   });
 });

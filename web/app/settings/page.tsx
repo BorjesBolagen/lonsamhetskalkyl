@@ -251,13 +251,13 @@ export default function Settings() {
       setIsSavingFilters(true);
       setFiltersStatus(null);
 
-      // Keep other filter fields and only overwrite areas + theme from this form.
       // Om rutan är tom eller ogiltig när man klickar spara, fallback till 15000
       const validReferenceValue = 
         profitabilityReferenceValue === "" || profitabilityReferenceValue <= 0
-        ? DEFAULT_PROFITABILITY_REFERENCE_VALUE
-        : profitabilityReferenceValue;
+          ? DEFAULT_PROFITABILITY_REFERENCE_VALUE
+          : profitabilityReferenceValue;
 
+      // Keep other filter fields and only overwrite areas + theme from this form.
       const nextFilters: Record<string, unknown> = {
         ...storedFilters,
         areas: districts,
@@ -459,18 +459,28 @@ export default function Settings() {
                           id="profitabilityReferenceValue"
                           type="number"
                           step={100}
+                          min={0}
                           value={profitabilityReferenceValue}
+                          onKeyDown={(e) => {
+                            // Förhindra inmatning av minus-tecken (både vanliga och på numpad, samt plusstecken)
+                            if (e.key === "-" || e.key === "Subtract" || e.key === "+" || e.key === "Add") {
+                              e.preventDefault();
+                            }
+                          }}
                           onChange={(e) => {
                             // Tillåt fältet att vara tomt när användaren suddar
                             if (e.target.value === "") {
                               setProfitabilityReferenceValue("");
                               return;
                             }
-  
+    
                             const parsed = Number(e.target.value);
+    
+                            // Ignorerar knapptrycket om de försöker skriva ett minustal
+                            if (parsed < 0) return; 
+
                             setProfitabilityReferenceValue(parsed);
                           }}
-                          
                           className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                         />
                       </div>
