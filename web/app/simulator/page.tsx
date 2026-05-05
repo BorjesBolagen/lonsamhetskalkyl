@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useSimulatorPlanner } from "./useSimulatorPlanner";
@@ -16,13 +17,6 @@ type RevenueFields = {
   optimizedRouteStops?: string[] | null;
   insertionPickupIndex?: number | null;
   insertionDeliveryIndex?: number | null;
-  missingDistanceRelation?: string | null;
-};
-
-type RouteMarkerFields = RevenueFields & {
-  taxPointRelation?: string | null;
-  pickupLocationCity?: string | null;
-  destinationCity?: string | null;
 };
 
 export default function SimulatorPage() {
@@ -40,15 +34,8 @@ export default function SimulatorPage() {
     unassignedConsignments,
     selectedConsignmentIds,
     selectedConsignments,
-    fictitiousBookings,
-    selectedFictitiousBookingIds,
-    selectedFictitiousBookings,
-    addFictitiousBooking,
-    removeFictitiousBooking,
-    toggleFictitiousBooking,
     toggleConsignment,
     clearSimulationSelection,
-    resetSimulationResults,
     currentEquipageSummary,
     simulationSummary,
     runSimulation,
@@ -59,45 +46,33 @@ export default function SimulatorPage() {
     isLoadingUnassigned,
     isLoadingCurrentEquipage,
     isSimulating,
-    isAddingFictitiousBooking,
     errorMsg,
     milprisPerMil,
   } = useSimulatorPlanner();
 
   const [showCalculatedParts, setShowCalculatedParts] = useState(false);
-  const [isFictitiousModalOpen, setIsFictitiousModalOpen] = useState(false);
-  const [fictitiousTaxPointRelation, setFictitiousTaxPointRelation] =
-    useState("");
-  const [fictitiousPrice, setFictitiousPrice] = useState("");
-  const [fictitiousFieldErrors, setFictitiousFieldErrors] = useState<{
-    taxPointRelation?: string;
-    price?: string;
-  }>({});
 
-  const selectedBookingCount =
-    selectedConsignmentIds.length + selectedFictitiousBookingIds.length;
+  const selectedBookingCount = selectedConsignmentIds.length;
 
   const simulatedSelectedConsignments = showCalculatedParts
-    ? selectedConsignments.filter((consignment) =>
-        hasRowSimulationResult(consignment as RevenueFields),
-      )
+    ? selectedConsignments.filter((consignment) => {
+        const data = consignment as RevenueFields;
+        return (
+          data.extraDistanceKm !== undefined ||
+          data.extraDrivingCost !== undefined ||
+          data.simulatedProfitability !== undefined
+        );
+      })
     : [];
 
-  const simulatedSelectedFictitiousBookings = showCalculatedParts
-    ? selectedFictitiousBookings.filter((booking) =>
-        hasRowSimulationResult(booking as RevenueFields),
-      )
-    : [];
-
-  const simulatedSelectedItems: RouteMarkerFields[] = [
-    ...simulatedSelectedConsignments,
-    ...simulatedSelectedFictitiousBookings,
-  ];
-
-  const primaryRoute = [...simulatedSelectedItems].reverse().find((item) => {
-    const data = item as RevenueFields;
-    return (data.optimizedRouteStops?.length ?? 0) > 0;
-  }) as (RouteMarkerFields & RevenueFields) | undefined;
+  const primaryRoute = [...simulatedSelectedConsignments]
+    .reverse()
+    .find((consignment) => {
+      const data = consignment as RevenueFields;
+      return (data.optimizedRouteStops?.length ?? 0) > 0;
+    }) as
+    | ((typeof simulatedSelectedConsignments)[number] & RevenueFields)
+    | undefined;
 
   const displayedSimulationSummary = showCalculatedParts
     ? simulationSummary
@@ -120,8 +95,8 @@ export default function SimulatorPage() {
         ? 100
         : 0;
 
-  const hasSimulationResult = simulatedSelectedItems.some(
-    (item) => (item as RevenueFields).extraDrivingCost != null,
+  const hasSimulationResult = simulatedSelectedConsignments.some(
+    (consignment) => (consignment as RevenueFields).extraDrivingCost != null,
   );
 
   function formatNumber(value: number): string {
@@ -136,8 +111,8 @@ export default function SimulatorPage() {
     });
   }
 
-  function getRevenue(item: RevenueFields): number {
-    return item.simulatedProfitability?.estimated_revenue ?? 0;
+  function getRevenue(consignment: RevenueFields): number {
+    return consignment.simulatedProfitability?.estimated_revenue ?? 0;
   }
 
   function getSelectedConsignmentRowColor(
@@ -159,16 +134,16 @@ export default function SimulatorPage() {
     return "bg-gray-300/40";
   }
 
-  function getRevenueStepText(item: RevenueFields): string {
+  function getRevenueStepText(consignment: RevenueFields): string {
     if (
-      item.simulatedProfitability?.estimated_revenue == null ||
-      item.simulatedProfitability.estimated_revenue <= 0 ||
-      item.revenueMatchStep == null
+      consignment.simulatedProfitability?.estimated_revenue == null ||
+      consignment.simulatedProfitability.estimated_revenue <= 0 ||
+      consignment.revenueMatchStep == null
     ) {
       return "Inget steg gav träff";
     }
 
-    return `Steg ${item.revenueMatchStep}`;
+    return `Steg ${consignment.revenueMatchStep}`;
   }
 
   function getCoverageLabel(): string {
@@ -199,15 +174,6 @@ export default function SimulatorPage() {
     return displayedSimulationSummary.simulatedMargin >= 0
       ? "bg-[var(--notification-color)] text-[var(--text-primary)]"
       : "bg-red-100 text-red-800";
-  }
-
-  function hasRowSimulationResult(data: RevenueFields): boolean {
-    return (
-      data.extraDistanceKm !== undefined ||
-      data.extraDrivingCost !== undefined ||
-      data.simulatedProfitability !== undefined ||
-      data.missingDistanceRelation !== undefined
-    );
   }
 
   function normalizeRouteValue(value?: string | null): string {
@@ -260,15 +226,15 @@ export default function SimulatorPage() {
   const selectedPickupMarkers = new Map<string, number>();
   const selectedDeliveryMarkers = new Map<string, number>();
 
-  simulatedSelectedItems.forEach((item) => {
+  simulatedSelectedConsignments.forEach((consignment) => {
     const [pickupTaxPoint, deliveryTaxPoint] =
-      item.taxPointRelation?.split("-").map((part) => part.trim()) ?? [];
+      consignment.taxPointRelation?.split("-").map((part) => part.trim()) ?? [];
 
     addMarkerCandidate(selectedPickupMarkers, pickupTaxPoint);
-    addMarkerCandidate(selectedPickupMarkers, item.pickupLocationCity);
+    addMarkerCandidate(selectedPickupMarkers, consignment.pickupLocationCity);
 
     addMarkerCandidate(selectedDeliveryMarkers, deliveryTaxPoint);
-    addMarkerCandidate(selectedDeliveryMarkers, item.destinationCity);
+    addMarkerCandidate(selectedDeliveryMarkers, consignment.destinationCity);
   });
 
   const proposedRouteEntries = (primaryRoute?.optimizedRouteStops ?? []).map(
@@ -298,25 +264,6 @@ export default function SimulatorPage() {
     setShowCalculatedParts(false);
   }
 
-  async function handleAddFictitiousBooking() {
-    setFictitiousFieldErrors({});
-
-    const result = await addFictitiousBooking({
-      taxPointRelation: fictitiousTaxPointRelation,
-      price: fictitiousPrice,
-    });
-
-    if (!result.success) {
-      setFictitiousFieldErrors(result.fieldErrors);
-      return;
-    }
-
-    setFictitiousTaxPointRelation("");
-    setFictitiousPrice("");
-    setFictitiousFieldErrors({});
-    setIsFictitiousModalOpen(false);
-  }
-
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="simulator" />
@@ -329,8 +276,7 @@ export default function SimulatorPage() {
                 Simulator
               </h1>
               <p className="text-sm text-[var(--text-primary)] opacity-80 leading-5">
-                Simulera extra körkostnad och intäkt för oplacerade och fiktiva
-                bokningar.
+                Simulera extra körkostnad och intäkt för oplacerade bokningar.
               </p>
             </div>
 
@@ -505,7 +451,7 @@ export default function SimulatorPage() {
             )}
           </div>
 
-          <div className="bg-[var(--primary-element)] rounded-2xl shadow-md border border-[var(--seperating-gray)] p-4 flex flex-col min-h-0">
+          <div className="bg-[var(--primary-element)] rounded-2xl shadow-md border border-[var(--seperating-gray)] p-4 flex flex-col min-h-0 h-full">
             <div className="mb-4 flex flex-col gap-3">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -522,7 +468,7 @@ export default function SimulatorPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={handleRunSimulation}
@@ -538,7 +484,10 @@ export default function SimulatorPage() {
 
                 <button
                   type="button"
-                  onClick={clearSimulationSelection}
+                  onClick={() => {
+                    clearSimulationSelection();
+                    resetCalculatedParts();
+                  }}
                   disabled={selectedBookingCount === 0}
                   className="bg-[var(--button-reset)] hover:bg-[var(--button-reset-hover)] disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-xl transition"
                 >
@@ -547,10 +496,7 @@ export default function SimulatorPage() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    resetSimulationResults();
-                    resetCalculatedParts();
-                  }}
+                  onClick={resetCalculatedParts}
                   disabled={!showCalculatedParts}
                   className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-xl transition"
                 >
@@ -568,7 +514,7 @@ export default function SimulatorPage() {
                 Inga oplacerade bokningar hittades.
               </div>
             ) : (
-              <div className="overflow-auto border border-[var(--seperating-gray)] rounded-2xl">
+              <div className="overflow-auto flex-1 min-h-0 border border-[var(--seperating-gray)] rounded-2xl">
                 <table className="w-full border-collapse text-sm">
                   <thead className="sticky top-0 z-10 bg-[var(--primary-element)]">
                     <tr className="border-b border-[var(--seperating-gray)] text-[var(--text-primary)]">
@@ -593,7 +539,7 @@ export default function SimulatorPage() {
                       );
                       const data = consignment as RevenueFields;
                       const shouldShowCalculatedParts =
-                        showCalculatedParts && hasRowSimulationResult(data);
+                        showCalculatedParts && isSelected;
                       const revenue = shouldShowCalculatedParts
                         ? getRevenue(data)
                         : 0;
@@ -642,13 +588,6 @@ export default function SimulatorPage() {
                             <span className="rounded-lg bg-[var(--secondary-element)] px-2 py-1 text-xs font-semibold">
                               {consignment.taxPointRelation?.trim() || "Saknas"}
                             </span>
-                            {shouldShowCalculatedParts &&
-                              data.missingDistanceRelation && (
-                                <p className="mt-1 text-xs font-semibold text-red-700">
-                                  Taxepoint {data.missingDistanceRelation} finns
-                                  inte, kan inte beräkna avstånd.
-                                </p>
-                              )}
                           </td>
 
                           <td className="p-3 text-right text-[var(--text-primary)]">
@@ -688,143 +627,6 @@ export default function SimulatorPage() {
                 </table>
               </div>
             )}
-
-            <div className="mt-4 rounded-2xl border border-[var(--seperating-gray)] bg-[var(--secondary-element)] p-4">
-              <div className="flex items-center justify-between gap-4 mb-3">
-                <div>
-                  <h3 className="text-lg font-bold text-[var(--text-primary)]">
-                    Fiktiva bokningar
-                  </h3>
-                  <p className="text-sm text-[var(--text-primary)] opacity-80">
-                    Simuleras med angivet pris och taxerelation.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFictitiousFieldErrors({});
-                    setIsFictitiousModalOpen(true);
-                  }}
-                  className="bg-[var(--button-fetch)] hover:opacity-90 text-[var(--text-primary)] font-bold py-2 px-4 rounded-xl transition border border-[var(--seperating-gray)]"
-                >
-                  Lägg till fiktiv bokning
-                </button>
-              </div>
-
-              {fictitiousBookings.length === 0 ? (
-                <p className="text-sm text-[var(--text-primary)]">
-                  Inga fiktiva bokningar tillagda.
-                </p>
-              ) : (
-                <div className="overflow-auto border border-[var(--seperating-gray)] rounded-2xl bg-[var(--primary-element)]">
-                  <table className="w-full border-collapse text-sm">
-                    <thead className="bg-[var(--primary-element)]">
-                      <tr className="border-b border-[var(--seperating-gray)] text-[var(--text-primary)]">
-                        <th className="text-left p-3 w-14">Välj</th>
-                        <th className="text-left p-3">Taxerelation</th>
-                        <th className="text-right p-3">Extra km</th>
-                        <th className="text-right p-3">Intäkt</th>
-                        <th className="text-left p-3">Steg</th>
-                        <th className="text-right p-3">Kostnad</th>
-                        <th className="text-right p-3">Åtgärd</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {fictitiousBookings.map((booking) => {
-                        const isSelected =
-                          selectedFictitiousBookingIds.includes(booking.id);
-                        const data = booking as RevenueFields;
-                        const shouldShowCalculatedParts =
-                          showCalculatedParts && hasRowSimulationResult(data);
-                        const revenue = shouldShowCalculatedParts
-                          ? getRevenue(data)
-                          : booking.price;
-                        const extraDrivingCost = shouldShowCalculatedParts
-                          ? data.extraDrivingCost
-                          : null;
-                        const extraDistanceKm = shouldShowCalculatedParts
-                          ? data.extraDistanceKm
-                          : null;
-                        const rowColor = isSelected
-                          ? getSelectedConsignmentRowColor(
-                              revenue,
-                              extraDrivingCost,
-                            )
-                          : "bg-[var(--primary-element)]";
-
-                        return (
-                          <tr
-                            key={booking.id}
-                            className={`border-b border-[var(--seperating-gray)] transition ${rowColor}`}
-                          >
-                            <td className="p-3">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() =>
-                                  toggleFictitiousBooking(booking.id)
-                                }
-                                className="h-4 w-4"
-                              />
-                            </td>
-
-                            <td className="p-3 text-[var(--text-primary)]">
-                              <span className="rounded-lg bg-[var(--secondary-element)] px-2 py-1 text-xs font-semibold">
-                                {booking.taxPointRelation}
-                              </span>
-                              {shouldShowCalculatedParts &&
-                                data.missingDistanceRelation && (
-                                  <p className="mt-1 text-xs font-semibold text-red-700">
-                                    Taxepoint {data.missingDistanceRelation}{" "}
-                                    finns inte, kan inte beräkna avstånd.
-                                  </p>
-                                )}
-                            </td>
-
-                            <td className="p-3 text-right text-[var(--text-primary)]">
-                              {extraDistanceKm != null
-                                ? `${formatDecimal(extraDistanceKm)} km`
-                                : "-"}
-                            </td>
-
-                            <td className="p-3 text-right font-semibold text-[var(--text-primary)]">
-                              {formatNumber(revenue)} kr
-                            </td>
-
-                            <td className="p-3 text-left text-[var(--text-primary)]">
-                              {shouldShowCalculatedParts &&
-                              data.simulatedProfitability !== undefined
-                                ? getRevenueStepText(data)
-                                : "-"}
-                            </td>
-
-                            <td className="p-3 text-right font-semibold text-[var(--text-primary)]">
-                              {extraDrivingCost != null
-                                ? `${formatNumber(extraDrivingCost)} kr`
-                                : "-"}
-                            </td>
-
-                            <td className="p-3 text-right">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  removeFictitiousBooking(booking.id)
-                                }
-                                className="text-sm font-bold text-red-700 hover:underline"
-                              >
-                                Ta bort
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
           </div>
 
           <div className="bg-[var(--primary-element)] rounded-2xl shadow-md border border-[var(--seperating-gray)] p-4 flex flex-col min-h-0 h-full">
@@ -973,8 +775,8 @@ export default function SimulatorPage() {
                         Föreslagen rutt
                       </h3>
                       <p className="text-sm text-[var(--text-primary)] opacity-80">
-                        Visar hela rutten. Markerade bokningar visas som pickup
-                        och delivery.
+                        Visar hela rutten. Markerade oplacerade bokningar visas
+                        som pickup och delivery.
                       </p>
                     </div>
 
@@ -1015,93 +817,6 @@ export default function SimulatorPage() {
           </div>
         </section>
       </main>
-
-      {isFictitiousModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-[var(--primary-element)] text-[var(--text-primary)] shadow-xl border border-[var(--seperating-gray)] p-6">
-            <h2 className="text-xl font-bold mb-4">Lägg till fiktiv bokning</h2>
-
-            <div className="space-y-4">
-              <div>
-                {fictitiousFieldErrors.taxPointRelation && (
-                  <p className="mb-1 text-sm font-semibold text-red-700">
-                    {fictitiousFieldErrors.taxPointRelation}
-                  </p>
-                )}
-                <label
-                  htmlFor="fictitiousTaxPointRelation"
-                  className="block text-sm font-bold mb-1"
-                >
-                  Taxerelation
-                </label>
-                <input
-                  id="fictitiousTaxPointRelation"
-                  value={fictitiousTaxPointRelation}
-                  onChange={(event) => {
-                    setFictitiousTaxPointRelation(event.target.value);
-                    setFictitiousFieldErrors((current) => ({
-                      ...current,
-                      taxPointRelation: undefined,
-                    }));
-                  }}
-                  placeholder="Exempel: 78542-36441"
-                  className="w-full p-3 rounded-xl border-2 border-[var(--input-border)] bg-[var(--secondary-element)] text-[var(--text-primary)]"
-                />
-              </div>
-
-              <div>
-                {fictitiousFieldErrors.price && (
-                  <p className="mb-1 text-sm font-semibold text-red-700">
-                    {fictitiousFieldErrors.price}
-                  </p>
-                )}
-                <label
-                  htmlFor="fictitiousPrice"
-                  className="block text-sm font-bold mb-1"
-                >
-                  Pris
-                </label>
-                <input
-                  id="fictitiousPrice"
-                  type="text"
-                  inputMode="decimal"
-                  value={fictitiousPrice}
-                  onChange={(event) => {
-                    setFictitiousPrice(event.target.value);
-                    setFictitiousFieldErrors((current) => ({
-                      ...current,
-                      price: undefined,
-                    }));
-                  }}
-                  className="w-full p-3 rounded-xl border-2 border-[var(--input-border)] bg-[var(--secondary-element)] text-[var(--text-primary)]"
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setFictitiousFieldErrors({});
-                  setIsFictitiousModalOpen(false);
-                }}
-                className="px-4 py-2 rounded-xl border border-[var(--seperating-gray)] font-bold"
-              >
-                Avbryt
-              </button>
-
-              <button
-                type="button"
-                onClick={handleAddFictitiousBooking}
-                disabled={isAddingFictitiousBooking}
-                className="px-4 py-2 rounded-xl bg-[var(--button-submit)] hover:bg-[var(--button-submit-hover)] disabled:bg-gray-400 text-white font-bold"
-              >
-                {isAddingFictitiousBooking ? "Kontrollerar..." : "Lägg till"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <Footer />
     </div>

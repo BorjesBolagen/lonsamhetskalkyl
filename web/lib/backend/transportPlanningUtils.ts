@@ -5,8 +5,8 @@ import {
   getCurrentlySignedInUser,
   getIlogEquipages,
   getIlogLines,
+  ProfitabilityValue,
 } from "../api";
-import type { ProfitabilityValue } from "../api";
 import type { ConsignmentListItem, EquipageItem, LineItem } from "../ilogTypes";
 import {
   AREA_OPTIONS,
@@ -18,10 +18,9 @@ import {
   normalizeText,
   parseAreaState,
 } from "../areaLineConfig";
-import {
-  DEFAULT_MILE_COST,
-  DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-} from "./constants";
+
+export const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
+export const STANDARD_FLM_REFERENCE = 19.2;
 
 export type LineWithCluster = LineItem & {
   cluster: string;
@@ -50,22 +49,15 @@ export type ConsignmentTotals = {
 export type TransportPlanningUserSettings = {
   selectedAreas: AreaState;
   profitabilityReferenceValue: number;
-  mileCostReferenceValue: number;
-};
-
-export type RouteDistanceResult = {
-  distanceKm: number;
-  missingDistanceRelation: string | null;
 };
 
 export type BestConsecutiveInsertionResult = {
   originalDistanceKm: number;
-  optimizedDistanceKm: number | null;
-  extraDistanceKm: number | null;
+  optimizedDistanceKm: number;
+  extraDistanceKm: number;
   optimizedStops: string[];
   pickupIndex: number | null;
   deliveryIndex: number | null;
-  missingDistanceRelation: string | null;
 };
 
 /**
@@ -91,33 +83,9 @@ export function parseProfitabilityReferenceValue(filters: unknown): number {
 }
 
 /**
- * Läser användarens sparade milkostnad för simulatorn.
- */
-export function parseMileCostReferenceValue(filters: unknown): number {
-  if (
-    typeof filters === "object" &&
-    filters !== null &&
-    !Array.isArray(filters)
-  ) {
-    const candidate = (filters as Record<string, unknown>)
-      .mileCostReferenceValue;
-
-    if (
-      typeof candidate === "number" &&
-      Number.isFinite(candidate) &&
-      candidate > 0
-    ) {
-      return candidate;
-    }
-  }
-
-  return DEFAULT_MILE_COST;
-}
-
-/**
  * Hämtar användarens transportplaneringsinställningar.
  */
-export async function getCurrentTransportPlanningUserSettings() {
+export async function getCurrentTransportPlanningUserSettings(): Promise<TransportPlanningUserSettings> {
   try {
     const response = await getCurrentlySignedInUser();
     const user = response.data;
@@ -126,7 +94,6 @@ export async function getCurrentTransportPlanningUserSettings() {
       return {
         selectedAreas: DEFAULT_AREAS,
         profitabilityReferenceValue: DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-        mileCostReferenceValue: DEFAULT_MILE_COST,
       };
     }
 
@@ -135,13 +102,11 @@ export async function getCurrentTransportPlanningUserSettings() {
       profitabilityReferenceValue: parseProfitabilityReferenceValue(
         user.filters,
       ),
-      mileCostReferenceValue: parseMileCostReferenceValue(user.filters),
     };
   } catch {
     return {
       selectedAreas: DEFAULT_AREAS,
       profitabilityReferenceValue: DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-      mileCostReferenceValue: DEFAULT_MILE_COST,
     };
   }
 }
@@ -245,7 +210,9 @@ export function pickTrailingNamePart(rawValue?: string | null): string | null {
 export function getDisplayCustomerName(
   consignment: ConsignmentListItem,
 ): string {
-  const normalizedCustomerName = pickTrailingNamePart(consignment.customerName);
+  const normalizedCustomerName = pickTrailingNamePart(
+    consignment.customerName,
+  );
   if (normalizedCustomerName) {
     return normalizedCustomerName;
   }
@@ -632,7 +599,7 @@ export const buildRouteStopsFromConsignments =
 export async function calculateRouteDistanceKm(
   stops: string[],
   getDistanceKm: (sender: string, receiver: string) => Promise<number | null>,
-): Promise<RouteDistanceResult> {
+): Promise<number> {
   let totalDistanceKm = 0;
 
   for (let index = 0; index < stops.length - 1; index += 1) {
@@ -641,20 +608,12 @@ export async function calculateRouteDistanceKm(
 
     const distanceKm = await getDistanceKm(from, to);
 
-    if (distanceKm === null) {
-      return {
-        distanceKm: totalDistanceKm,
-        missingDistanceRelation: `${from}-${to}`,
-      };
+    if (distanceKm !== null) {
+      totalDistanceKm += distanceKm;
     }
-
-    totalDistanceKm += distanceKm;
   }
 
-  return {
-    distanceKm: totalDistanceKm,
-    missingDistanceRelation: null,
-  };
+  return totalDistanceKm;
 }
 
 /**
@@ -674,19 +633,8 @@ export async function calculateBestPickupBeforeDeliveryInsertion(
   getDistanceKm: (sender: string, receiver: string) => Promise<number | null>,
 ): Promise<BestConsecutiveInsertionResult> {
   if (currentStops.length === 0) {
-    const distanceKm = await getDistanceKm(pickupTaxPoint, deliveryTaxPoint);
-
-    if (distanceKm === null) {
-      return {
-        originalDistanceKm: currentDistanceKm,
-        optimizedDistanceKm: null,
-        extraDistanceKm: null,
-        optimizedStops: [pickupTaxPoint, deliveryTaxPoint],
-        pickupIndex: null,
-        deliveryIndex: null,
-        missingDistanceRelation: `${pickupTaxPoint}-${deliveryTaxPoint}`,
-      };
-    }
+    const distanceKm =
+      (await getDistanceKm(pickupTaxPoint, deliveryTaxPoint)) ?? 0;
 
     return {
       originalDistanceKm: currentDistanceKm,
@@ -695,39 +643,13 @@ export async function calculateBestPickupBeforeDeliveryInsertion(
       optimizedStops: [pickupTaxPoint, deliveryTaxPoint],
       pickupIndex: 0,
       deliveryIndex: 1,
-      missingDistanceRelation: null,
     };
   }
 
   if (currentStops.length === 1) {
-    const firstLeg = await getDistanceKm(currentStops[0], pickupTaxPoint);
-
-    if (firstLeg === null) {
-      return {
-        originalDistanceKm: currentDistanceKm,
-        optimizedDistanceKm: null,
-        extraDistanceKm: null,
-        optimizedStops: [...currentStops],
-        pickupIndex: null,
-        deliveryIndex: null,
-        missingDistanceRelation: `${currentStops[0]}-${pickupTaxPoint}`,
-      };
-    }
-
-    const secondLeg = await getDistanceKm(pickupTaxPoint, deliveryTaxPoint);
-
-    if (secondLeg === null) {
-      return {
-        originalDistanceKm: currentDistanceKm,
-        optimizedDistanceKm: null,
-        extraDistanceKm: null,
-        optimizedStops: [...currentStops],
-        pickupIndex: null,
-        deliveryIndex: null,
-        missingDistanceRelation: `${pickupTaxPoint}-${deliveryTaxPoint}`,
-      };
-    }
-
+    const firstLeg = (await getDistanceKm(currentStops[0], pickupTaxPoint)) ?? 0;
+    const secondLeg =
+      (await getDistanceKm(pickupTaxPoint, deliveryTaxPoint)) ?? 0;
     const newDistanceKm = firstLeg + secondLeg;
 
     return {
@@ -737,7 +659,6 @@ export async function calculateBestPickupBeforeDeliveryInsertion(
       optimizedStops: [currentStops[0], pickupTaxPoint, deliveryTaxPoint],
       pickupIndex: 1,
       deliveryIndex: 2,
-      missingDistanceRelation: null,
     };
   }
 
@@ -745,15 +666,10 @@ export async function calculateBestPickupBeforeDeliveryInsertion(
   let bestStops = [...currentStops];
   let bestPickupIndex: number | null = null;
   let bestDeliveryIndex: number | null = null;
-  let firstMissingDistanceRelation: string | null = null;
 
   // Start och stop behålls som första/sista stopp.
   // Därför får nya stopp bara läggas in mellan dem.
-  for (
-    let pickupIndex = 1;
-    pickupIndex < currentStops.length;
-    pickupIndex += 1
-  ) {
+  for (let pickupIndex = 1; pickupIndex < currentStops.length; pickupIndex += 1) {
     for (
       let deliveryIndex = pickupIndex + 1;
       deliveryIndex <= currentStops.length;
@@ -763,19 +679,13 @@ export async function calculateBestPickupBeforeDeliveryInsertion(
       candidateStops.splice(pickupIndex, 0, pickupTaxPoint);
       candidateStops.splice(deliveryIndex, 0, deliveryTaxPoint);
 
-      const candidateDistanceResult = await calculateRouteDistanceKm(
+      const candidateDistanceKm = await calculateRouteDistanceKm(
         candidateStops,
         getDistanceKm,
       );
 
-      if (candidateDistanceResult.missingDistanceRelation) {
-        firstMissingDistanceRelation ??=
-          candidateDistanceResult.missingDistanceRelation;
-        continue;
-      }
-
-      if (candidateDistanceResult.distanceKm < bestDistanceKm) {
-        bestDistanceKm = candidateDistanceResult.distanceKm;
+      if (candidateDistanceKm < bestDistanceKm) {
+        bestDistanceKm = candidateDistanceKm;
         bestStops = candidateStops;
         bestPickupIndex = pickupIndex;
         bestDeliveryIndex = deliveryIndex;
@@ -786,12 +696,11 @@ export async function calculateBestPickupBeforeDeliveryInsertion(
   if (!Number.isFinite(bestDistanceKm)) {
     return {
       originalDistanceKm: currentDistanceKm,
-      optimizedDistanceKm: null,
-      extraDistanceKm: null,
+      optimizedDistanceKm: currentDistanceKm,
+      extraDistanceKm: 0,
       optimizedStops: [...currentStops],
       pickupIndex: null,
       deliveryIndex: null,
-      missingDistanceRelation: firstMissingDistanceRelation,
     };
   }
 
@@ -802,7 +711,6 @@ export async function calculateBestPickupBeforeDeliveryInsertion(
     optimizedStops: bestStops,
     pickupIndex: bestPickupIndex,
     deliveryIndex: bestDeliveryIndex,
-    missingDistanceRelation: null,
   };
 }
 
@@ -820,15 +728,15 @@ export async function calculateBestExtraDistanceKm(
   pickupTaxPoint: string,
   deliveryTaxPoint: string,
   getDistanceKm: (sender: string, receiver: string) => Promise<number | null>,
-): Promise<number | null> {
-  const currentDistanceResult = await calculateRouteDistanceKm(
+): Promise<number> {
+  const currentDistanceKm = await calculateRouteDistanceKm(
     baseStops,
     getDistanceKm,
   );
 
   const result = await calculateBestPickupBeforeDeliveryInsertion(
     baseStops,
-    currentDistanceResult.distanceKm,
+    currentDistanceKm,
     pickupTaxPoint,
     deliveryTaxPoint,
     getDistanceKm,
@@ -846,14 +754,14 @@ export async function calculateBestRouteInsertion(
   deliveryTaxPoint: string,
   getDistanceKm: (sender: string, receiver: string) => Promise<number | null>,
 ): Promise<BestConsecutiveInsertionResult> {
-  const currentDistanceResult = await calculateRouteDistanceKm(
+  const currentDistanceKm = await calculateRouteDistanceKm(
     baseStops,
     getDistanceKm,
   );
 
   return calculateBestPickupBeforeDeliveryInsertion(
     baseStops,
-    currentDistanceResult.distanceKm,
+    currentDistanceKm,
     pickupTaxPoint,
     deliveryTaxPoint,
     getDistanceKm,

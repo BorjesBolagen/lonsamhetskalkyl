@@ -35,34 +35,14 @@ export default function Navigation({
     return () => clearInterval(timer);
   }, [currentPage]);
 
-const [userRole, setUserRole] = useState<string | null>(null);
-const [hasMounted, setHasMounted] = useState(false);
-
-useEffect(() => {
-  setHasMounted(true);
-
-  const fetchUserRole = async () => {
+  const [userRole, setUserRole] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
     try {
-      const cachedRole = window.localStorage.getItem("userRole");
-
-      if (cachedRole) {
-        setUserRole(cachedRole);
-        return;
-      }
-
-      const response = await getCurrentlySignedInUser();
-
-      if (response.status && response.data?.role) {
-        setUserRole(response.data.role);
-        window.localStorage.setItem("userRole", response.data.role);
-      }
-    } catch (error) {
-      console.error("Error fetching user role:", error);
+      return window.localStorage.getItem("userRole");
+    } catch {
+      return null;
     }
-  };
-
-  void fetchUserRole();
-}, []);
+  });
 
   useEffect(() => {
     if (userRole) return;
@@ -140,15 +120,15 @@ useEffect(() => {
               Simulator
             </GuardedLink>
 
-          {hasMounted && userRole === "admin" && (
-            <GuardedLink
-              href="/admin"
-              className={getLinkClasses(currentPage === "admin")}
-              hasUnsavedChanges={hasUnsavedChanges}
-            >
-              Admin
-            </GuardedLink>
-          )}
+            {userRole === "admin" && (
+              <GuardedLink
+                href="/admin"
+                className={getLinkClasses(currentPage === "admin")}
+                hasUnsavedChanges={hasUnsavedChanges}
+              >
+                Admin
+              </GuardedLink>
+            )}
           </div>
 
           {/* RIGHT SIDE */}
