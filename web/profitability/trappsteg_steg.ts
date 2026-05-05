@@ -3,18 +3,6 @@ import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { roundUpWeight } from "../lib/backend/utils";
 import { normalizeText } from "./service";
 
-function valideraInput(input: ProfitabilityInput) {
-    // Validera input
-    if (!input.kundnamn) {
-        throw new Error("Kundnamn måste fyllas i.");
-    }
-    if (!input.taxPointRelation) {
-        throw new Error("Taxepunkter måste fyllas i.");
-    }
-    if (isNaN(input.chargeable_weight)) {
-        throw new Error("Levererad vikt måste vara ett giltigt tal.");
-    }
-}
 
 /**
  * Steg 1 för trappstegsmodellen. Försöker hitta exakt matching på kundnamn + taxeprel + vklfgrv.
@@ -25,15 +13,12 @@ function valideraInput(input: ProfitabilityInput) {
  * @returns Estimerat pris eller null
  * @throws Error om input är fel eller om databasen inte får träff
  */
-export async function try_steg_1(input: ProfitabilityInput): Promise<number | null> {
-
-    valideraInput(input);
+export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
 
     // Hämta input variabler
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-    const weight_plus_one = await roundUpWeight(weight);
 
     // Fråga supabase om (kundnamn, viktklass, avsändningstaxepunkt, mottagningstaxepunkt) finns.
     // Om det finns returneras alla dessa raders kundnettofrakt och vikt
@@ -105,15 +90,12 @@ export async function try_steg_1(input: ProfitabilityInput): Promise<number | nu
  * @returns Estimerat pris eller null.
  * @throws Error om input är fel eller om databasanropet misslyckas.
  */
-export async function try_steg_2(input: ProfitabilityInput): Promise<number | null> {
-
-    valideraInput(input);
+export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
 
     // Hämta input variabler
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-    const weight_plus_one = await roundUpWeight(weight); 
 
     // Kolla om supabase har match på kundnamn, km och viktklass
     const supabase = await getSupabaseServerClient();
@@ -168,36 +150,28 @@ export async function try_steg_2(input: ProfitabilityInput): Promise<number | nu
  * @returns Estimerat pris eller null.
  * @throws Error om input är fel eller om databasanropet misslyckas.
  */
-export async function try_steg_3(input: ProfitabilityInput): Promise<number | null> {
+export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
     
-    valideraInput(input);
-
+    const t0 = performance.now();
     // Hämta variabler
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-    const weight_plus_one = await roundUpWeight(weight);
+    const t1 = performance.now();
 
     // Kolla om supabase har match på bara kundnamn
     const supabase = await getSupabaseServerClient();
-    const { data: data_orginal, error: error_orginal } = await supabase.rpc("steg_3", {
-        in_kundnamn: kundnamn,
-        in_weight: weight,
-        in_taxep_sender: sender_taxep,
-        in_taxep_receiver: receiver_taxep
-    });
+    const [{ data: data_orginal, error: error_orginal }, { data: data_plus_ett, error: error_plus_ett }] = 
+        await Promise.all([
+            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep }),
+            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight_plus_one, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep })
+        ]);
+    
+    const t2 = performance.now();
 
     if (error_orginal) {
         throw new Error("Fel vid steg 3: " + JSON.stringify(error_orginal, null, 2));
     }
-
-    // Kolla om supabase har match på bara kundnamn för vikt+1
-    const { data: data_plus_ett, error: error_plus_ett } = await supabase.rpc("steg_3", {
-        in_kundnamn: kundnamn,
-        in_weight: weight_plus_one,
-        in_taxep_sender: sender_taxep,
-        in_taxep_receiver: receiver_taxep
-    });
 
     if (error_plus_ett) {
         throw new Error("Fel vid steg 3: " + JSON.stringify(error_plus_ett, null, 2));
@@ -217,6 +191,13 @@ export async function try_steg_3(input: ProfitabilityInput): Promise<number | nu
     if (estimeratPris_orginal !== null && estimeratPris_plus_ett !== null) {
         return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
     }
+
+    const t3 = performance.now();
+    console.log({
+        setup: t1 - t0,
+        supabase: t2 - t1,
+        extra: t3 - t2,
+    });
     return estimeratPris_orginal ?? estimeratPris_plus_ett ?? null;
 
 }
@@ -230,14 +211,11 @@ export async function try_steg_3(input: ProfitabilityInput): Promise<number | nu
  * @returns Estimerat pris eller null.
  * @throws Error om input är fel eller om databasanropet misslyckas.
  */
-export async function try_steg_4(input: ProfitabilityInput): Promise<number | null> {
-    
-    valideraInput(input);
+export async function try_steg_4(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
 
     // Hämta variabler
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-    const weight_plus_one = await roundUpWeight(weight);
 
     // Kolla om supabase har match på bara taxepunkter och viktklass
     const supabase = await getSupabaseServerClient();
@@ -280,14 +258,11 @@ export async function try_steg_4(input: ProfitabilityInput): Promise<number | nu
     return estimeratPris_orginal ?? estimeratPris_plus_ett ?? null;
 }
 
-export async function try_steg_5(input: ProfitabilityInput): Promise<number | null> {
-    
-    valideraInput(input);
+export async function try_steg_5(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
 
     // Hämta variabler
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-    const weight_plus_one = await roundUpWeight(weight);
 
     const supabase = await getSupabaseServerClient();
     const { data: data_orginal, error: error_orginal } = await supabase.rpc("steg_5", {
@@ -309,8 +284,6 @@ export async function try_steg_5(input: ProfitabilityInput): Promise<number | nu
     if (error_plus_ett) {
         throw new Error("Fel vid steg 5: " + JSON.stringify(error_plus_ett, null, 2));
     }
-
-    console.log(input.kundnamn, data_orginal, data_plus_ett);
 
     // -------- Se om vi fick träff och estimera pris om vi fick träff
     const calculatePris = (d: { medel_se: number, forh_linjevis: number } | null, weight: number): number | null => {
