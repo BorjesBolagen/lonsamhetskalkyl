@@ -119,7 +119,7 @@ export function useHistoricalImport() {
 
       setCSVImportStage('Import slutförd!');
       setCSVImportResponse(
-        `Import klar! ${result.result.rowsFound} rader lästa, ${result.result.insertedRows} rader skrivna till Historical_shipment, ${result.result.filteredOutRows} rader bortfiltrerade (viktklass 20 eller lägre).`,
+        `Import klar!\n${result.result.rowsFound} rader lästa.\n${result.result.insertedRows} rader skrivna till Historical_shipment.\n${result.result.filteredOutRows} rader bortfiltrerade (viktklass 20 eller lägre).`,
       );
       setCSVImportErrors([]);
     } catch (error) {

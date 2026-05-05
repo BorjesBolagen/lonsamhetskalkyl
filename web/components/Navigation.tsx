@@ -1,8 +1,9 @@
 "use client";
-import Link from "next/link";
 import GuardedLink from "./GuardedLink";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
+import { getCurrentlySignedInUser, getAmountOfUnreadMessages } from "@/lib/api";
 
 interface NavigationProps {
   currentPage?: string;
@@ -14,12 +15,78 @@ export default function Navigation({
   hasUnsavedChanges = false,
 }: NavigationProps) {
   const router = useRouter();
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const confirmNavigation = () => {
-    if (!hasUnsavedChanges) return true;
+  // Hämta antal olästa vid mount, nollställ när man är på notis-sidan
+  useEffect(() => {
+    if (currentPage === "notifications") {
+      setUnreadCount(0);
+      return;
+    }
 
-    return confirm("Du har osparade ändringar. Vill du verkligen lämna sidan?");
+    // Hämta direkt + sedan var 30:e sekund
+    const fetchUnread = () =>
+      getAmountOfUnreadMessages()
+        .then((res) => setUnreadCount(Number(res.data)))
+        .catch(console.error);
+
+    fetchUnread();
+    const timer = setInterval(fetchUnread, 20_000);
+    return () => clearInterval(timer);
+  }, [currentPage]);
+
+const [userRole, setUserRole] = useState<string | null>(null);
+const [hasMounted, setHasMounted] = useState(false);
+
+useEffect(() => {
+  setHasMounted(true);
+
+  const fetchUserRole = async () => {
+    try {
+      const cachedRole = window.localStorage.getItem("userRole");
+
+      if (cachedRole) {
+        setUserRole(cachedRole);
+        return;
+      }
+
+      const response = await getCurrentlySignedInUser();
+
+      if (response.status && response.data?.role) {
+        setUserRole(response.data.role);
+        window.localStorage.setItem("userRole", response.data.role);
+      }
+    } catch (error) {
+      console.error("Error fetching user role:", error);
+    }
   };
+
+  void fetchUserRole();
+}, []);
+
+  useEffect(() => {
+    if (userRole) return;
+
+    const fetchUserRole = async () => {
+      try {
+        const response = await getCurrentlySignedInUser();
+        if (response.status && response.data) {
+          setUserRole(response.data.role);
+          if (response.data.role) {
+            try {
+              window.localStorage.setItem("userRole", response.data.role);
+            } catch {
+              // ignore storage errors
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user role:", error);
+      }
+    };
+
+    fetchUserRole();
+  }, [userRole]);
 
   const handleLogout = async () => {
     if (hasUnsavedChanges) {
@@ -32,6 +99,11 @@ export default function Navigation({
     try {
       const supabase = getSupabaseBrowserClient();
       await supabase.auth.signOut();
+      try {
+        window.localStorage.removeItem("userRole");
+      } catch {
+        // ignore storage errors
+      }
       console.log("User signed out successfully");
       router.push("/login");
     } catch (error) {
@@ -68,6 +140,7 @@ export default function Navigation({
               Simulator
             </GuardedLink>
 
+          {hasMounted && userRole === "admin" && (
             <GuardedLink
               href="/admin"
               className={getLinkClasses(currentPage === "admin")}
@@ -75,16 +148,23 @@ export default function Navigation({
             >
               Admin
             </GuardedLink>
+          )}
           </div>
 
           {/* RIGHT SIDE */}
           <div className="flex-1 flex items-center justify-end space-x-4">
+            {/* Notifikationer med badge */}
             <GuardedLink
               href="/notifications"
-              className={getLinkClasses(currentPage === "notifications")}
+              className={`${getLinkClasses(currentPage === "notifications")} gap-2`}
               hasUnsavedChanges={hasUnsavedChanges}
             >
               Notifikationer
+              {unreadCount > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[11px] font-bold flex items-center justify-center leading-none">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </GuardedLink>
 
             <GuardedLink

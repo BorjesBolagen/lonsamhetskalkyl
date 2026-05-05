@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { loginProcedure } from "@/lib/api";
+import { loginProcedure, getCurrentlySignedInUser } from "@/lib/api";
 
 export default function Login() {
   const router = useRouter();
@@ -9,7 +9,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [rememberMe, setRememerMe] = useState(false)
+  const [rememberMe, setRememerMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -18,21 +18,43 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-        await loginProcedure(email, password, rememberMe);
-        router.push("/home");
-        router.refresh();
+      await loginProcedure(email, password, rememberMe);
 
+      // Cache the role locally to avoid a visible navbar flicker on navigation
+      try {
+        const resp = await getCurrentlySignedInUser();
+        if (resp.status && resp.data) {
+          if (resp.data.role) {
+            try {
+              window.localStorage.setItem("userRole", resp.data.role);
+            } catch (_) {}
+          } else {
+            try {
+              window.localStorage.removeItem("userRole");
+            } catch (_) {}
+          }
+        } else {
+          try {
+            window.localStorage.removeItem("userRole");
+          } catch (_) {}
+        }
+      } catch (e) {
+        try {
+          window.localStorage.removeItem("userRole");
+        } catch (_) {}
+      }
+
+      router.push("/home");
+      router.refresh();
     } catch (err) {
       setErrorMsg((err as Error).message);
     } finally {
       setIsLoading(false);
     }
-
-
   };
 
   return (
-    <div 
+    <div
       className="relative min-h-screen w-full flex items-center justify-center overflow-hidden"
       style={{
         backgroundImage: `
@@ -40,14 +62,14 @@ export default function Login() {
           linear-gradient(300deg, #426d46 25%, transparent 25.2%),
           linear-gradient(15deg, #1D3A21 15%, transparent 15.2%),
           linear-gradient(to bottom, #AEE3B2 0%, #446E30 100%)
-        `
+        `,
       }}
     >
       {/* Logotypen uppe till höger */}
       <div className="absolute top-8 right-8 bg-white p-3 rounded shadow-lg z-20 flex items-center justify-center">
-        <img 
-          src="/logo.png" 
-          alt="Börjes Logotyp" 
+        <img
+          src="/logo.png"
+          alt="Börjes Logotyp"
           className="h-10 w-auto object-contain"
         />
       </div>
@@ -92,32 +114,71 @@ export default function Login() {
             >
               {showPassword ? (
                 // Överstruket öga (dölj)
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"
+                  />
                 </svg>
               ) : (
                 // Vanligt öga (visa)
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
                 </svg>
               )}
             </button>
           </div>
-          
 
           <div className="flex items-center justify-between text-xs text-gray-600">
             <label className="flex items-center cursor-pointer">
-              <input type="checkbox" data-testid="remember-me" checked = {rememberMe} onChange={(e) => setRememerMe(e.target.checked)} className="mr-2 accent-[#76a57d]"  />
+              <input
+                type="checkbox"
+                data-testid="remember-me"
+                checked={rememberMe}
+                onChange={(e) => setRememerMe(e.target.checked)}
+                className="mr-2 accent-[#76a57d]"
+              />
               Kom ihåg mig
             </label>
-            <a href="#" className="underline hover:text-black transition-colors">
+            <a
+              href="#"
+              className="underline hover:text-black transition-colors"
+            >
               Glömt lösenord?
             </a>
           </div>
 
           {errorMsg && (
-            <p data-testid="error-message" className="text-red-500 text-sm text-center font-medium">{errorMsg}</p>
+            <p
+              data-testid="error-message"
+              className="text-red-500 text-sm text-center font-medium"
+            >
+              {errorMsg}
+            </p>
           )}
 
           <button

@@ -12,6 +12,10 @@ import {
 } from "../../lib/areaLineConfig";
 import { Json } from "../../lib/supabaseServerSchema";
 import { useEffect, useMemo, useState } from "react";
+import { DEFAULT_PROFITABILITY_REFERENCE_VALUE, DEFAULT_MILE_COST} from "../../lib/backend/constants"
+import {
+  parseMileCostReferenceValue,
+} from "../../lib/backend/transportPlanningUtils";
 
 type ThemeMode = "light" | "dark";
 
@@ -22,7 +26,6 @@ function applyThemeToDOM(theme: ThemeMode) {
 }
 
 const DEFAULT_THEME: ThemeMode = "light";
-const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
 
 function resolveInitialTheme(): ThemeMode {
   if (typeof document !== "undefined") {
@@ -116,6 +119,8 @@ export default function Settings() {
   const [draftTheme, setDraftTheme] = useState<ThemeMode>(DEFAULT_THEME);
   const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
     useState<number>(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
+  const [mileCostReferenceValue, setMileCostReferenceValue] = 
+    useState<number>(DEFAULT_MILE_COST);
 
   const clusterGroups = useMemo(() => {
     const sortedKeys = [...AREA_KEYS].sort((a, b) =>
@@ -147,12 +152,14 @@ export default function Settings() {
           <input
             type="checkbox"
             checked={districts[distKey]}
-            onChange={() =>
+            onChange={() => {
               setDistricts({
                 ...districts,
                 [distKey]: !districts[distKey],
-              })
-            }
+              });
+              setHasUnsavedChanges(true);
+
+            }}
             className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
           />
           {districts[distKey] && (
@@ -210,6 +217,10 @@ export default function Settings() {
         setProfitabilityReferenceValue(
           parseProfitabilityReferenceValue(user.filters),
         );
+
+        setMileCostReferenceValue(
+          parseMileCostReferenceValue(user.filters),
+        );
       } catch (error) {
         setFiltersStatus({
           type: "error",
@@ -255,6 +266,7 @@ export default function Settings() {
         areas: districts,
         theme: draftTheme,
         profitabilityReferenceValue,
+        mileCostReferenceValue,
       };
 
       await setFilters(userId, nextFilters as Json);
@@ -274,12 +286,12 @@ export default function Settings() {
 
   // Ikoner för ögat
   const EyeIcon = () => (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      fill="none" 
-      viewBox="0 0 24 24" 
-      strokeWidth={1.5} 
-      stroke="currentColor" 
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
       className="w-6 h-6"
     >
       <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
@@ -288,12 +300,12 @@ export default function Settings() {
   );
 
   const EyeSlashIcon = () => (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      fill="none" 
-      viewBox="0 0 24 24" 
-      strokeWidth={1.5} 
-      stroke="currentColor" 
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
       className="w-6 h-6"
     >
       <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
@@ -309,7 +321,7 @@ export default function Settings() {
 
       <main className="flex-grow flex flex-col p-6 items-center">
         {/* Yttre container, max-w-lg gör lådan lagom snäv (inget onödigt vitt utrymme) */}
-        <div className="font-sans text-[var(--text-secondary)] w-full max-w-lg">
+        <div className="font-sans text-[var(--text-secondary)] w-full max-w-6xl">
           <h1 className="text-4xl text-[var(--text-primary)] font-bold text-center mb-8">
             Mitt Konto
           </h1>
@@ -319,11 +331,10 @@ export default function Settings() {
             {/* KONTO-FLIKEN */}
             <button
               onClick={() => setActiveTab("konto")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
-                activeTab === "konto"
-                  ? "bg-[var(--primary-element)] border-[#446E30]"
-                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-              }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "konto"
+                ? "bg-[var(--primary-element)] border-[#446E30]"
+                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+                }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -345,11 +356,10 @@ export default function Settings() {
             {/* LÖSENORD-FLIKEN */}
             <button
               onClick={() => setActiveTab("losenord")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
-                activeTab === "losenord"
-                  ? "bg-[var(--primary-element)] border-[#446E30]"
-                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-              }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "losenord"
+                ? "bg-[var(--primary-element)] border-[#446E30]"
+                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+                }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -372,147 +382,177 @@ export default function Settings() {
           <section className="bg-[var(--primary-element)] rounded-xl shadow-md p-8 sm:p-10 min-h-[450px]">
             {/* INNEHÅLL: KONTO (Kombinerad info och inställningar) */}
             {activeTab === "konto" && (
-              <div className="space-y-10 w-full mx-auto">
-                {/* DEL 1: Kontoinformation (Read-only) */}
-                <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
-                    Din Profil
-                  </h3>
-                  <div className="bg-[var(--secondary-element)] p-5 rounded-lg space-y-3">
-                    <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
-                      <span className="text-[var(--text-primary)] font-bold">
-                        Användare:
-                      </span>
-                      <span className="font-medium">{displayName}</span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
-                      <span className="text-[var(--text-primary)] font-bold">
-                        E-post:
-                      </span>
-                      <span className="font-medium">{email}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-[var(--text-primary)] font-bold">
-                        Roll:
-                      </span>
-                      <span className="bg-[var(--primary-element)] text-[var(--text-primary)] px-3 py-1 rounded-full text-sm font-bold">
-                        {role}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* DEL 2: Områden (Interaktiv) */}
-                <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
-                    Filtrera dina kluster
-                  </h3>
-                  {isLoadingProfile && (
-                    <p className="text-sm text-gray-600 mb-3">
-                      Laddar sparade inställningar...
-                    </p>
-                  )}
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
-                        <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
-                          SML kluster
-                        </h4>
-                        <div className="space-y-2">
-                          {clusterGroups.sml.map((distKey) =>
-                            renderClusterToggle(distKey),
-                          )}
+              <div className="flex flex-col gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="flex flex-col gap-6">
+                    {/* DEL 1: Kontoinformation (Read-only) */}
+                    <div>
+                      <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
+                        Din Profil
+                      </h3>
+                      <div className="bg-[var(--secondary-element)] p-5 rounded-lg space-y-3">
+                        <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
+                          <span className="text-[var(--text-primary)] font-bold">
+                            Användare:
+                          </span>
+                          <span className="font-medium">{displayName}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-[var(--seperating-gray)] pb-2">
+                          <span className="text-[var(--text-primary)] font-bold">
+                            E-post:
+                          </span>
+                          <span className="font-medium">{email}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[var(--text-primary)] font-bold">
+                            Roll:
+                          </span>
+                          <span className="bg-[var(--primary-element)] text-[var(--text-primary)] px-3 py-1 rounded-full text-sm font-bold">
+                            {role}
+                          </span>
                         </div>
                       </div>
+                    </div>
+                    {/* DEL 3: Tema (Interaktiv) */}
+                    <div>
+                      <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
+                        Tema
+                      </h3>
+                      <div className="flex space-x-4">
+                        <button
+                          onClick={() => {
+                            setDraftTheme("light");
+                            setHasUnsavedChanges(true);
+                          }}
+                          className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "light"
+                            ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                            : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                            }`}
+                        >
+                          Light
+                        </button>
 
-                      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
-                        <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
-                          AHL kluster
-                        </h4>
-                        <div className="space-y-2">
-                          {clusterGroups.ahl.map((distKey) =>
-                            renderClusterToggle(distKey),
-                          )}
-                        </div>
+                        <button
+                          onClick={() => {
+                            setDraftTheme("dark");
+                            setHasUnsavedChanges(true);
+                          }}
+                          className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "dark"
+                            ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                            : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                            }`}
+                        >
+                          Dark
+                        </button>
+                      </div>
+                    </div>
 
-                        <div className="pt-2">
+                    {/* DEL 4: Prisreferens för Home */}
+                    <div>
+                      <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
+                        Referensvärde för prisbar
+                      </h3>
+                      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2">
+                        <label
+                          htmlFor="profitabilityReferenceValue"
+                          className="block text-sm font-medium text-[var(--text-primary)]"
+                        >
+                          Värde som motsvarar 100% i prisbaren
+                        </label>
+                        <input
+                          id="profitabilityReferenceValue"
+                          type="number"
+                          step={100}
+                          value={profitabilityReferenceValue}
+                          onChange={(e) => {
+                            const parsed = Number(e.target.value);
+                            setProfitabilityReferenceValue(
+                              Number.isFinite(parsed) && parsed > 0
+                                ? parsed
+                                : DEFAULT_PROFITABILITY_REFERENCE_VALUE,
+                            );
+                          }}
+                          className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        />
+                      </div>
+                    </div>
+                    {/* DEL 5: Milpris för simulator */}
+                    <div>
+                      <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
+                          Milkostnad för simulator
+                      </h3>
+                      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2">
+                        <label
+                        htmlFor="mileCostReferenceValue"
+                        className="block text-sm font-medium text-[var(--text-primary)]"
+                        >
+                        </label>
+                        <input
+                        id="mileCostReferenceValue"
+                        type="number"
+                        step={5}
+                        value={mileCostReferenceValue}
+                        onChange={(e) => {
+                          const parsed = Number(e.target.value);
+                          setMileCostReferenceValue(
+                          Number.isFinite(parsed) && parsed > 0
+                            ? parsed
+                            : DEFAULT_MILE_COST,
+                        );
+                        setHasUnsavedChanges(true);
+                      }}
+                      className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DEL 2: Områden (Interaktiv) */}
+                  <div>
+                    <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
+                      Filtrera dina kluster
+                    </h3>
+                    {isLoadingProfile && (
+                      <p className="text-sm text-gray-600 mb-3">
+                        Laddar sparade inställningar...
+                      </p>
+                    )}
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
                           <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
-                            Övriga kluster
+                            SML kluster
                           </h4>
-                          <div className="space-y-2 pt-1">
-                            {clusterGroups.other.map((distKey) =>
+                          <div className="space-y-2">
+                            {clusterGroups.sml.map((distKey) =>
                               renderClusterToggle(distKey),
                             )}
                           </div>
                         </div>
+
+                        <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
+                          <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
+                            AHL kluster
+                          </h4>
+                          <div className="space-y-2">
+                            {clusterGroups.ahl.map((distKey) =>
+                              renderClusterToggle(distKey),
+                            )}
+                          </div>
+
+                          <div className="pt-2">
+                            <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
+                              Övriga kluster
+                            </h4>
+                            <div className="space-y-2 pt-1">
+                              {clusterGroups.other.map((distKey) =>
+                                renderClusterToggle(distKey),
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* DEL 3: Tema (Interaktiv) */}
-                <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
-                    Tema
-                  </h3>
-                  <div className="flex space-x-4">
-                    <button
-                      onClick={() => {
-                        setDraftTheme("light");
-                        setHasUnsavedChanges(true);
-                      }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
-                        draftTheme === "light"
-                          ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
-                          : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
-                      }`}
-                    >
-                      Light
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setDraftTheme("dark");
-                        setHasUnsavedChanges(true);
-                      }}
-                      className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
-                        draftTheme === "dark"
-                          ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
-                          : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
-                      }`}
-                    >
-                      Dark
-                    </button>
-                  </div>
-                </div>
-
-                {/* DEL 4: Prisreferens för Home */}
-                <div>
-                  <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
-                    Referensvärde för prisbar
-                  </h3>
-                  <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2">
-                    <label
-                      htmlFor="profitabilityReferenceValue"
-                      className="block text-sm font-medium text-[var(--text-primary)]"
-                    >
-                      Värde som motsvarar 100% i prisbaren
-                    </label>
-                    <input
-                      id="profitabilityReferenceValue"
-                      type="number"
-                      step={100}
-                      value={profitabilityReferenceValue}
-                      onChange={(e) => {
-                        const parsed = Number(e.target.value);
-                        setProfitabilityReferenceValue(
-                          Number.isFinite(parsed) && parsed > 0
-                            ? parsed
-                            : DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-                        );
-                      }}
-                      className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
-                    />
                   </div>
                 </div>
 
