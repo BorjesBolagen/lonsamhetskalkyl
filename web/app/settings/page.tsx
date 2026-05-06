@@ -70,7 +70,7 @@ function parseProfitabilityReferenceValue(filters: unknown): number {
     isPlainObject(filters) &&
     typeof filters.profitabilityReferenceValue === "number" &&
     Number.isFinite(filters.profitabilityReferenceValue) &&
-    filters.profitabilityReferenceValue > 0
+    filters.profitabilityReferenceValue >= 0
   ) {
     return filters.profitabilityReferenceValue;
   }
@@ -251,10 +251,10 @@ export default function Settings() {
       setIsSavingFilters(true);
       setFiltersStatus(null);
 
-      // Om rutan är tom eller ogiltig när man klickar spara, fallback till 15000
+      // Om rutan är tom eller mindre än noll när man klickar spara, sätt den till 0
       const validReferenceValue = 
-        profitabilityReferenceValue === "" || profitabilityReferenceValue <= 0
-          ? DEFAULT_PROFITABILITY_REFERENCE_VALUE
+        profitabilityReferenceValue === "" || profitabilityReferenceValue < 0
+          ? 0
           : profitabilityReferenceValue;
 
       // Keep other filter fields and only overwrite areas + theme from this form.
