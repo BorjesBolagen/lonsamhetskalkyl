@@ -35,7 +35,7 @@ describe('Settings Page', () => {
     cy.contains('Din Profil').should('be.visible');
   });
 
-  it('can update reference value, save, and persist empty fallback', () => {
+  it('can update reference value, save, and persist empty fallback as 0', () => {
     const newValue = '18500';
     const originalValue = '15000'; 
 
@@ -76,8 +76,13 @@ describe('Settings Page', () => {
     cy.visit('/settings');
     cy.wait(1500);
     
-    // Om allt fungerar ska värdet nu vara magiskt återställt till 15000
-    cy.get('input#profitabilityReferenceValue').should('have.value', originalValue);
+    // Om allt fungerar ska den tomma strängen ha blivit sparad som 0
+    cy.get('input#profitabilityReferenceValue').should('have.value', '0');
+
+    // --- Cleanup: Återställ till 15000 så vi inte förstör framtida tester ---
+    cy.get('input#profitabilityReferenceValue').type('{selectAll}' + originalValue);
+    cy.contains('button', 'Spara inställningar').click();
+    cy.contains('Inställningar sparade.').should('be.visible');
   });
 
   it('shows validation errors when passwords do not match', () => {
