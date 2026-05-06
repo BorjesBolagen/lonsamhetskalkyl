@@ -1,13 +1,17 @@
-"use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { redirect } from "next/navigation";
+import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
-export default function Home() {
-  const router = useRouter();
+/**
+ * This is the main page of the application and only redirects users to either login or home.
+ * It checks if the user is authenticated by retrieving the auth-cookies from Supabase.
+ */
+export default async function Home() {
+  const supabase = await getSupabaseServerClient();
+  const { data } = await supabase.auth.getClaims();
 
-  useEffect(() => {
-    router.push("/login");
-  }, [router]);
+  if (data?.claims) {
+    redirect("/home");
+  }
 
-  return null;
+  redirect("/login");
 }
