@@ -12,6 +12,10 @@ import {
 } from "../../lib/areaLineConfig";
 import { Json } from "../../lib/supabaseServerSchema";
 import { useEffect, useMemo, useState } from "react";
+import { DEFAULT_PROFITABILITY_REFERENCE_VALUE, DEFAULT_MILE_COST} from "../../lib/backend/constants"
+import {
+  parseMileCostReferenceValue,
+} from "../../lib/backend/transportPlanningUtils";
 
 type ThemeMode = "light" | "dark";
 
@@ -22,7 +26,6 @@ function applyThemeToDOM(theme: ThemeMode) {
 }
 
 const DEFAULT_THEME: ThemeMode = "light";
-const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
 
 function resolveInitialTheme(): ThemeMode {
   if (typeof document !== "undefined") {
@@ -116,6 +119,8 @@ export default function Settings() {
   const [draftTheme, setDraftTheme] = useState<ThemeMode>(DEFAULT_THEME);
   const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
     useState<number | "">(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
+  const [mileCostReferenceValue, setMileCostReferenceValue] = 
+    useState<number>(DEFAULT_MILE_COST);
 
   const clusterGroups = useMemo(() => {
     const sortedKeys = [...AREA_KEYS].sort((a, b) =>
@@ -212,6 +217,10 @@ export default function Settings() {
         setProfitabilityReferenceValue(
           parseProfitabilityReferenceValue(user.filters),
         );
+
+        setMileCostReferenceValue(
+          parseMileCostReferenceValue(user.filters),
+        );
       } catch (error) {
         setFiltersStatus({
           type: "error",
@@ -263,6 +272,7 @@ export default function Settings() {
         areas: districts,
         theme: draftTheme,
         profitabilityReferenceValue: validReferenceValue,
+        mileCostReferenceValue,
       };
 
       await setFilters(userId, nextFilters as Json);
@@ -482,6 +492,35 @@ export default function Settings() {
                             setProfitabilityReferenceValue(parsed);
                           }}
                           className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        />
+                      </div>
+                    </div>
+                    {/* DEL 5: Milpris för simulator */}
+                    <div>
+                      <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
+                          Milkostnad för simulator
+                      </h3>
+                      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2">
+                        <label
+                        htmlFor="mileCostReferenceValue"
+                        className="block text-sm font-medium text-[var(--text-primary)]"
+                        >
+                        </label>
+                        <input
+                        id="mileCostReferenceValue"
+                        type="number"
+                        step={5}
+                        value={mileCostReferenceValue}
+                        onChange={(e) => {
+                          const parsed = Number(e.target.value);
+                          setMileCostReferenceValue(
+                          Number.isFinite(parsed) && parsed > 0
+                            ? parsed
+                            : DEFAULT_MILE_COST,
+                        );
+                        setHasUnsavedChanges(true);
+                      }}
+                      className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                         />
                       </div>
                     </div>
