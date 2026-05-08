@@ -36,10 +36,7 @@ describe('Admin Page - Messaging', () => {
     cy.get('[data-testid="logout-button"]').click();
     cy.url().should('include', '/login');
 
-
-    // ---------------------------------------------------------
     // 2. TRAFIKLEDARE LÄSER MEDDELANDET
-    // ---------------------------------------------------------
     // Eftersom vi precis loggat ut är vi redan på /login. 
     // Vi loggar in manuellt i UI:t för att garantera en fräsch session.
     cy.get('[data-testid="email-input"]').clear().type('trafikborjes@gmail.com');

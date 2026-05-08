@@ -42,8 +42,8 @@ describe('Login Page', () => {
 
 
   it('shows an error with bad credentials', () => {
-    cy.get('[data-testid="email-input"]').type('user@example.com')
-    cy.get('[data-testid="password-input"]').type('wrongpassword123')
+    cy.get('[data-testid="email-input"]').clear().type('user@example.com').should('have.value', 'user@example.com')
+    cy.get('[data-testid="password-input"]').clear().type('wrongpassword123').should('have.value', 'wrongpassword123')
     cy.get('[data-testid="login-button"]').click()
 
     cy.url().should('include', '/login')
@@ -52,43 +52,46 @@ describe('Login Page', () => {
   })
 
   it('logs in with email unverified', () => {
-
     cy.loginAs('unverified');
   })
 
   it('log in with bad email format 1: No @', () => {
-    cy.get('[data-testid="email-input"]').type('user')
-    cy.get('[data-testid="password-input"]').type('wrongpassword123')
+    // Ge sidan 500ms (en halv sekund) att hydratisera React-koden
+    cy.wait(500)
+    cy.get('[data-testid="email-input"]').clear().type('user').should('have.value', 'user')
+    cy.get('[data-testid="password-input"]').clear().type('wrongpassword123').should('have.value', 'wrongpassword123')
     cy.get('[data-testid="login-button"]').click()
 
     cy.url().should('include', '/login')
     cy.get('[data-testid="error-message"]').should('be.visible')
-    cy.get('[data-testid="error-message"]').should('contain', 'Email är inte rätt formaterat')
+    cy.get('[data-testid="error-message"]').should('have.text', 'Email är inte rätt formaterat')
   })
 
   it('log in with bad email format 2: No . after @', () => {
-    cy.get('[data-testid="email-input"]').type('user@example')
-    cy.get('[data-testid="password-input"]').type('wrongpassword123')
+    cy.wait(500)
+    cy.get('[data-testid="email-input"]').clear().type('user@example').should('have.value', 'user@example')
+    cy.get('[data-testid="password-input"]').clear().type('wrongpassword123').should('have.value', 'wrongpassword123')
     cy.get('[data-testid="login-button"]').click()
     
     cy.url().should('include', '/login')
     cy.get('[data-testid="error-message"]').should('be.visible')
-    cy.get('[data-testid="error-message"]').should('contain', 'Email är inte rätt formaterat')
+    cy.get('[data-testid="error-message"]').should('have.text', 'Email är inte rätt formaterat')
   })
 
   it('log in with bad email format 3: No character after . after @', () => {
-    cy.get('[data-testid="email-input"]').type('user@example.')
-    cy.get('[data-testid="password-input"]').type('wrongpassword123')
+    cy.wait(500)
+    cy.get('[data-testid="email-input"]').clear().type('user@example.').should('have.value', 'user@example.')
+    cy.get('[data-testid="password-input"]').clear().type('wrongpassword123').should('have.value', 'wrongpassword123')
     cy.get('[data-testid="login-button"]').click()
     
     cy.url().should('include', '/login')
     cy.get('[data-testid="error-message"]').should('be.visible')
-    cy.get('[data-testid="error-message"]').should('contain', 'Email är inte rätt formaterat')
+    cy.get('[data-testid="error-message"]').should('have.text', 'Email är inte rätt formaterat')
   })
 
   it('log in with bad password format 1: no number', () => {
-    cy.get('[data-testid="email-input"]').type('user@example.com')
-    cy.get('[data-testid="password-input"]').type('wrongpassword')
+    cy.get('[data-testid="email-input"]').clear().type('user@example.com').should('have.value', 'user@example.com')
+    cy.get('[data-testid="password-input"]').clear().type('wrongpassword').should('have.value', 'wrongpassword')
     cy.get('[data-testid="login-button"]').click()
 
     cy.url().should('include', '/login')
@@ -97,8 +100,8 @@ describe('Login Page', () => {
   })
 
   it('log in with bad password format 2: not enough characters', () => {
-    cy.get('[data-testid="email-input"]').type('user@example.com')
-    cy.get('[data-testid="password-input"]').type('wrong')
+    cy.get('[data-testid="email-input"]').clear().type('user@example.com').should('have.value', 'user@example.com')
+    cy.get('[data-testid="password-input"]').clear().type('wrong').should('have.value', 'wrong')
     cy.get('[data-testid="login-button"]').click()
 
     cy.url().should('include', '/login')

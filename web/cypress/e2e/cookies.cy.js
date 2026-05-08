@@ -17,9 +17,9 @@ describe('Cookies', () => {
       cy.url().should("include", route)
     })
 
-    // just / should redirect to /login
+    // just / should redirect to /home since the user is already logged in
     cy.visit("/")
-    cy.url().should("include", "/login")
+    cy.url().should("include", "/home")
   })
 
   it('login - verify cookies - log out - only remember me should be left', () => {
