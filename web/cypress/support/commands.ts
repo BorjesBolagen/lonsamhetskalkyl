@@ -140,18 +140,12 @@ Cypress.Commands.add('signupUser', (firstName: string, lastName: string, email: 
 });
 
 Cypress.Commands.add('clearSignupForm', () => {
-	
-	assertSignupFormIsVisible();
-
-	cy.visit("/admin")
-	cy.get('[data-testid="signup-button"]').should("be.visible").click();
-
-	assertSignupFormIsVisible();
-	/*
-	cy.get('[data-testid="signup-set-first-name"]').clear();
-	cy.get('[data-testid="signup-set-last-name"]').clear();
+    // Rensar fälten manuellt så vi inte får dubbel text
+    cy.get('[data-testid="signup-set-first-name"]').clear();
+    cy.get('[data-testid="signup-set-last-name"]').clear();
     cy.get('[data-testid="signup-set-email"]').clear();
     cy.get('[data-testid="signup-set-password"]').clear();
-    cy.get('[data-testid="signup-set-role"]').clear();
-	*/
+    
+    // För select-menyn sätter vi tillbaka den till default ("")
+    cy.get('[data-testid="signup-set-role"]').select(''); 
 });

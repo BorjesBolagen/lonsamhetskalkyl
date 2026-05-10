@@ -1,9 +1,18 @@
 describe('sign up tests', () => {
   beforeEach(() => {
     cy.loginAs('admin');
+    
+    // 1. Sätt upp en lyssnare som väntar på att Next.js laddar klart data
+    cy.intercept('GET', '**/api/users/get/currentUser*').as('adminLoad');
+    
     cy.visit("/admin");
-    cy.get('[data-testid="signup-button"]').should("be.visible");
-    cy.get('[data-testid="signup-button"]').click();
+    
+    // 2. Vänta på API-anropet innan vi gör något annat
+    cy.wait('@adminLoad');
+
+    // 3. Nu är React redo, vi kan klicka upp modalen
+    cy.get('[data-testid="signup-button"]').should("be.visible").click();
+    cy.get('[data-testid="close-signup-window"]').should("be.visible");
   });
 
   it('sign up with missing parameters', () => {
@@ -107,16 +116,15 @@ describe('sign up tests', () => {
 
     // Now with verified email try logging in as signed up user
 
-    // Login with new user
-    cy.get('[data-testid="email-input"]').should("be.visible").type(email);
-    cy.get('[data-testid="password-input"]').should("be.visible").type(password);
+    // Login with new user (Fixat med clear och value-check så React hinner med!)
+    cy.get('[data-testid="email-input"]').should("be.visible").clear().type(email).should('have.value', email);
+    cy.get('[data-testid="password-input"]').should("be.visible").clear().type(password).should('have.value', password);
     cy.get('[data-testid="login-button"]').should("be.visible").click()
 
     // Verify that we are logged in
     cy.url().should("include", "/home")
 
     // Check if the new user is in supabase
-    
     cy.request('http://localhost:3000/api/users/')
       .then((response) => {
         expect(response.status).to.eq(200);
