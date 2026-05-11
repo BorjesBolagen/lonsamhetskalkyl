@@ -224,6 +224,12 @@ const formatStatus = (row: Record<string, unknown>): string => {
   return [statusTypePart, ilogPart].filter(Boolean).join(" ").trim();
 };
 
+const normalizeOwnStatus = (value: string): string => value.trim().toLowerCase();
+
+const shouldHideConsignment = (ownStatus: string): boolean => {
+  return normalizeOwnStatus(ownStatus) === normalizeOwnStatus("Ej i lastlista");
+};
+
 /**
  * Rekursiv hjälpfunktion för att hitta consignment-objekt i djup nested struktur.
  * 
@@ -583,6 +589,10 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
         readNestedString(row, "consignment", ["ilogStatus"]) ||
         readString(row, ["ilogStatus"]);
 
+      const ownStatus =
+        readNestedString(row, "consignment", ["ownStatus", "own_status"]) ||
+        readString(row, ["ownStatus", "own_status"]);
+
       const goodsDescription = estimatedProperties || comment;
 
       return {
@@ -612,13 +622,15 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
         opalBookingId,
         transporterType,
         ilogStatus,
+        ownStatus,
         prognosis: "",
         comment,
       };
     })
     .filter((item): item is ConsignmentListItem => {
       if (item === null) return false;
-      // Filter bort helt tomma entries - ta bara rader med faktisk data
+      if (item.ownStatus && shouldHideConsignment(item.ownStatus)) return false;
+      // Filter bort helt tomma entries och "ej i lastlista" entries - ta bara rader med faktisk data
       // iLog returnera ofta placeholder-objekt utan data
       const hasData =
         item.senderName.length > 0 ||
@@ -762,10 +774,15 @@ export const mapConsignmentDetail = (raw: unknown): ConsignmentDetail => {
     readNestedString(row, "consignment", ["ilogStatus"]) ||
     readString(row, ["ilogStatus"]);
 
+  const ownStatus =
+    readNestedString(row, "consignment", ["ownStatus", "own_status"]) ||
+    readString(row, ["ownStatus", "own_status"]);
+
   return {
     consignmentId,
     waybillnumber,
     status,
+    ownStatus,
     sender,
     receiver,
     pickupCity,
