@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useSimulatorPlanner } from "./useSimulatorPlanner";
@@ -43,8 +42,15 @@ export default function SimulatorPage() {
     unassignedConsignments,
     selectedConsignmentIds,
     selectedConsignments,
+    fictitiousBookings,
+    selectedFictitiousBookingIds,
+    selectedFictitiousBookings,
+    addFictitiousBooking,
+    removeFictitiousBooking,
+    toggleFictitiousBooking,
     toggleConsignment,
     clearSimulationSelection,
+    resetSimulationResults,
     currentEquipageSummary,
     activeCurrentEquipageSummary,
     excludedCurrentConsignmentIds,
@@ -58,11 +64,20 @@ export default function SimulatorPage() {
     isLoadingUnassigned,
     isLoadingCurrentEquipage,
     isSimulating,
+    isAddingFictitiousBooking,
     errorMsg,
     milprisPerMil,
   } = useSimulatorPlanner();
 
   const [showCalculatedParts, setShowCalculatedParts] = useState(false);
+  const [isFictitiousModalOpen, setIsFictitiousModalOpen] = useState(false);
+  const [fictitiousTaxPointRelation, setFictitiousTaxPointRelation] =
+    useState("");
+  const [fictitiousPrice, setFictitiousPrice] = useState("");
+  const [fictitiousFieldErrors, setFictitiousFieldErrors] = useState<{
+    taxPointRelation?: string;
+    price?: string;
+  }>({});
 
   // Aktiva befintliga bokningar är de som fortfarande ligger kvar på ekipaget i simuleringen.
   const selectedCurrentConsignments =
@@ -83,14 +98,9 @@ export default function SimulatorPage() {
     : [];
 
   const simulatedSelectedConsignments = showCalculatedParts
-    ? selectedConsignments.filter((consignment) => {
-        const data = consignment as RevenueFields;
-        return (
-          data.extraDistanceKm !== undefined ||
-          data.extraDrivingCost !== undefined ||
-          data.simulatedProfitability !== undefined
-        );
-      })
+    ? selectedConsignments.filter((consignment) =>
+        hasRowSimulationResult(consignment as RevenueFields),
+      )
     : [];
 
   const simulatedSelectedFictitiousBookings = showCalculatedParts
@@ -138,8 +148,8 @@ export default function SimulatorPage() {
         ? 100
         : 0;
 
-  const hasSimulationResult = simulatedSelectedConsignments.some(
-    (consignment) => (consignment as RevenueFields).extraDrivingCost != null,
+  const hasSimulationResult = simulatedSelectedItems.some(
+    (item) => (item as RevenueFields).extraDrivingCost != null,
   );
 
   function formatNumber(value: number): string {
@@ -154,8 +164,8 @@ export default function SimulatorPage() {
     });
   }
 
-  function getRevenue(consignment: RevenueFields): number {
-    return consignment.simulatedProfitability?.estimated_revenue ?? 0;
+  function getRevenue(item: RevenueFields): number {
+    return item.simulatedProfitability?.estimated_revenue ?? 0;
   }
 
   // Radfärg visar enkel marginalstatus: grön lönsam, röd olönsam, grå saknar kostnad.
@@ -181,14 +191,14 @@ export default function SimulatorPage() {
   // Steg visas endast när intäkten kommer från prislogiken, inte från fiktivt användarpris.
   function getRevenueStepText(item: RevenueFields): string {
     if (
-      consignment.simulatedProfitability?.estimated_revenue == null ||
-      consignment.simulatedProfitability.estimated_revenue <= 0 ||
-      consignment.revenueMatchStep == null
+      item.simulatedProfitability?.estimated_revenue == null ||
+      item.simulatedProfitability.estimated_revenue <= 0 ||
+      item.revenueMatchStep == null
     ) {
       return "Inget steg gav träff";
     }
 
-    return `Steg ${consignment.revenueMatchStep}`;
+    return `Steg ${item.revenueMatchStep}`;
   }
 
   function getCoverageLabel(): string {
@@ -282,16 +292,15 @@ export default function SimulatorPage() {
   const selectedPickupMarkers = new Map<string, number>();
   const selectedDeliveryMarkers = new Map<string, number>();
 
-  simulatedSelectedConsignments.forEach((consignment) => {
   simulatedAddedItems.forEach((item) => {
     const [pickupTaxPoint, deliveryTaxPoint] =
-      consignment.taxPointRelation?.split("-").map((part) => part.trim()) ?? [];
+      item.taxPointRelation?.split("-").map((part) => part.trim()) ?? [];
 
     addMarkerCandidate(selectedPickupMarkers, pickupTaxPoint);
-    addMarkerCandidate(selectedPickupMarkers, consignment.pickupLocationCity);
+    addMarkerCandidate(selectedPickupMarkers, item.pickupLocationCity);
 
     addMarkerCandidate(selectedDeliveryMarkers, deliveryTaxPoint);
-    addMarkerCandidate(selectedDeliveryMarkers, consignment.destinationCity);
+    addMarkerCandidate(selectedDeliveryMarkers, item.destinationCity);
   });
 
   // Bygger föreslagen rutt och markerar bara nya tillägg som pickup/leverans.
@@ -356,7 +365,8 @@ export default function SimulatorPage() {
                 Simulator
               </h1>
               <p className="text-sm text-[var(--text-primary)] opacity-80 leading-5">
-                Simulera extra körkostnad och intäkt för oplacerade bokningar.
+                Simulera extra körkostnad och intäkt för oplacerade och fiktiva
+                bokningar.
               </p>
             </div>
 
@@ -535,7 +545,7 @@ export default function SimulatorPage() {
             )}
           </div>
 
-          <div className="bg-[var(--primary-element)] rounded-2xl shadow-md border border-[var(--seperating-gray)] p-4 flex flex-col min-h-0 h-full">
+          <div className="bg-[var(--primary-element)] rounded-2xl shadow-md border border-[var(--seperating-gray)] p-4 flex flex-col min-h-0">
             <div className="mb-4 flex flex-col gap-3">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -553,7 +563,7 @@ export default function SimulatorPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={handleRunSimulation}
@@ -578,7 +588,10 @@ export default function SimulatorPage() {
 
                 <button
                   type="button"
-                  onClick={resetCalculatedParts}
+                  onClick={() => {
+                    resetSimulationResults();
+                    resetCalculatedParts();
+                  }}
                   disabled={!showCalculatedParts}
                   className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-xl transition"
                 >
@@ -596,7 +609,7 @@ export default function SimulatorPage() {
                 Inga oplacerade bokningar hittades.
               </div>
             ) : (
-              <div className="overflow-auto flex-1 min-h-0 border border-[var(--seperating-gray)] rounded-2xl">
+              <div className="overflow-auto border border-[var(--seperating-gray)] rounded-2xl">
                 <table className="w-full border-collapse text-sm">
                   <thead className="sticky top-0 z-10 bg-[var(--primary-element)]">
                     <tr className="border-b border-[var(--seperating-gray)] text-[var(--text-primary)]">
@@ -622,7 +635,7 @@ export default function SimulatorPage() {
                       );
                       const data = consignment as RevenueFields;
                       const shouldShowCalculatedParts =
-                        showCalculatedParts && isSelected;
+                        showCalculatedParts && hasRowSimulationResult(data);
                       const revenue = shouldShowCalculatedParts
                         ? getRevenue(data)
                         : 0;
@@ -671,6 +684,13 @@ export default function SimulatorPage() {
                             <span className="rounded-lg bg-[var(--secondary-element)] px-2 py-1 text-xs font-semibold">
                               {consignment.taxPointRelation?.trim() || "Saknas"}
                             </span>
+                            {shouldShowCalculatedParts &&
+                              data.missingDistanceRelation && (
+                                <p className="mt-1 text-xs font-semibold text-red-700">
+                                  Taxepoint {data.missingDistanceRelation} finns
+                                  inte, kan inte beräkna avstånd.
+                                </p>
+                              )}
                           </td>
 
                           <td className="p-3 text-right text-[var(--text-primary)]">
@@ -1177,6 +1197,93 @@ export default function SimulatorPage() {
           </div>
         </section>
       </main>
+
+      {isFictitiousModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--primary-element)] text-[var(--text-primary)] shadow-xl border border-[var(--seperating-gray)] p-6">
+            <h2 className="text-xl font-bold mb-4">Lägg till fiktiv bokning</h2>
+
+            <div className="space-y-4">
+              <div>
+                {fictitiousFieldErrors.taxPointRelation && (
+                  <p className="mb-1 text-sm font-semibold text-red-700">
+                    {fictitiousFieldErrors.taxPointRelation}
+                  </p>
+                )}
+                <label
+                  htmlFor="fictitiousTaxPointRelation"
+                  className="block text-sm font-bold mb-1"
+                >
+                  Taxerelation
+                </label>
+                <input
+                  id="fictitiousTaxPointRelation"
+                  value={fictitiousTaxPointRelation}
+                  onChange={(event) => {
+                    setFictitiousTaxPointRelation(event.target.value);
+                    setFictitiousFieldErrors((current) => ({
+                      ...current,
+                      taxPointRelation: undefined,
+                    }));
+                  }}
+                  placeholder="Exempel: 78542-36441"
+                  className="w-full p-3 rounded-xl border-2 border-[var(--input-border)] bg-[var(--secondary-element)] text-[var(--text-primary)]"
+                />
+              </div>
+
+              <div>
+                {fictitiousFieldErrors.price && (
+                  <p className="mb-1 text-sm font-semibold text-red-700">
+                    {fictitiousFieldErrors.price}
+                  </p>
+                )}
+                <label
+                  htmlFor="fictitiousPrice"
+                  className="block text-sm font-bold mb-1"
+                >
+                  Pris
+                </label>
+                <input
+                  id="fictitiousPrice"
+                  type="text"
+                  inputMode="decimal"
+                  value={fictitiousPrice}
+                  onChange={(event) => {
+                    setFictitiousPrice(event.target.value);
+                    setFictitiousFieldErrors((current) => ({
+                      ...current,
+                      price: undefined,
+                    }));
+                  }}
+                  className="w-full p-3 rounded-xl border-2 border-[var(--input-border)] bg-[var(--secondary-element)] text-[var(--text-primary)]"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setFictitiousFieldErrors({});
+                  setIsFictitiousModalOpen(false);
+                }}
+                className="px-4 py-2 rounded-xl border border-[var(--seperating-gray)] font-bold"
+              >
+                Avbryt
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAddFictitiousBooking}
+                disabled={isAddingFictitiousBooking}
+                className="px-4 py-2 rounded-xl bg-[var(--button-submit)] hover:bg-[var(--button-submit-hover)] disabled:bg-gray-400 text-white font-bold"
+              >
+                {isAddingFictitiousBooking ? "Kontrollerar..." : "Lägg till"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>
