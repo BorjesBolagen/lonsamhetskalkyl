@@ -1016,7 +1016,7 @@ export function useSimulatorPlanner() {
         setAvailableLines(approvedLines as SimulatorLine[]);
         setFilteredAreaEquipages([]);
       } catch {
-        setErrorMsg("Kunde inte hämta linjer.");
+        setErrorMsg("Kunde inte hämta linjer, testa ladda om sidan.");
         setAvailableLines([]);
         setHomeVisibleLines([]);
         setFilteredAreaEquipages([]);
