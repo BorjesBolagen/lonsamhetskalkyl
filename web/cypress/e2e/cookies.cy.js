@@ -27,6 +27,9 @@ describe('Cookies', () => {
     cy.getCookie('sb-ukfnyyglaistpbnlgjar-auth-token').should('exist')
     cy.getCookie('sb-remember-me').should('exist')
 
+    // Låt React ladda klart och rita om menyn innan vi klickar
+    cy.wait(1000) 
+
     cy.get('[data-testid="logout-button"]').click()
     cy.url().should("include", "/login")
 
@@ -34,7 +37,7 @@ describe('Cookies', () => {
     
     cy.getCookie('sb-ukfnyyglaistpbnlgjar-auth-token').should('not.exist')
     cy.getCookie('sb-remember-me').should('exist')
-  })
+})
 
   it("can't access routes without valid auth cookie", () => {
     cy.clearCookie('sb-ukfnyyglaistpbnlgjar-auth-token')

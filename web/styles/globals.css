@@ -54,6 +54,18 @@ html[data-theme="dark"] {
   --hover-areas: #353535;
 }
 
+.footer-logo-dark {
+  display: none;
+}
+
+[data-theme="dark"] .footer-logo-light {
+  display: none;
+}
+
+[data-theme="dark"] .footer-logo-dark {
+  display: block;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

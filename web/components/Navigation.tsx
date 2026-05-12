@@ -104,6 +104,18 @@ export default function Navigation({
         <div className="flex items-center justify-between h-14">
           {/* LEFT SIDE */}
           <div className="flex-1 flex items-center justify-start space-x-4">
+            <div className="flex justify-end">
+              <img
+                src="../CMYKlodjur.png"
+                alt="Börjes Bolagen"
+                className="footer-logo-light h-12 w-auto"
+              />
+              <img
+                src="../CMYKlodjur_INV.png"
+                alt="Börjes Bolagen"
+                className="footer-logo-dark h-12 w-auto"
+              />
+            </div>
             <GuardedLink
               href="/home"
               className={getLinkClasses(currentPage === "home")}

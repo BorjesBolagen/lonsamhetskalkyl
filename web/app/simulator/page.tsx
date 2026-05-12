@@ -6,6 +6,7 @@ import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useSimulatorPlanner } from "./useSimulatorPlanner";
 
+// Gemensamma fält som kan finnas på simulerade iLog-rader och fiktiva rader.
 type RevenueFields = {
   simulatedProfitability?: {
     estimated_revenue?: number | null;
@@ -17,6 +18,14 @@ type RevenueFields = {
   optimizedRouteStops?: string[] | null;
   insertionPickupIndex?: number | null;
   insertionDeliveryIndex?: number | null;
+  missingDistanceRelation?: string | null;
+};
+
+// Fält som behövs för att kunna markera pickup/leverans i föreslagen rutt.
+type RouteMarkerFields = RevenueFields & {
+  taxPointRelation?: string | null;
+  pickupLocationCity?: string | null;
+  destinationCity?: string | null;
 };
 
 export default function SimulatorPage() {
@@ -37,6 +46,9 @@ export default function SimulatorPage() {
     toggleConsignment,
     clearSimulationSelection,
     currentEquipageSummary,
+    activeCurrentEquipageSummary,
+    excludedCurrentConsignmentIds,
+    toggleCurrentConsignment,
     simulationSummary,
     runSimulation,
     getDisplayCustomerName,
@@ -52,7 +64,23 @@ export default function SimulatorPage() {
 
   const [showCalculatedParts, setShowCalculatedParts] = useState(false);
 
-  const selectedBookingCount = selectedConsignmentIds.length;
+  // Aktiva befintliga bokningar är de som fortfarande ligger kvar på ekipaget i simuleringen.
+  const selectedCurrentConsignments =
+    activeCurrentEquipageSummary?.consignments ?? [];
+
+  const selectedBookingCount =
+    selectedCurrentConsignments.length +
+    selectedConsignmentIds.length +
+    selectedFictitiousBookingIds.length;
+  const excludedCurrentBookingCount = excludedCurrentConsignmentIds.length;
+  const totalChangeCount = selectedBookingCount + excludedCurrentBookingCount;
+
+  // Visa bara beräknade rader efter att användaren faktiskt har kört simuleringen.
+  const simulatedSelectedCurrentConsignments = showCalculatedParts
+    ? selectedCurrentConsignments.filter((consignment) =>
+        hasRowSimulationResult(consignment as RevenueFields),
+      )
+    : [];
 
   const simulatedSelectedConsignments = showCalculatedParts
     ? selectedConsignments.filter((consignment) => {
@@ -65,15 +93,30 @@ export default function SimulatorPage() {
       })
     : [];
 
-  const primaryRoute = [...simulatedSelectedConsignments]
-    .reverse()
-    .find((consignment) => {
-      const data = consignment as RevenueFields;
-      return (data.optimizedRouteStops?.length ?? 0) > 0;
-    }) as
-    | ((typeof simulatedSelectedConsignments)[number] & RevenueFields)
-    | undefined;
+  const simulatedSelectedFictitiousBookings = showCalculatedParts
+    ? selectedFictitiousBookings.filter((booking) =>
+        hasRowSimulationResult(booking as RevenueFields),
+      )
+    : [];
 
+  // Nya tillägg i rutten är oplacerade och fiktiva bokningar, inte befintliga ekipagebokningar.
+  const simulatedAddedItems: RouteMarkerFields[] = [
+    ...simulatedSelectedConsignments,
+    ...simulatedSelectedFictitiousBookings,
+  ];
+
+  const simulatedSelectedItems: RouteMarkerFields[] = [
+    ...simulatedSelectedCurrentConsignments,
+    ...simulatedAddedItems,
+  ];
+
+  // Senast simulerade rad innehåller den mest kompletta optimerade rutten.
+  const primaryRoute = [...simulatedSelectedItems].reverse().find((item) => {
+    const data = item as RevenueFields;
+    return (data.optimizedRouteStops?.length ?? 0) > 0;
+  }) as (RouteMarkerFields & RevenueFields) | undefined;
+
+  // Dölj totalsiffror tills en ny simulering har körts.
   const displayedSimulationSummary = showCalculatedParts
     ? simulationSummary
     : {
@@ -115,6 +158,7 @@ export default function SimulatorPage() {
     return consignment.simulatedProfitability?.estimated_revenue ?? 0;
   }
 
+  // Radfärg visar enkel marginalstatus: grön lönsam, röd olönsam, grå saknar kostnad.
   function getSelectedConsignmentRowColor(
     revenue: number,
     cost?: number | null,
@@ -134,7 +178,8 @@ export default function SimulatorPage() {
     return "bg-gray-300/40";
   }
 
-  function getRevenueStepText(consignment: RevenueFields): string {
+  // Steg visas endast när intäkten kommer från prislogiken, inte från fiktivt användarpris.
+  function getRevenueStepText(item: RevenueFields): string {
     if (
       consignment.simulatedProfitability?.estimated_revenue == null ||
       consignment.simulatedProfitability.estimated_revenue <= 0 ||
@@ -174,6 +219,16 @@ export default function SimulatorPage() {
     return displayedSimulationSummary.simulatedMargin >= 0
       ? "bg-[var(--notification-color)] text-[var(--text-primary)]"
       : "bg-red-100 text-red-800";
+  }
+
+  // Avgör om en rad har beräkningsdata nog för att visas i resultatdelen.
+  function hasRowSimulationResult(data: RevenueFields): boolean {
+    return (
+      data.extraDistanceKm !== undefined ||
+      data.extraDrivingCost !== undefined ||
+      data.simulatedProfitability !== undefined ||
+      data.missingDistanceRelation !== undefined
+    );
   }
 
   function normalizeRouteValue(value?: string | null): string {
@@ -223,10 +278,12 @@ export default function SimulatorPage() {
     return false;
   }
 
+  // Markeringskartorna används för att bara färga varje valt stopp en gång.
   const selectedPickupMarkers = new Map<string, number>();
   const selectedDeliveryMarkers = new Map<string, number>();
 
   simulatedSelectedConsignments.forEach((consignment) => {
+  simulatedAddedItems.forEach((item) => {
     const [pickupTaxPoint, deliveryTaxPoint] =
       consignment.taxPointRelation?.split("-").map((part) => part.trim()) ?? [];
 
@@ -237,6 +294,7 @@ export default function SimulatorPage() {
     addMarkerCandidate(selectedDeliveryMarkers, consignment.destinationCity);
   });
 
+  // Bygger föreslagen rutt och markerar bara nya tillägg som pickup/leverans.
   const proposedRouteEntries = (primaryRoute?.optimizedRouteStops ?? []).map(
     (location, index) => {
       const isPickup = takeMarkerCandidate(selectedPickupMarkers, location);
@@ -255,13 +313,35 @@ export default function SimulatorPage() {
     },
   );
 
+  // Kör simulering och visar därefter beräkningsdelarna.
   async function handleRunSimulation() {
     setShowCalculatedParts(true);
     await runSimulation();
   }
 
+  // Döljer resultatet och rensar beräknade fält i hooken.
   function resetCalculatedParts() {
     setShowCalculatedParts(false);
+  }
+
+  // Lägger till fiktiv bokning från modal och visar fältfel direkt vid valideringsfel.
+  async function handleAddFictitiousBooking() {
+    setFictitiousFieldErrors({});
+
+    const result = await addFictitiousBooking({
+      taxPointRelation: fictitiousTaxPointRelation,
+      price: fictitiousPrice,
+    });
+
+    if (!result.success) {
+      setFictitiousFieldErrors(result.fieldErrors);
+      return;
+    }
+
+    setFictitiousTaxPointRelation("");
+    setFictitiousPrice("");
+    setFictitiousFieldErrors({});
+    setIsFictitiousModalOpen(false);
   }
 
   return (
@@ -342,7 +422,9 @@ export default function SimulatorPage() {
                   disabled={!selectedLine || isLoadingEquipages}
                   className="w-full text-[var(--text-primary)] border-2 border-[var(--input-border)] rounded-xl p-3 bg-[var(--secondary-element)]"
                 >
-                  <option value="">Välj ekipage</option>
+                  <option value="">
+                    {selectedLine ? "Välj ekipage" : "Välj linje först"}
+                  </option>
                   {availableEquipages.map((equipage) => (
                     <option key={equipage.id} value={equipage.id}>
                       {equipage.name}
@@ -422,7 +504,7 @@ export default function SimulatorPage() {
                       Bokningar
                     </p>
                     <p className="text-3xl 2xl:text-2xl font-bold text-[var(--text-primary)] leading-tight break-words">
-                      {currentEquipageSummary.consignments.length}
+                      {activeCurrentEquipageSummary?.consignments.length ?? 0}
                     </p>
                   </div>
 
@@ -431,7 +513,9 @@ export default function SimulatorPage() {
                       Total vikt
                     </p>
                     <p className="text-3xl 2xl:text-2xl font-bold text-[var(--text-primary)] leading-tight break-words">
-                      {formatNumber(currentEquipageSummary.totalWeightKg)}
+                      {formatNumber(
+                        activeCurrentEquipageSummary?.totalWeightKg ?? 0,
+                      )}
                     </p>
                     <p className="text-sm text-[var(--text-primary)] opacity-75">
                       kg
@@ -443,7 +527,7 @@ export default function SimulatorPage() {
                       Nuvarande FLM
                     </p>
                     <p className="text-3xl 2xl:text-2xl font-bold text-[var(--text-primary)] leading-tight break-words">
-                      {currentEquipageSummary.totalFlm.toFixed(1)}
+                      {(activeCurrentEquipageSummary?.totalFlm ?? 0).toFixed(1)}
                     </p>
                   </div>
                 </div>
@@ -464,7 +548,8 @@ export default function SimulatorPage() {
                 </div>
 
                 <div className="rounded-xl bg-[var(--notification-color)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)]">
-                  {selectedBookingCount} valda
+                  {selectedBookingCount} tillägg / {excludedCurrentBookingCount}{" "}
+                  bortvalda
                 </div>
               </div>
 
@@ -474,7 +559,7 @@ export default function SimulatorPage() {
                   onClick={handleRunSimulation}
                   disabled={
                     !selectedEquipageId ||
-                    selectedBookingCount === 0 ||
+                    totalChangeCount === 0 ||
                     isSimulating
                   }
                   className="bg-[var(--button-submit)] hover:bg-[var(--button-submit-hover)] disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-xl transition"
@@ -484,11 +569,8 @@ export default function SimulatorPage() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    clearSimulationSelection();
-                    resetCalculatedParts();
-                  }}
-                  disabled={selectedBookingCount === 0}
+                  onClick={clearSimulationSelection}
+                  disabled={totalChangeCount === 0}
                   className="bg-[var(--button-reset)] hover:bg-[var(--button-reset-hover)] disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-xl transition"
                 >
                   Rensa val
@@ -534,6 +616,7 @@ export default function SimulatorPage() {
 
                   <tbody>
                     {unassignedConsignments.map((consignment) => {
+                      // Oplacerade rader färgas bara när de är valda och har simulerats.
                       const isSelected = selectedConsignmentIds.includes(
                         consignment.consignmentId,
                       );
@@ -627,6 +710,283 @@ export default function SimulatorPage() {
                 </table>
               </div>
             )}
+
+            {selectedEquipage &&
+              !isLoadingCurrentEquipage &&
+              currentEquipageSummary && (
+                <>
+                  {/* Lista över befintliga bokningar på ekipaget. Ikryssade rader ingår i simulerad startrutt. */}
+                  <div className="mt-4 rounded-2xl border border-[var(--seperating-gray)] overflow-hidden bg-[var(--primary-element)]">
+                    <div className="p-3 border-b border-[var(--seperating-gray)] bg-[var(--secondary-element)]">
+                      <h3 className="font-bold text-[var(--text-primary)]">
+                        Bokningar på ekipaget
+                      </h3>
+                      <p className="text-xs text-[var(--text-primary)] opacity-75">
+                        Ikryssade befintliga bokningar simuleras med samma
+                        intäkts- och kostnadsberäkning som övriga valda
+                        bokningar.
+                      </p>
+                    </div>
+
+                    {currentEquipageSummary.consignments.length === 0 ? (
+                      <p className="p-3 text-sm text-[var(--text-primary)]">
+                        Inga bokningar finns på ekipaget för valt datum.
+                      </p>
+                    ) : (
+                      <div className="max-h-96 overflow-auto">
+                        <table className="w-full border-collapse text-xs">
+                          <thead className="sticky top-0 z-10 bg-[var(--primary-element)]">
+                            <tr className="border-b border-[var(--seperating-gray)] text-[var(--text-primary)]">
+                              <th className="text-left p-2 w-12">Med</th>
+                              <th className="text-left p-2">Kund</th>
+                              <th className="text-left p-2">Hämtort</th>
+                              <th className="text-left p-2">Mottagarort</th>
+                              <th className="text-left p-2">Taxerelation</th>
+                              <th className="text-right p-2">Vikt</th>
+                              <th className="text-right p-2">FLM</th>
+                              <th className="text-right p-2">Extra km</th>
+                              <th className="text-right p-2">Intäkt</th>
+                              <th className="text-left p-2">Steg</th>
+                              <th className="text-right p-2">Kostnad</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {currentEquipageSummary.consignments.map(
+                              (consignment) => {
+                                // Avmarkerade befintliga bokningar hålls neutrala och räknas inte som tillägg.
+                                const isIncluded =
+                                  !excludedCurrentConsignmentIds.includes(
+                                    consignment.consignmentId,
+                                  );
+                                const data = consignment as RevenueFields;
+                                const shouldShowCalculatedParts =
+                                  showCalculatedParts &&
+                                  hasRowSimulationResult(data);
+                                const revenue = shouldShowCalculatedParts
+                                  ? getRevenue(data)
+                                  : 0;
+                                const extraDrivingCost =
+                                  shouldShowCalculatedParts
+                                    ? data.extraDrivingCost
+                                    : null;
+                                const extraDistanceKm =
+                                  shouldShowCalculatedParts
+                                    ? data.extraDistanceKm
+                                    : null;
+                                const rowColor = isIncluded && shouldShowCalculatedParts
+                                  ? getSelectedConsignmentRowColor(
+                                      revenue,
+                                      extraDrivingCost,
+                                    )
+                                  : "bg-[var(--primary-element)]";
+
+                                return (
+                                  <tr
+                                    key={consignment.consignmentId}
+                                    className={`border-b border-[var(--seperating-gray)] ${rowColor}`}
+                                  >
+                                    <td className="p-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={isIncluded}
+                                        onChange={() =>
+                                          toggleCurrentConsignment(
+                                            consignment.consignmentId,
+                                          )
+                                        }
+                                        className="h-4 w-4"
+                                      />
+                                    </td>
+                                    <td className="p-2 font-semibold text-[var(--text-primary)]">
+                                      {getDisplayCustomerName(consignment)}
+                                    </td>
+                                    <td className="p-2 text-[var(--text-primary)]">
+                                      {consignment.pickupLocationCity || "-"}
+                                    </td>
+                                    <td className="p-2 text-[var(--text-primary)]">
+                                      {consignment.destinationCity || "-"}
+                                    </td>
+                                    <td className="p-2 text-[var(--text-primary)]">
+                                      <span className="rounded-lg bg-[var(--secondary-element)] px-2 py-1 text-xs font-semibold">
+                                        {consignment.taxPointRelation?.trim() ||
+                                          "Saknas"}
+                                      </span>
+                                      {shouldShowCalculatedParts &&
+                                        data.missingDistanceRelation && (
+                                          <p className="mt-1 text-xs font-semibold text-red-700">
+                                            Taxepoint{" "}
+                                            {data.missingDistanceRelation} finns
+                                            inte, kan inte beräkna avstånd.
+                                          </p>
+                                        )}
+                                    </td>
+                                    <td className="p-2 text-right text-[var(--text-primary)]">
+                                      {formatNumber(consignment.weight ?? 0)} kg
+                                    </td>
+                                    <td className="p-2 text-right text-[var(--text-primary)]">
+                                      {(consignment.flm ?? 0).toFixed(1)}
+                                    </td>
+                                    <td className="p-2 text-right text-[var(--text-primary)]">
+                                      {extraDistanceKm != null
+                                        ? `${formatDecimal(extraDistanceKm)} km`
+                                        : "-"}
+                                    </td>
+                                    <td className="p-2 text-right font-semibold text-[var(--text-primary)]">
+                                      {shouldShowCalculatedParts
+                                        ? `${formatNumber(revenue)} kr`
+                                        : "-"}
+                                    </td>
+                                    <td className="p-2 text-left text-[var(--text-primary)]">
+                                      {shouldShowCalculatedParts &&
+                                      data.simulatedProfitability !== undefined
+                                        ? getRevenueStepText(data)
+                                        : "-"}
+                                    </td>
+                                    <td className="p-2 text-right font-semibold text-[var(--text-primary)]">
+                                      {extraDrivingCost != null
+                                        ? `${formatNumber(extraDrivingCost)} kr`
+                                        : "-"}
+                                    </td>
+                                  </tr>
+                                );
+                              },
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            <div className="mt-4 rounded-2xl border border-[var(--seperating-gray)] bg-[var(--secondary-element)] p-4">
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <div>
+                  <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                    Fiktiva bokningar
+                  </h3>
+                  <p className="text-sm text-[var(--text-primary)] opacity-80">
+                    Simuleras med angivet pris och taxerelation.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFictitiousFieldErrors({});
+                    setIsFictitiousModalOpen(true);
+                  }}
+                  className="bg-[var(--button-fetch)] hover:opacity-90 text-[var(--text-primary)] font-bold py-2 px-4 rounded-xl transition border border-[var(--seperating-gray)]"
+                >
+                  Lägg till fiktiv bokning
+                </button>
+              </div>
+
+              {fictitiousBookings.length === 0 ? (
+                <p className="text-sm text-[var(--text-primary)]">
+                  Inga fiktiva bokningar tillagda.
+                </p>
+              ) : (
+                <div className="overflow-auto border border-[var(--seperating-gray)] rounded-2xl bg-[var(--primary-element)]">
+                  <table className="w-full border-collapse text-sm">
+                    <thead className="bg-[var(--primary-element)]">
+                      <tr className="border-b border-[var(--seperating-gray)] text-[var(--text-primary)]">
+                        <th className="text-left p-3 w-14">Välj</th>
+                        <th className="text-left p-3">Taxerelation</th>
+                        <th className="text-right p-3">Extra km</th>
+                        <th className="text-right p-3">Intäkt</th>
+                        <th className="text-right p-3">Kostnad</th>
+                        <th className="text-right p-3">Åtgärd</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {fictitiousBookings.map((booking) => {
+                        // Fiktiva rader använder användarens pris som intäkt och saknar prissteg.
+                        const isSelected =
+                          selectedFictitiousBookingIds.includes(booking.id);
+                        const data = booking as RevenueFields;
+                        const shouldShowCalculatedParts =
+                          showCalculatedParts && hasRowSimulationResult(data);
+                        const revenue = shouldShowCalculatedParts
+                          ? getRevenue(data)
+                          : booking.price;
+                        const extraDrivingCost = shouldShowCalculatedParts
+                          ? data.extraDrivingCost
+                          : null;
+                        const extraDistanceKm = shouldShowCalculatedParts
+                          ? data.extraDistanceKm
+                          : null;
+                        const rowColor = isSelected
+                          ? getSelectedConsignmentRowColor(
+                              revenue,
+                              extraDrivingCost,
+                            )
+                          : "bg-[var(--primary-element)]";
+
+                        return (
+                          <tr
+                            key={booking.id}
+                            className={`border-b border-[var(--seperating-gray)] transition ${rowColor}`}
+                          >
+                            <td className="p-3">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() =>
+                                  toggleFictitiousBooking(booking.id)
+                                }
+                                className="h-4 w-4"
+                              />
+                            </td>
+
+                            <td className="p-3 text-[var(--text-primary)]">
+                              <span className="rounded-lg bg-[var(--secondary-element)] px-2 py-1 text-xs font-semibold">
+                                {booking.taxPointRelation}
+                              </span>
+                              {shouldShowCalculatedParts &&
+                                data.missingDistanceRelation && (
+                                  <p className="mt-1 text-xs font-semibold text-red-700">
+                                    Taxepoint {data.missingDistanceRelation}{" "}
+                                    finns inte, kan inte beräkna avstånd.
+                                  </p>
+                                )}
+                            </td>
+
+                            <td className="p-3 text-right text-[var(--text-primary)]">
+                              {extraDistanceKm != null
+                                ? `${formatDecimal(extraDistanceKm)} km`
+                                : "-"}
+                            </td>
+
+                            <td className="p-3 text-right font-semibold text-[var(--text-primary)]">
+                              {formatNumber(revenue)} kr
+                            </td>
+
+                            <td className="p-3 text-right font-semibold text-[var(--text-primary)]">
+                              {extraDrivingCost != null
+                                ? `${formatNumber(extraDrivingCost)} kr`
+                                : "-"}
+                            </td>
+
+                            <td className="p-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeFictitiousBooking(booking.id)
+                                }
+                                className="text-sm font-bold text-red-700 hover:underline"
+                              >
+                                Ta bort
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="bg-[var(--primary-element)] rounded-2xl shadow-md border border-[var(--seperating-gray)] p-4 flex flex-col min-h-0 h-full">
@@ -648,7 +1008,7 @@ export default function SimulatorPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl bg-[var(--secondary-element)] border border-[var(--seperating-gray)] p-4">
                     <p className="text-xs uppercase tracking-wide text-[var(--text-primary)] opacity-75">
-                      Valda bokningar
+                      Tillagda bokningar
                     </p>
                     <p className="text-2xl font-bold text-[var(--text-primary)]">
                       {selectedBookingCount}
@@ -775,8 +1135,8 @@ export default function SimulatorPage() {
                         Föreslagen rutt
                       </h3>
                       <p className="text-sm text-[var(--text-primary)] opacity-80">
-                        Visar hela rutten. Markerade oplacerade bokningar visas
-                        som pickup och delivery.
+                        Visar hela rutten. Bara nya bokningar markeras som pickup
+                        och delivery.
                       </p>
                     </div>
 

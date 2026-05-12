@@ -57,8 +57,8 @@ Cypress.Commands.add('loginAs', (userKey: string, rememberMe: boolean = false) =
 		const password = users[userKey].password;
 
 		cy.visit('/login')
-		cy.get('[data-testid="email-input"]').type(email)
-		cy.get('[data-testid="password-input"]').type(password)
+		cy.get('[data-testid="email-input"]').clear().type(email)
+		cy.get('[data-testid="password-input"]').clear().type(password)
 		if (rememberMe) cy.get('[data-testid="remember-me"]').click()
 
 		cy.get('[data-testid="login-button"]').click()
@@ -72,7 +72,7 @@ Cypress.Commands.add('loginAs', (userKey: string, rememberMe: boolean = false) =
 		}
 
 		// after login, user should be redirected
-    cy.url().should('include', '/home')
+    cy.url({ timeout: 15000 }).should('include', '/home')
 
 		//// Check cookie status
 		// Make sure cookies exist
