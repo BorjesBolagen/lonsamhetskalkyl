@@ -159,6 +159,11 @@ export default function Admin() {
       const { data, error } = await supabase.auth.signUp({
         email: signupEmail,
         password: signupPassword,
+        options: {
+          data: {
+            first_name: signupFirstName.trim()
+          }
+        }
       });
 
       if (error) throw error;
