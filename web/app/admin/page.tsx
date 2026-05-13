@@ -70,10 +70,10 @@ export default function Admin() {
     handleCSVSelected,
   } = useHistoricalImport();
 
-  // State för att visa/dölja lösenordet när admin skapar en ny användare
+  // State for password visibility toggle in admin user creation
   const [showSignupPassword, setShowSignupPassword] = useState(false);
 
-  // Ikoner för ögat
+  // Eye icon SVN (also used in reset-password/page.tsx - consider extracting to shared component)
   const EyeIcon = () => (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -131,6 +131,7 @@ export default function Admin() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate all fields are filled
     if (
       !signupFirstName.trim() ||
       !signupLastName.trim() ||
@@ -144,31 +145,37 @@ export default function Admin() {
 
     try {
       const supabase = getSupabaseBrowserClient();
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
 
-      // Check if email already exists - Transmits password for validation, not actually used in backend logic
+      // Verify email is valid before signup
       const APIsignUpResponse = await signUpProcedure(signupEmail);
       if (!APIsignUpResponse.status) throw new Error(APIsignUpResponse.message);
 
-      // signUpProcedure kollar om email är valid. Kolla om password också är valid
+      // Validate password requirements
       if (!validatePassword(signupPassword))
         throw new Error(
           "Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra",
         );
 
-      // Supabase signup
+      // Create user in Supabase auth
       const { data, error } = await supabase.auth.signUp({
         email: signupEmail,
         password: signupPassword,
+        options: {
+          emailRedirectTo: `${siteUrl}/login`,
+        },
       });
 
       if (error) throw error;
       if (!data.user) throw new Error("Kunde inte skapa användare");
 
+      // Set default user preferences
       const defaultFilters = {
         areas: DEFAULT_AREAS,
         theme: "light",
       };
 
+      // Update user profile with role, name, and preferences
       const userUpdate: TablesUpdate<"User"> = {
         role,
         first_name: signupFirstName.trim(),
@@ -176,7 +183,6 @@ export default function Admin() {
         filters: defaultFilters,
       };
 
-      // Update role and profile information in User table
       const { error: updateError } = await supabase
         .from("User")
         .update(userUpdate)
@@ -184,10 +190,11 @@ export default function Admin() {
 
       if (updateError) throw updateError;
 
-      // Success
+      // Confirm successful user creation
       setSignupResponse(
         `Skapade användare ${data.user.email}. Ett verifieringsmail har skickats. Kom ihåg att kolla skräpposten.`,
       );
+      // Clear form after successful signup
       setSignupFirstName("");
       setSignupLastName("");
       setSignupEmail("");
@@ -404,13 +411,14 @@ export default function Admin() {
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
                     data-testid="signup-set-password"
-                    className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
+                    className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 pr-9 w-full"
                   />
                   <button
                     type="button"
                     onClick={() => setShowSignupPassword(!showSignupPassword)}
                     data-testid="signup-password-eye-icon"
-                    className="absolute right-3 top-2.5 text-[var(--text-secondary)] hover:text-black transition-colors"
+                    className="absolute right-2 top-2 text-[var(--text-secondary)] hover:text-black transition-colors p-1"
+                    aria-label={showSignupPassword ? "Dölj lösenord" : "Visa lösenord"}
                   >
                     {showSignupPassword ? <EyeSlashIcon /> : <EyeIcon />}
                   </button>

@@ -2,6 +2,12 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { COOKIE_MAX_AGE } from './constants';
 
+// Routes accessible without authentication - auth flows and password recovery
+const PUBLIC_ROUTES = ["/login", "/forgot-password", "/reset-password"];
+
+// API routes accessible without authentication
+const PUBLIC_ROUTE_PREFIXES = ["/api/login", "/api/signup", "/api/auth/forgot-password"];
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -47,13 +53,15 @@ export async function updateSession(request: NextRequest) {
 
   const user = data?.claims
 
-if (
-  !user &&
-  !request.nextUrl.pathname.startsWith("/login") &&
-  !request.nextUrl.pathname.startsWith("/api/login") &&
-  !request.nextUrl.pathname.startsWith("/auth")
-) {
-    // no user, potentially respond by redirecting the user to the login page
+  // Redirect unauthenticated users to login, except for public routes
+  if (
+    !user &&
+    !PUBLIC_ROUTES.includes(request.nextUrl.pathname) &&
+    !PUBLIC_ROUTE_PREFIXES.some((prefix) =>
+      request.nextUrl.pathname.startsWith(prefix),
+    ) &&
+    !request.nextUrl.pathname.startsWith("/auth")
+  ) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

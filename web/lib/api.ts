@@ -150,12 +150,23 @@ export const setFilters = async (id: string, filters: Json): Promise<BasicRespon
 	return (await response.json()) as BasicResponse<null>;
 }
 
+export const forgotPassword = async (email: string): Promise<BasicResponse<null>> => {
+	const response = await fetch("/api/auth/forgot-password", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ email }),
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+	return (await response.json()) as BasicResponse<null>;
+}
+
 // NOT DONE YET
-export const setPassword = async (id: string, newPassword: string): Promise<BasicResponse<null>> => {
+export const setPassword = async (currentPassword: string, newPassword: string): Promise<BasicResponse<null>> => {
 	const response = await fetch("/api/users/set/password", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ userId: id, newPassword }),
+		body: JSON.stringify({ currentPassword, newPassword }),
 	});
 
 	if (!response.ok) throw new Error((await response.json()).message);
