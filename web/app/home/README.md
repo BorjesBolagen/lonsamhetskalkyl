@@ -32,9 +32,10 @@ Detta dokument beskriver hur sidan Home hämtar data från iLog, filtrerar resul
 5. Endast linjer i valda kluster behålls.
 6. Ekipage matchas mot godkända linjer via lineId eller normaliserat lineName.
 7. Consignments hämtas i batchar per ekipage.
-8. Ekipage utan consignments filtreras bort.
-9. Ekipage grupperas/sorteras per visad linje.
-10. Profitability beräknas asynkront per consignment efter initial rendering.
+8. Consignments med `ownStatus = Ej i lastlista` filtreras bort när API:t returnerar fältet.
+9. Ekipage utan consignments filtreras bort.
+10. Ekipage grupperas/sorteras per visad linje.
+11. Profitability beräknas asynkront per consignment efter initial rendering.
 
 ## Detaljvy (Info-knappen)
 

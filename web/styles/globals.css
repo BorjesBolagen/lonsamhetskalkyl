@@ -23,7 +23,7 @@
   --primary-color: #22a122;
   --primary-color-background: #78d378;
   --seperating-gray: #dfdfdf;
-  --input-text: #ffffff;
+  --input-text: #F5F5F5;
   --hover-areas: #f8f8f8;
 }
 
@@ -52,6 +52,18 @@ html[data-theme="dark"] {
   --seperating-gray: #383838;
   --input-text: #373a39;
   --hover-areas: #353535;
+}
+
+.footer-logo-dark {
+  display: none;
+}
+
+[data-theme="dark"] .footer-logo-light {
+  display: none;
+}
+
+[data-theme="dark"] .footer-logo-dark {
+  display: block;
 }
 
 @theme inline {

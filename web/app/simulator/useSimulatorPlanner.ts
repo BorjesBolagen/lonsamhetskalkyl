@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getIlogConsignments, ProfitabilityValue } from "../../lib/api";
+import { getIlogConsignments, getIlogEquipages } from "../../lib/api";
+import type { ProfitabilityValue } from "../../lib/api";
 import type {
   ConsignmentListItem,
   EquipageItem,
   LineItem,
 } from "../../lib/ilogTypes";
-import { AreaState, DEFAULT_AREAS } from "../../lib/areaLineConfig";
+import { DEFAULT_AREAS } from "../../lib/areaLineConfig";
+import type { AreaState } from "../../lib/areaLineConfig";
 import {
   buildDeliveryRouteWithStartAndStop,
   calculateBestPickupBeforeDeliveryInsertion,
@@ -15,12 +17,10 @@ import {
   calculateConsignmentProfitabilityPrice,
   calculateExtraDrivingCost,
   calculateRouteDistanceKm,
-  DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-  equipagePlacementMatchesLine,
   getCurrentTransportPlanningUserSettings,
   getDefaultNextDate,
   getDisplayCustomerName,
-  getEquipageLinePlacement,
+  filterEquipagesForSelectedLine,
   getFilteredLinesAndEquipagesForAreas,
   getSelectedAreaLabels,
   parseTaxPointRelation,
@@ -28,16 +28,27 @@ import {
   safeSetSessionStorageJson,
   toIlogDate,
 } from "../../lib/backend/transportPlanningUtils";
+import {
+  DEFAULT_MILE_COST,
+  DEFAULT_PROFITABILITY_REFERENCE_VALUE,
+} from "../../lib/backend/constants";
 
-const SIMULATOR_CACHE_KEY = "simulator-cache-v8";
-
-// Ändra till ert faktiska milpris.
-const MILPRIS_PER_MIL = 100;
+// Cache-nyckel för att kunna återställa simulatorns senaste lokala urval.
+const SIMULATOR_CACHE_KEY = "simulator-cache-v9";
+const FICTITIOUS_TAX_POINT_RELATION_PATTERN = /^\d{5}-\d{5}$/;
 
 type SimulatorLine = LineItem & {
   cluster: string;
 };
 
+// Fiktiva bokningar har användarstyrd intäkt och behöver därför inte prissteg.
+type SimulatedRevenueValue = {
+  estimated_revenue: number;
+  step_used?: number | null;
+  detail?: string;
+};
+
+// Utökar iLog-bokningar med fält som bara används efter simulering.
 type SimulatedConsignment = ConsignmentListItem & {
   simulatedProfitability?: ProfitabilityValue | null;
   revenueMatchStep?: number | null;
@@ -48,12 +59,54 @@ type SimulatedConsignment = ConsignmentListItem & {
   optimizedRouteStops?: string[] | null;
   insertionPickupIndex?: number | null;
   insertionDeliveryIndex?: number | null;
+  missingDistanceRelation?: string | null;
 };
 
+// Lokal modell för en manuell bokning som inte finns i iLog.
+export type FictitiousBooking = {
+  id: string;
+  taxPointRelation: string;
+  price: number;
+  simulatedProfitability?: SimulatedRevenueValue | null;
+  revenueMatchStep?: number | null;
+  extraDistanceKm?: number | null;
+  extraDrivingCost?: number | null;
+  originalRouteDistanceKm?: number | null;
+  optimizedRouteDistanceKm?: number | null;
+  optimizedRouteStops?: string[] | null;
+  insertionPickupIndex?: number | null;
+  insertionDeliveryIndex?: number | null;
+  missingDistanceRelation?: string | null;
+};
+
+export type NewFictitiousBookingInput = {
+  taxPointRelation: string;
+  price: string | number;
+};
+
+export type AddFictitiousBookingFieldErrors = {
+  taxPointRelation?: string;
+  price?: string;
+};
+
+export type AddFictitiousBookingResult =
+  | { success: true }
+  | {
+      success: false;
+      fieldErrors: AddFictitiousBookingFieldErrors;
+    };
+
 type CurrentEquipageSummary = {
-  consignments: ConsignmentListItem[];
+  consignments: SimulatedConsignment[];
   totalFlm: number;
   totalWeightKg: number;
+};
+
+type ActiveCurrentEquipageSummary = CurrentEquipageSummary & {
+  excludedConsignmentIds: number[];
+  excludedConsignments: SimulatedConsignment[];
+  excludedFlm: number;
+  excludedWeightKg: number;
 };
 
 type SimulatorCachePayload = {
@@ -61,7 +114,10 @@ type SimulatorCachePayload = {
   selectedLineId: number | null;
   selectedEquipageId: number | null;
   selectedConsignmentIds: number[];
+  selectedFictitiousBookingIds: string[];
+  excludedCurrentConsignmentIds: number[];
   unassignedConsignments: SimulatedConsignment[];
+  fictitiousBookings: FictitiousBooking[];
 };
 
 type DistanceLookupResponse = {
@@ -74,9 +130,7 @@ type DistanceLookupResponse = {
   };
 };
 
-/**
- * Hämtar oplacerade bokningar för vald linje och datum.
- */
+// Hämtar oplacerade bokningar för vald linje och dag via intern API-route.
 async function getIlogUnassignedConsignments(
   date: string,
   lineId: number,
@@ -95,10 +149,8 @@ async function getIlogUnassignedConsignments(
   return response.json();
 }
 
-/**
- * Hämtar avstånd mellan två taxepunkter via distance_map-routen.
- */
-async function getDistanceKmBetweenTaxPoints(
+// Slår upp avstånd i en bestämd riktning mellan två taxepunkter.
+async function getDistanceKmForDirectedTaxPointRelation(
   sender: string,
   receiver: string,
 ): Promise<number | null> {
@@ -139,23 +191,89 @@ async function getDistanceKmBetweenTaxPoints(
     : null;
 }
 
-/**
- * Hook för simulatorns state, laddning, cache och ruttinsättning med pickup före delivery.
- */
+// Testar även omvänd relation eftersom avståndstabellen inte alltid är riktad åt samma håll.
+async function getDistanceKmBetweenTaxPoints(
+  sender: string,
+  receiver: string,
+): Promise<number | null> {
+  const forwardDistanceKm = await getDistanceKmForDirectedTaxPointRelation(
+    sender,
+    receiver,
+  );
+
+  if (forwardDistanceKm !== null) {
+    return forwardDistanceKm;
+  }
+
+  return getDistanceKmForDirectedTaxPointRelation(receiver, sender);
+}
+
+function normalizeFictitiousTaxPointRelation(value: string): string {
+  return value.trim().replace(/\s+/g, "");
+}
+
+
+// Tar bort gamla simuleringsvärden så nya körningar bara speglar aktuellt urval.
+function clearConsignmentSimulationFields<T extends SimulatedConsignment>(
+  consignment: T,
+): T {
+  return {
+    ...consignment,
+    simulatedProfitability: undefined,
+    revenueMatchStep: undefined,
+    extraDistanceKm: undefined,
+    extraDrivingCost: undefined,
+    originalRouteDistanceKm: undefined,
+    optimizedRouteDistanceKm: undefined,
+    optimizedRouteStops: undefined,
+    insertionPickupIndex: undefined,
+    insertionDeliveryIndex: undefined,
+    missingDistanceRelation: undefined,
+  };
+}
+
+// Rensar beräknade fält för fiktiva bokningar utan att ta bort användarens inmatning.
+function clearFictitiousSimulationFields(
+  booking: FictitiousBooking,
+): FictitiousBooking {
+  return {
+    ...booking,
+    simulatedProfitability: undefined,
+    revenueMatchStep: undefined,
+    extraDistanceKm: undefined,
+    extraDrivingCost: undefined,
+    originalRouteDistanceKm: undefined,
+    optimizedRouteDistanceKm: undefined,
+    optimizedRouteStops: undefined,
+    insertionPickupIndex: undefined,
+    insertionDeliveryIndex: undefined,
+    missingDistanceRelation: undefined,
+  };
+}
+
+// Används för att skilja beräknade rader från rader som ännu inte simulerats.
+function hasSimulationResult(
+  item: SimulatedConsignment | FictitiousBooking,
+): boolean {
+  return (
+    item.extraDistanceKm !== undefined ||
+    item.extraDrivingCost !== undefined ||
+    item.simulatedProfitability !== undefined ||
+    item.missingDistanceRelation !== undefined
+  );
+}
+
 export function useSimulatorPlanner() {
   const [selectedAreas, setSelectedAreas] = useState<AreaState>(DEFAULT_AREAS);
   const [areasLoaded, setAreasLoaded] = useState(false);
   const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
     useState<number>(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
+  const [mileCostReferenceValue, setMileCostReferenceValue] =
+    useState<number>(DEFAULT_MILE_COST);
 
   const [selectedDate, setSelectedDate] = useState(getDefaultNextDate);
-
-  // Alla möjliga linjer efter klusterfilter.
   const [availableLines, setAvailableLines] = useState<SimulatorLine[]>([]);
-
-  // Endast linjer som faktiskt får ekipage enligt samma placeringslogik som Home.
   const [homeVisibleLines, setHomeVisibleLines] = useState<SimulatorLine[]>([]);
-
   const [filteredAreaEquipages, setFilteredAreaEquipages] = useState<
     EquipageItem[]
   >([]);
@@ -174,9 +292,16 @@ export function useSimulatorPlanner() {
   const [selectedConsignmentIds, setSelectedConsignmentIds] = useState<
     number[]
   >([]);
+  const [fictitiousBookings, setFictitiousBookings] = useState<
+    FictitiousBooking[]
+  >([]);
+  const [selectedFictitiousBookingIds, setSelectedFictitiousBookingIds] =
+    useState<string[]>([]);
 
   const [currentEquipageSummary, setCurrentEquipageSummary] =
     useState<CurrentEquipageSummary | null>(null);
+  const [excludedCurrentConsignmentIds, setExcludedCurrentConsignmentIds] =
+    useState<number[]>([]);
 
   const [isLoadingLines, setIsLoadingLines] = useState(false);
   const [isLoadingEquipages, setIsLoadingEquipages] = useState(false);
@@ -184,17 +309,20 @@ export function useSimulatorPlanner() {
   const [isLoadingCurrentEquipage, setIsLoadingCurrentEquipage] =
     useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isAddingFictitiousBooking, setIsAddingFictitiousBooking] =
+    useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Härledda val gör renderingen enklare och undviker upprepade filter i JSX.
   const selectedAreaLabels = useMemo(
     () => getSelectedAreaLabels(selectedAreas),
     [selectedAreas],
   );
 
   const selectedLine = useMemo(
-    () => homeVisibleLines.find((line) => line.id === selectedLineId) ?? null,
-    [homeVisibleLines, selectedLineId],
+    () => availableLines.find((line) => line.id === selectedLineId) ?? null,
+    [availableLines, selectedLineId],
   );
 
   const selectedEquipage = useMemo(
@@ -213,37 +341,122 @@ export function useSimulatorPlanner() {
     [unassignedConsignments, selectedConsignmentIds],
   );
 
+  // Aktivt ekipage är nuvarande bokningar minus dem användaren valt att ta bort i simuleringen.
+  const activeCurrentEquipageSummary =
+    useMemo<ActiveCurrentEquipageSummary | null>(() => {
+      if (!currentEquipageSummary) {
+        return null;
+      }
+
+      const excludedIdSet = new Set(excludedCurrentConsignmentIds);
+
+      // Bokningar som är urbockade räknas bort ur den simulerade startrutten.
+      const activeConsignments = currentEquipageSummary.consignments.filter(
+        (consignment) => !excludedIdSet.has(consignment.consignmentId),
+      );
+      const excludedConsignments = currentEquipageSummary.consignments.filter(
+        (consignment) => excludedIdSet.has(consignment.consignmentId),
+      );
+      const activeTotals = calculateConsignmentTotals(activeConsignments);
+      const excludedTotals = calculateConsignmentTotals(excludedConsignments);
+
+      return {
+        consignments: activeConsignments,
+        totalFlm: activeTotals.totalFlm,
+        totalWeightKg: activeTotals.totalWeightKg,
+        excludedConsignmentIds: excludedCurrentConsignmentIds,
+        excludedConsignments,
+        excludedFlm: excludedTotals.totalFlm,
+        excludedWeightKg: excludedTotals.totalWeightKg,
+      };
+    }, [currentEquipageSummary, excludedCurrentConsignmentIds]);
+
+  const selectedFictitiousBookings = useMemo(
+    () =>
+      fictitiousBookings.filter((booking) =>
+        selectedFictitiousBookingIds.includes(booking.id),
+      ),
+    [fictitiousBookings, selectedFictitiousBookingIds],
+  );
+
+  // Summeringen byggs alltid från aktuella markerade rader och deras senaste simuleringsfält.
   const simulationSummary = useMemo(() => {
-    const addedWeightKg = selectedConsignments.reduce(
-      (sum, consignment) => sum + (consignment.weight ?? 0),
+    const selectedCurrentConsignments =
+      activeCurrentEquipageSummary?.consignments ?? [];
+    const removedCurrentConsignments =
+      activeCurrentEquipageSummary?.excludedConsignments ?? [];
+
+    const addedWeightKg = [
+      ...selectedCurrentConsignments,
+      ...selectedConsignments,
+    ].reduce((sum, consignment) => sum + (consignment.weight ?? 0), 0);
+
+    const addedFlm = [
+      ...selectedCurrentConsignments,
+      ...selectedConsignments,
+    ].reduce((sum, consignment) => sum + (consignment.flm ?? 0), 0);
+
+    const selectedItems = [
+      ...selectedCurrentConsignments,
+      ...selectedConsignments,
+      ...selectedFictitiousBookings,
+    ];
+
+    const calculatedSelectedItems = selectedItems.filter(
+      (item) => hasSimulationResult(item) && item.extraDrivingCost !== null,
+    );
+
+    const calculatedRemovedItems = removedCurrentConsignments.filter(
+      (item) => hasSimulationResult(item) && item.extraDrivingCost !== null,
+    );
+
+    const addedExtraDistanceKm = calculatedSelectedItems.reduce(
+      (sum, item) => sum + (item.extraDistanceKm ?? 0),
       0,
     );
 
-    const addedFlm = selectedConsignments.reduce(
-      (sum, consignment) => sum + (consignment.flm ?? 0),
+    const removedExtraDistanceKm = calculatedRemovedItems.reduce(
+      (sum, item) => sum + (item.extraDistanceKm ?? 0),
       0,
     );
 
-    const totalExtraDistanceKm = selectedConsignments.reduce(
-      (sum, consignment) => sum + (consignment.extraDistanceKm ?? 0),
+    const addedExtraDrivingCost = calculatedSelectedItems.reduce(
+      (sum, item) => sum + (item.extraDrivingCost ?? 0),
       0,
     );
 
-    const totalExtraDrivingCost = selectedConsignments.reduce(
-      (sum, consignment) => sum + (consignment.extraDrivingCost ?? 0),
+    const removedExtraDrivingCost = calculatedRemovedItems.reduce(
+      (sum, item) => sum + (item.extraDrivingCost ?? 0),
       0,
     );
 
-    const totalEstimatedRevenue = selectedConsignments.reduce(
-      (sum, consignment) =>
-        sum + (consignment.simulatedProfitability?.estimated_revenue ?? 0),
+    const addedEstimatedRevenue = calculatedSelectedItems.reduce(
+      (sum, item) =>
+        sum +
+        (item.simulatedProfitability?.estimated_revenue ??
+          ("price" in item ? item.price : 0)),
       0,
     );
 
+    const removedEstimatedRevenue = calculatedRemovedItems.reduce(
+      (sum, item) =>
+        sum + (item.simulatedProfitability?.estimated_revenue ?? 0),
+      0,
+    );
+
+    const totalExtraDistanceKm = addedExtraDistanceKm - removedExtraDistanceKm;
+    const totalExtraDrivingCost =
+      addedExtraDrivingCost - removedExtraDrivingCost;
+    const totalEstimatedRevenue =
+      addedEstimatedRevenue - removedEstimatedRevenue;
     const simulatedMargin = totalEstimatedRevenue - totalExtraDrivingCost;
-
-    const currentFlm = currentEquipageSummary?.totalFlm ?? 0;
-    const simulatedFlm = currentFlm + addedFlm;
+    const currentFlm = activeCurrentEquipageSummary?.totalFlm ?? 0;
+    const simulatedFlm =
+      currentFlm +
+      selectedConsignments.reduce(
+        (sum, consignment) => sum + (consignment.flm ?? 0),
+        0,
+      );
 
     return {
       addedWeightKg,
@@ -255,48 +468,53 @@ export function useSimulatorPlanner() {
       currentFlm,
       simulatedFlm,
     };
-  }, [currentEquipageSummary, selectedConsignments]);
+  }, [
+    activeCurrentEquipageSummary,
+    selectedConsignments,
+    selectedFictitiousBookings,
+  ]);
 
-  /**
-   * Sparar simulatorns state i sessionStorage.
-   */
+  // Sparar bara lokalt UI-läge, inte några permanenta ändringar i iLog.
   function persistSimulatorCache(payload: SimulatorCachePayload): void {
     safeSetSessionStorageJson(SIMULATOR_CACHE_KEY, payload);
   }
 
-  /**
-   * Byter datum och nollställer beroende val.
-   */
   function handleDateChange(value: string) {
+    // Datumbyte ska behålla vald linje och valt ekipage så att användaren kan jämföra dagar.
     setSelectedDate(value);
-    setSelectedLineId(null);
-    setSelectedEquipageId(null);
     setSelectedConsignmentIds([]);
+    setExcludedCurrentConsignmentIds([]);
     setUnassignedConsignments([]);
     setCurrentEquipageSummary(null);
   }
 
-  /**
-   * Byter linje och nollställer beroende val.
-   */
   function handleLineChange(lineId: number | null) {
+    // Ekipage får inte hämtas/visas förrän användaren har valt linje.
     setSelectedLineId(lineId);
     setSelectedEquipageId(null);
     setSelectedConsignmentIds([]);
+    setExcludedCurrentConsignmentIds([]);
     setUnassignedConsignments([]);
     setCurrentEquipageSummary(null);
+    setAvailableEquipages([]);
   }
 
-  /**
-   * Byter ekipage.
-   */
+  // Vid byte av ekipage börjar borttagningsurvalet om för att undvika fel korskoppling.
   function handleEquipageChange(equipageId: number | null) {
     setSelectedEquipageId(equipageId);
+    setExcludedCurrentConsignmentIds([]);
   }
 
-  /**
-   * Markerar eller avmarkerar bokning.
-   */
+  function toggleCurrentConsignment(consignmentId: number) {
+    // Checkboxen styr om en befintlig bokning ska ingå i startrutten eller tas bort lokalt.
+    setExcludedCurrentConsignmentIds((current) =>
+      current.includes(consignmentId)
+        ? current.filter((id) => id !== consignmentId)
+        : [...current, consignmentId],
+    );
+  }
+
+  // Markerar oplacerade bokningar som ska testas som nya stopp i rutten.
   function toggleConsignment(consignmentId: number) {
     setSelectedConsignmentIds((current) =>
       current.includes(consignmentId)
@@ -305,9 +523,115 @@ export function useSimulatorPlanner() {
     );
   }
 
-  /**
-   * Hämtar intäkt med samma profitability-logik som Home.
-   */
+  // Validerar manuell taxerelation och pris innan bokningen läggs till i listan.
+  async function addFictitiousBooking(
+    input: NewFictitiousBookingInput,
+  ): Promise<AddFictitiousBookingResult> {
+    const normalizedTaxPointRelation = normalizeFictitiousTaxPointRelation(
+      input.taxPointRelation,
+    );
+    const rawPrice =
+      typeof input.price === "string" ? input.price.trim() : input.price;
+    const price =
+      typeof rawPrice === "number"
+        ? rawPrice
+        : Number(rawPrice.replace(",", "."));
+    const fieldErrors: AddFictitiousBookingFieldErrors = {};
+
+    if (
+      !FICTITIOUS_TAX_POINT_RELATION_PATTERN.test(normalizedTaxPointRelation)
+    ) {
+      fieldErrors.taxPointRelation =
+        "Taxerelation måste ha formatet 12345-67890.";
+    }
+
+    if (typeof rawPrice === "string" && rawPrice.length === 0) {
+      fieldErrors.price = "Pris måste vara ett nummer.";
+    } else if (!Number.isFinite(price)) {
+      fieldErrors.price = "Pris måste vara ett nummer.";
+    } else if (price < 0) {
+      fieldErrors.price = "Pris får inte vara negativt.";
+    }
+
+    if (fieldErrors.taxPointRelation || fieldErrors.price) {
+      return { success: false, fieldErrors };
+    }
+
+    const parsed = parseTaxPointRelation(normalizedTaxPointRelation);
+    if (!parsed) {
+      return {
+        success: false,
+        fieldErrors: {
+          taxPointRelation: "Taxerelation måste ha formatet 12345-67890.",
+        },
+      };
+    }
+
+    setIsAddingFictitiousBooking(true);
+
+    try {
+      const distanceKm = await getDistanceKmBetweenTaxPoints(
+        parsed.sender,
+        parsed.receiver,
+      );
+
+      if (distanceKm === null) {
+        return {
+          success: false,
+          fieldErrors: {
+            taxPointRelation: `Taxepoint ${normalizedTaxPointRelation} finns inte, kan inte beräkna avstånd.`,
+          },
+        };
+      }
+
+      const id = `fiktiv-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      setFictitiousBookings((current) => [
+        ...current,
+        {
+          id,
+          taxPointRelation: `${parsed.sender}-${parsed.receiver}`,
+          price,
+        },
+      ]);
+      setSelectedFictitiousBookingIds((current) => [...current, id]);
+      setErrorMsg("");
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        fieldErrors: {
+          taxPointRelation:
+            error instanceof Error
+              ? `Kunde inte kontrollera taxerelationen: ${error.message}`
+              : "Kunde inte kontrollera taxerelationen.",
+        },
+      };
+    } finally {
+      setIsAddingFictitiousBooking(false);
+    }
+  }
+
+  function removeFictitiousBooking(id: string) {
+    setFictitiousBookings((current) =>
+      current.filter((booking) => booking.id !== id),
+    );
+    setSelectedFictitiousBookingIds((current) =>
+      current.filter((bookingId) => bookingId !== id),
+    );
+  }
+
+  function toggleFictitiousBooking(id: string) {
+    setSelectedFictitiousBookingIds((current) =>
+      current.includes(id)
+        ? current.filter((bookingId) => bookingId !== id)
+        : [...current, id],
+    );
+  }
+
+  // Återanvänder samma intäktslogik som startsidans lönsamhetsberäkning.
   async function calculateRevenueLikeHome(
     consignment: ConsignmentListItem,
   ): Promise<{
@@ -323,28 +647,27 @@ export function useSimulatorPlanner() {
     };
   }
 
-  /**
-   * Simulerar valda bokningar med start/stop från valt ekipages befintliga consignments.
-   *
-   * iLog ger inte separat start-/slutpunkt för ekipaget. Därför byggs originalrutten
-   * från valt ekipages consignments:
-   * - start = sender i första befintliga taxPointRelation
-   * - stop = receiver i sista befintliga taxPointRelation
-   *
-   * För varje ny bokning testas bästa placering där pickup alltid ligger före delivery.
-   */
+  // Kör en ny simulering från aktuellt urval och skriver över tidigare beräknade fält.
   async function runSimulation() {
     if (!selectedEquipageId) {
       setErrorMsg("Välj ett ekipage att simulera på.");
       return;
     }
 
-    if (!currentEquipageSummary) {
+    if (!activeCurrentEquipageSummary) {
       setErrorMsg("Ekipagets nuvarande bokningar har inte laddats.");
       return;
     }
 
-    if (selectedConsignmentIds.length === 0) {
+    const selectedCurrentConsignments =
+      activeCurrentEquipageSummary.consignments;
+
+    if (
+      selectedCurrentConsignments.length === 0 &&
+      selectedConsignmentIds.length === 0 &&
+      selectedFictitiousBookingIds.length === 0 &&
+      excludedCurrentConsignmentIds.length === 0
+    ) {
       setErrorMsg("Välj minst en bokning att simulera.");
       return;
     }
@@ -354,8 +677,10 @@ export function useSimulatorPlanner() {
 
     try {
       const selectedIdSet = new Set(selectedConsignmentIds);
+      const selectedFictitiousIdSet = new Set(selectedFictitiousBookingIds);
       const distanceCache = new Map<string, number | null>();
 
+      // Cache minskar antalet uppslag för samma taxepunktsrelation under en körning.
       async function getCachedDistanceKm(
         sender: string,
         receiver: string,
@@ -371,31 +696,37 @@ export function useSimulatorPlanner() {
           return distanceCache.get(reverseKey) ?? null;
         }
 
-        const distanceKm = await getDistanceKmBetweenTaxPoints(sender, receiver);
+        const distanceKm = await getDistanceKmBetweenTaxPoints(
+          sender,
+          receiver,
+        );
         distanceCache.set(forwardKey, distanceKm);
+        distanceCache.set(reverseKey, distanceKm);
         return distanceKm;
       }
 
-      let currentRouteStops = buildDeliveryRouteWithStartAndStop(
-        currentEquipageSummary.consignments,
-      );
+      // Ikryssade befintliga bokningar simuleras som egna steg, på samma sätt som oplacerade och fiktiva bokningar.
+      let currentRouteStops = buildDeliveryRouteWithStartAndStop([]);
 
-      let currentRouteDistanceKm = await calculateRouteDistanceKm(
+      const currentRouteDistance = await calculateRouteDistanceKm(
         currentRouteStops,
         getCachedDistanceKm,
       );
 
+      let currentRouteDistanceKm = currentRouteDistance.distanceKm;
+
       const simulatedById = new Map<number, SimulatedConsignment>();
+      const simulatedCurrentById = new Map<number, SimulatedConsignment>();
+      const simulatedFictitiousById = new Map<string, FictitiousBooking>();
 
-      for (const consignment of unassignedConsignments) {
-        if (!selectedIdSet.has(consignment.consignmentId)) {
-          continue;
-        }
-
+      // Simulerar en iLog-bokning som pickup + leverans och beräknar marginaldata.
+      async function simulateConsignmentInsertion(
+        consignment: ConsignmentListItem,
+      ): Promise<SimulatedConsignment> {
         const parsed = parseTaxPointRelation(consignment.taxPointRelation);
 
         if (!parsed) {
-          simulatedById.set(consignment.consignmentId, {
+          return {
             ...consignment,
             simulatedProfitability: null,
             revenueMatchStep: null,
@@ -406,6 +737,90 @@ export function useSimulatorPlanner() {
             optimizedRouteStops: null,
             insertionPickupIndex: null,
             insertionDeliveryIndex: null,
+            missingDistanceRelation: null,
+          };
+        }
+
+        const routeResult = await calculateBestPickupBeforeDeliveryInsertion(
+          currentRouteStops,
+          currentRouteDistanceKm,
+          parsed.sender,
+          parsed.receiver,
+          getCachedDistanceKm,
+        );
+
+        const extraDrivingCost =
+          routeResult.extraDistanceKm === null
+            ? null
+            : calculateExtraDrivingCost(
+                routeResult.extraDistanceKm,
+                mileCostReferenceValue,
+              );
+
+        const { simulatedProfitability, revenueMatchStep } =
+          await calculateRevenueLikeHome(consignment);
+
+        if (routeResult.optimizedDistanceKm !== null) {
+          currentRouteStops = routeResult.optimizedStops;
+          currentRouteDistanceKm = routeResult.optimizedDistanceKm;
+        }
+
+        return {
+          ...consignment,
+          simulatedProfitability,
+          revenueMatchStep,
+          extraDistanceKm: routeResult.extraDistanceKm,
+          extraDrivingCost,
+          originalRouteDistanceKm: routeResult.originalDistanceKm,
+          optimizedRouteDistanceKm: routeResult.optimizedDistanceKm,
+          optimizedRouteStops: routeResult.optimizedStops,
+          insertionPickupIndex: routeResult.pickupIndex,
+          insertionDeliveryIndex: routeResult.deliveryIndex,
+          missingDistanceRelation: routeResult.missingDistanceRelation,
+        };
+      }
+
+      // Befintliga markerade bokningar behandlas som simulerade rader, men inte som nya tillägg i UI:t.
+      for (const consignment of selectedCurrentConsignments) {
+        simulatedCurrentById.set(
+          consignment.consignmentId,
+          await simulateConsignmentInsertion(consignment),
+        );
+      }
+
+      // Endast markerade oplacerade bokningar ska ingå i den här körningens resultat.
+      for (const consignment of unassignedConsignments) {
+        if (!selectedIdSet.has(consignment.consignmentId)) {
+          continue;
+        }
+
+        simulatedById.set(
+          consignment.consignmentId,
+          await simulateConsignmentInsertion(consignment),
+        );
+      }
+
+      // Fiktiva bokningar använder användarens pris som intäkt och hoppar över prissteg.
+      for (const booking of fictitiousBookings) {
+        if (!selectedFictitiousIdSet.has(booking.id)) {
+          continue;
+        }
+
+        const parsed = parseTaxPointRelation(booking.taxPointRelation);
+
+        if (!parsed) {
+          simulatedFictitiousById.set(booking.id, {
+            ...booking,
+            simulatedProfitability: null,
+            revenueMatchStep: null,
+            extraDistanceKm: null,
+            extraDrivingCost: null,
+            originalRouteDistanceKm: null,
+            optimizedRouteDistanceKm: null,
+            optimizedRouteStops: null,
+            insertionPickupIndex: null,
+            insertionDeliveryIndex: null,
+            missingDistanceRelation: null,
           });
           continue;
         }
@@ -418,21 +833,25 @@ export function useSimulatorPlanner() {
           getCachedDistanceKm,
         );
 
-        const extraDrivingCost = calculateExtraDrivingCost(
-          routeResult.extraDistanceKm,
-          MILPRIS_PER_MIL,
-        );
+        const extraDrivingCost =
+          routeResult.extraDistanceKm === null
+            ? null
+            : calculateExtraDrivingCost(
+                routeResult.extraDistanceKm,
+                mileCostReferenceValue,
+              );
 
-        const { simulatedProfitability, revenueMatchStep } =
-          await calculateRevenueLikeHome(consignment);
+        if (routeResult.optimizedDistanceKm !== null) {
+          currentRouteStops = routeResult.optimizedStops;
+          currentRouteDistanceKm = routeResult.optimizedDistanceKm;
+        }
 
-        currentRouteStops = routeResult.optimizedStops;
-        currentRouteDistanceKm = routeResult.optimizedDistanceKm;
-
-        simulatedById.set(consignment.consignmentId, {
-          ...consignment,
-          simulatedProfitability,
-          revenueMatchStep,
+        simulatedFictitiousById.set(booking.id, {
+          ...booking,
+          simulatedProfitability: {
+            estimated_revenue: booking.price,
+          },
+          revenueMatchStep: null,
           extraDistanceKm: routeResult.extraDistanceKm,
           extraDrivingCost,
           originalRouteDistanceKm: routeResult.originalDistanceKm,
@@ -440,13 +859,40 @@ export function useSimulatorPlanner() {
           optimizedRouteStops: routeResult.optimizedStops,
           insertionPickupIndex: routeResult.pickupIndex,
           insertionDeliveryIndex: routeResult.deliveryIndex,
+          missingDistanceRelation: routeResult.missingDistanceRelation,
         });
       }
 
+      // Alla rader som inte simulerades i denna körning rensas från gamla resultat.
+      setCurrentEquipageSummary((current) =>
+        current
+          ? {
+              ...current,
+              consignments: current.consignments.map((consignment) => {
+                const simulated = simulatedCurrentById.get(
+                  consignment.consignmentId,
+                );
+
+                return simulated ?? clearConsignmentSimulationFields(consignment);
+              }),
+            }
+          : current,
+      );
+
       setUnassignedConsignments((current) =>
-        current.map((consignment) =>
-          simulatedById.get(consignment.consignmentId) ?? consignment,
-        ),
+        current.map((consignment) => {
+          const simulated = simulatedById.get(consignment.consignmentId);
+
+          return simulated ?? clearConsignmentSimulationFields(consignment);
+        }),
+      );
+
+      setFictitiousBookings((current) =>
+        current.map((booking) => {
+          const simulated = simulatedFictitiousById.get(booking.id);
+
+          return simulated ?? clearFictitiousSimulationFields(booking);
+        }),
       );
     } catch (error) {
       setErrorMsg(
@@ -459,39 +905,51 @@ export function useSimulatorPlanner() {
     }
   }
 
-  /**
-   * Rensar valda bokningar och simulerade ruttvärden.
-   */
+  // Tömmer endast valen, men lämnar eventuellt visade beräkningsresultat kvar.
   function clearSimulationSelection() {
     setSelectedConsignmentIds([]);
+    setSelectedFictitiousBookingIds([]);
+    setExcludedCurrentConsignmentIds([]);
+  }
+
+  // Återställer både val och beräkningsfält till ett osimulerat läge.
+  function resetSimulationResults() {
+    setSelectedConsignmentIds([]);
+    setSelectedFictitiousBookingIds([]);
+    setExcludedCurrentConsignmentIds([]);
+    setCurrentEquipageSummary((current) =>
+      current
+        ? {
+            ...current,
+            consignments: current.consignments.map((consignment) =>
+              clearConsignmentSimulationFields(consignment),
+            ),
+          }
+        : current,
+    );
     setUnassignedConsignments((current) =>
-      current.map((consignment) => ({
-        ...consignment,
-        simulatedProfitability: undefined,
-        revenueMatchStep: undefined,
-        extraDistanceKm: undefined,
-        extraDrivingCost: undefined,
-        originalRouteDistanceKm: undefined,
-        optimizedRouteDistanceKm: undefined,
-        optimizedRouteStops: undefined,
-        insertionPickupIndex: undefined,
-        insertionDeliveryIndex: undefined,
-      })),
+      current.map((consignment) => clearConsignmentSimulationFields(consignment)),
+    );
+    setFictitiousBookings((current) =>
+      current.map((booking) => clearFictitiousSimulationFields(booking)),
     );
   }
 
   useEffect(() => {
+    // Läser användarens sparade områden och referensvärden vid sidladdning.
     async function loadCurrentUserSettings() {
       const settings = await getCurrentTransportPlanningUserSettings();
       setSelectedAreas(settings.selectedAreas);
       setProfitabilityReferenceValue(settings.profitabilityReferenceValue);
+      setMileCostReferenceValue(settings.mileCostReferenceValue);
       setAreasLoaded(true);
     }
 
-    loadCurrentUserSettings();
+    void loadCurrentUserSettings();
   }, []);
 
   useEffect(() => {
+    // Återställer senaste simulatorurvalet från sessionStorage.
     const cached =
       safeGetSessionStorageJson<SimulatorCachePayload>(SIMULATOR_CACHE_KEY);
 
@@ -500,13 +958,21 @@ export function useSimulatorPlanner() {
       setSelectedLineId(cached.selectedLineId ?? null);
       setSelectedEquipageId(cached.selectedEquipageId ?? null);
       setSelectedConsignmentIds(cached.selectedConsignmentIds ?? []);
+      setSelectedFictitiousBookingIds(
+        cached.selectedFictitiousBookingIds ?? [],
+      );
+      setExcludedCurrentConsignmentIds(
+        cached.excludedCurrentConsignmentIds ?? [],
+      );
       setUnassignedConsignments(cached.unassignedConsignments ?? []);
+      setFictitiousBookings(cached.fictitiousBookings ?? []);
     }
 
     setHasHydrated(true);
   }, []);
 
   useEffect(() => {
+    // Skriv cache först när initial återläsning är klar.
     if (!hasHydrated) {
       return;
     }
@@ -516,135 +982,74 @@ export function useSimulatorPlanner() {
       selectedLineId,
       selectedEquipageId,
       selectedConsignmentIds,
+      selectedFictitiousBookingIds,
+      excludedCurrentConsignmentIds,
       unassignedConsignments,
+      fictitiousBookings,
     });
   }, [
+    fictitiousBookings,
     hasHydrated,
     selectedDate,
-    selectedLineId,
     selectedEquipageId,
+    selectedFictitiousBookingIds,
+    excludedCurrentConsignmentIds,
+    selectedLineId,
     selectedConsignmentIds,
     unassignedConsignments,
   ]);
 
   useEffect(() => {
-    async function loadLinesAndAreaEquipages() {
+    // Hämtar linjer efter att användarens område/kluster har laddats.
+    async function loadLinesForSelectedAreas() {
       if (!areasLoaded) {
         return;
       }
 
       setIsLoadingLines(true);
-      setIsLoadingEquipages(true);
       setErrorMsg("");
 
       try {
-        const { approvedLines, filteredEquipages } =
+        const { approvedLines } =
           await getFilteredLinesAndEquipagesForAreas(selectedAreaLabels);
 
         setAvailableLines(approvedLines as SimulatorLine[]);
-        setFilteredAreaEquipages(filteredEquipages);
+        setFilteredAreaEquipages([]);
       } catch {
-        setErrorMsg("Kunde inte hämta linjer och ekipage.");
+        setErrorMsg("Kunde inte hämta linjer, testa ladda om sidan.");
         setAvailableLines([]);
         setHomeVisibleLines([]);
         setFilteredAreaEquipages([]);
       } finally {
         setIsLoadingLines(false);
-        setIsLoadingEquipages(false);
       }
     }
 
-    loadLinesAndAreaEquipages();
+    void loadLinesForSelectedAreas();
   }, [areasLoaded, selectedAreaLabels]);
 
-useEffect(() => {
-  async function loadHomeVisibleLines() {
-    if (
-      !selectedDate ||
-      availableLines.length === 0 ||
-      filteredAreaEquipages.length === 0
-    ) {
-      setHomeVisibleLines([]);
-      return;
-    }
-
-    const ilogDate = toIlogDate(selectedDate);
-    if (!ilogDate) {
-      setHomeVisibleLines([]);
-      return;
-    }
-
-    setIsLoadingLines(true);
-    setErrorMsg("");
-
-    try {
-      const visibleLineMap = new Map<number, SimulatorLine>();
-
-      await Promise.all(
-        filteredAreaEquipages.map(async (equipage) => {
-          const response = await getIlogConsignments(ilogDate, equipage.id);
-          const consignments = (response.data ?? []) as ConsignmentListItem[];
-
-          const placement = getEquipageLinePlacement(
-            equipage,
-            consignments,
-            availableLines,
-            selectedAreaLabels,
-          );
-
-          if (!placement) {
-            return;
-          }
-
-          visibleLineMap.set(
-            placement.displayLine.id,
-            placement.displayLine as SimulatorLine,
-          );
-        }),
-      );
-
-      const visibleLines = Array.from(visibleLineMap.values()).sort((a, b) =>
-        a.name.localeCompare(b.name, "sv"),
-      );
-
-      setHomeVisibleLines(visibleLines);
-
-      if (
-        selectedLineId &&
-        !visibleLines.some((line) => line.id === selectedLineId)
-      ) {
-        setSelectedLineId(null);
-        setSelectedEquipageId(null);
-        setSelectedConsignmentIds([]);
-        setUnassignedConsignments([]);
-        setCurrentEquipageSummary(null);
-      }
-    } catch {
-      setErrorMsg("Kunde inte kontrollera synliga linjer.");
-      setHomeVisibleLines([]);
-    } finally {
-      setIsLoadingLines(false);
-    }
-  }
-
-  loadHomeVisibleLines();
-}, [
-  availableLines,
-  filteredAreaEquipages,
-  selectedAreaLabels,
-  selectedDate,
-]);
+  useEffect(() => {
+    // Feedback: linjelistan ska visa alla linjer i valda kluster, även riktningar utan lastade bokningar.
+    setHomeVisibleLines(availableLines);
+  }, [availableLines]);
 
   useEffect(() => {
-    async function loadEquipagesForSelectedLineUsingHomeLogic() {
+    // Hämtar ekipage först när både linje och giltigt datum finns.
+    async function loadEquipagesForSelectedLine() {
       if (!selectedLine || !selectedDate) {
         setAvailableEquipages([]);
+        setSelectedEquipageId(null);
+        setCurrentEquipageSummary(null);
+        setExcludedCurrentConsignmentIds([]);
         return;
       }
 
       const ilogDate = toIlogDate(selectedDate);
       if (!ilogDate) {
         setAvailableEquipages([]);
+        setSelectedEquipageId(null);
+        setCurrentEquipageSummary(null);
+        setExcludedCurrentConsignmentIds([]);
         return;
       }
 
@@ -652,61 +1057,59 @@ useEffect(() => {
       setErrorMsg("");
 
       try {
-        const checkedEquipages = await Promise.all(
-          filteredAreaEquipages.map(async (equipage) => {
-            const response = await getIlogConsignments(ilogDate, equipage.id);
-            const consignments = (response.data ?? []) as ConsignmentListItem[];
+        const response = await getIlogEquipages();
 
-            const placement = getEquipageLinePlacement(
-              equipage,
-              consignments,
-              availableLines,
-              selectedAreaLabels,
-            );
+        if (!response.status) {
+          setErrorMsg(
+            response.message || "Kunde inte hämta ekipage för vald linje.",
+          );
+          setAvailableEquipages([]);
+          setSelectedEquipageId(null);
+          setCurrentEquipageSummary(null);
+          setExcludedCurrentConsignmentIds([]);
+          return;
+        }
 
-            if (!placement) {
-              return null;
-            }
+        const equipages = filterEquipagesForSelectedLine(
+          (response.data ?? []) as EquipageItem[],
+          selectedLine,
+        ).sort((a, b) => a.name.localeCompare(b.name, "sv"));
 
-            return equipagePlacementMatchesLine(placement, selectedLine)
-              ? equipage
-              : null;
-          }),
+        setAvailableEquipages(equipages);
+
+        setSelectedEquipageId((current) =>
+          current && equipages.some((equipage) => equipage.id === current)
+            ? current
+            : null,
         );
-
-        const filtered = checkedEquipages
-          .filter((equipage): equipage is EquipageItem => equipage !== null)
-          .sort((a, b) => a.name.localeCompare(b.name, "sv"));
-
-        setAvailableEquipages(filtered);
       } catch {
-        setErrorMsg("Kunde inte kontrollera ekipage för vald linje.");
+        setErrorMsg("Kunde inte hämta ekipage för vald linje.");
         setAvailableEquipages([]);
+        setSelectedEquipageId(null);
+        setCurrentEquipageSummary(null);
+        setExcludedCurrentConsignmentIds([]);
       } finally {
         setIsLoadingEquipages(false);
       }
     }
 
-    loadEquipagesForSelectedLineUsingHomeLogic();
-  }, [
-    availableLines,
-    filteredAreaEquipages,
-    selectedAreaLabels,
-    selectedLine,
-    selectedDate,
-  ]);
+    void loadEquipagesForSelectedLine();
+  }, [selectedLine, selectedDate]);
 
   useEffect(() => {
+    // Nollställ valt ekipage om det inte längre finns i den filtrerade listan.
     if (
       selectedEquipageId &&
       !availableEquipages.some((equipage) => equipage.id === selectedEquipageId)
     ) {
       setSelectedEquipageId(null);
       setCurrentEquipageSummary(null);
+      setExcludedCurrentConsignmentIds([]);
     }
   }, [availableEquipages, selectedEquipageId]);
 
   useEffect(() => {
+    // Hämtar oplacerade bokningar och behåller gamla simuleringsfält där samma id återkommer.
     async function loadUnassignedConsignments() {
       if (!hasHydrated) {
         return;
@@ -766,6 +1169,7 @@ useEffect(() => {
                 optimizedRouteStops: previous.optimizedRouteStops,
                 insertionPickupIndex: previous.insertionPickupIndex,
                 insertionDeliveryIndex: previous.insertionDeliveryIndex,
+                missingDistanceRelation: previous.missingDistanceRelation,
               }
             : consignment;
         });
@@ -784,10 +1188,11 @@ useEffect(() => {
       }
     }
 
-    loadUnassignedConsignments();
+    void loadUnassignedConsignments();
   }, [hasHydrated, selectedLine, selectedDate]);
 
   useEffect(() => {
+    // Hämtar bokningar som redan ligger på valt ekipage för valt datum.
     async function loadCurrentEquipage() {
       if (!selectedEquipageId || !selectedDate) {
         setCurrentEquipageSummary(null);
@@ -807,8 +1212,17 @@ useEffect(() => {
           ilogDate,
           selectedEquipageId,
         );
-        const consignments = (response.data ?? []) as ConsignmentListItem[];
+        const consignments = (response.data ?? []) as SimulatedConsignment[];
         const totals = calculateConsignmentTotals(consignments);
+
+        // Ta bort gamla urval som inte finns på det nya datumets ekipagelista.
+        setExcludedCurrentConsignmentIds((current) =>
+          current.filter((id) =>
+            consignments.some(
+              (consignment) => consignment.consignmentId === id,
+            ),
+          ),
+        );
 
         setCurrentEquipageSummary({
           consignments,
@@ -822,7 +1236,7 @@ useEffect(() => {
       }
     }
 
-    loadCurrentEquipage();
+    void loadCurrentEquipage();
   }, [selectedEquipageId, selectedDate]);
 
   return {
@@ -840,9 +1254,19 @@ useEffect(() => {
     unassignedConsignments,
     selectedConsignmentIds,
     selectedConsignments,
+    fictitiousBookings,
+    selectedFictitiousBookingIds,
+    selectedFictitiousBookings,
+    addFictitiousBooking,
+    removeFictitiousBooking,
+    toggleFictitiousBooking,
     toggleConsignment,
     clearSimulationSelection,
+    resetSimulationResults,
     currentEquipageSummary,
+    activeCurrentEquipageSummary,
+    excludedCurrentConsignmentIds,
+    toggleCurrentConsignment,
     simulationSummary,
     runSimulation,
     getDisplayCustomerName,
@@ -852,7 +1276,8 @@ useEffect(() => {
     isLoadingUnassigned,
     isLoadingCurrentEquipage,
     isSimulating,
+    isAddingFictitiousBooking,
     errorMsg,
-    milprisPerMil: MILPRIS_PER_MIL,
+    milprisPerMil: mileCostReferenceValue,
   };
 }

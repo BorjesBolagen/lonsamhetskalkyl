@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState } from "react";
 import { loginProcedure, getCurrentlySignedInUser } from "@/lib/api";
 
@@ -164,12 +165,9 @@ export default function Login() {
               />
               Kom ihåg mig
             </label>
-            <a
-              href="#"
-              className="underline hover:text-black transition-colors"
-            >
+            <Link href="/forgot-password" className="underline hover:text-black transition-colors">
               Glömt lösenord?
-            </a>
+            </Link>
           </div>
 
           {errorMsg && (

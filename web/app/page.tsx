@@ -1,13 +1,7 @@
-"use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-
+/**
+ * Root page - Proxy handles redirects to /home or /login based on auth status.
+ * This component is rarely reached in normal flow due to proxy routing.
+ */
 export default function Home() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.push("/login");
-  }, [router]);
-
   return null;
 }
