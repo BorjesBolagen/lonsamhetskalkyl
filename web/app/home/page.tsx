@@ -73,49 +73,53 @@ export default function Home() {
       <Navigation currentPage="home" />
 
       <main className="flex-grow p-6 flex gap-6">
-        <div className="flex-grow">
+        <div className="w-full flex-grow max-w-[90rem]"> 
           {/* Left column: grouped lines with equipage cards. */}
           {!lineError && lineCards.length > 0 && (
-            <div className="space-y-3">
+            <div className="columns-1 2xl:columns-2 gap-6">
               {lineCards.map((line) => (
-                <LineCard
-                  key={`${line.id}-${line.name}`}
-                  title={`${line.name} (${line.id})`}
-                  onRefresh={() => refreshLineConsignments(line.id)}
-                  isRefreshing={refreshingLines.has(line.id)}
+                <div 
+                  key={`${line.id}-${line.name}`} 
+                  className="break-inside-avoid mb-6 inline-block w-full"
                 >
-                  <div className="flex flex-wrap gap-4 items-start w-full">
-                    {line.equipages.map((equipage) => {
-                      const isProfitabilityLoading =
-                        equipage.profitabilityStatus === "idle" ||
-                        equipage.profitabilityStatus === "loading";
+                  <LineCard
+                    title={`${line.name} (${line.id})`}
+                    onRefresh={() => refreshLineConsignments(line.id)}
+                    isRefreshing={refreshingLines.has(line.id)}
+                  >
+                    <div className="flex flex-wrap gap-4 items-start w-full">
+                      {line.equipages.map((equipage) => {
+                        const isProfitabilityLoading =
+                          equipage.profitabilityStatus === "idle" ||
+                          equipage.profitabilityStatus === "loading";
 
-                      return (
-                        <EquipageCard
-                          key={`${line.id}-${equipage.id}`}
-                          title={equipage.name}
-                          capacity={convertFlmToBarProgress(equipage.totalFlm)}
-                          price={convertProfitToBarProgress(
-                            equipage.totalProfitabilityPrice,
-                          )}
-                          priceLoading={isProfitabilityLoading}
-                          onRefresh={() =>
-                            refreshEquipageConsignments(equipage.id)
-                          }
-                          isRefreshing={refreshingEquipages.has(equipage.id)}
-                        >
-                          <button
-                            type="button"
-                            className="w-full text-sm"
-                            onClick={() => openPopup(equipage)}
+                        return (
+                          <EquipageCard
+                            key={`${line.id}-${equipage.id}`}
+                            title={equipage.name}
+                            capacity={convertFlmToBarProgress(equipage.totalFlm)}
+                            price={convertProfitToBarProgress(
+                              equipage.totalProfitabilityPrice,
+                            )}
+                            priceLoading={isProfitabilityLoading}
+                            onRefresh={() =>
+                              refreshEquipageConsignments(equipage.id)
+                            }
+                            isRefreshing={refreshingEquipages.has(equipage.id)}
                           >
-                            Info
-                          </button>
-                        </EquipageCard>
-                      );
-                    })}
-                  </div>
-                </LineCard>
+                            <button
+                              type="button"
+                              className="w-full text-sm"
+                              onClick={() => openPopup(equipage)}
+                            >
+                              Info
+                            </button>
+                          </EquipageCard>
+                        );
+                      })}
+                    </div>
+                  </LineCard>
+                </div>
               ))}
             </div>
           )}
