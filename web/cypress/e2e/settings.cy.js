@@ -79,7 +79,7 @@ describe('Settings Page', () => {
     // Om allt fungerar ska den tomma strängen ha blivit sparad som 0
     cy.get('input#profitabilityReferenceValue').should('have.value', '0');
 
-    // --- Cleanup: Återställ till 15000 så vi inte förstör framtida tester ---
+    // Cleanup: Återställ till 15000 så vi inte förstör framtida tester
     cy.get('input#profitabilityReferenceValue').type('{selectAll}' + originalValue);
     cy.contains('button', 'Spara inställningar').click();
     cy.contains('Inställningar sparade.').should('be.visible');
@@ -90,7 +90,7 @@ describe('Settings Page', () => {
     cy.contains('button', 'Lösenord').click();
 
     // Skriv in uppgifter där de nya lösenorden inte matchar
-    // Cypress letar upp den label som heter "Nuvarande lösenord", backar ut till föräldern och hittar input-fältet.
+    // Cypress letar upp den label som heter "Nuvarande lösenord", backar ut till föräldern och hittar input-fältet
     cy.contains('label', 'Nuvarande lösenord').parent().find('input').type('admin123');
     cy.contains('label', 'Nytt lösenord').parent().find('input').type('NyttLösenord1!');
     cy.contains('label', 'Repetera nytt lösenord').parent().find('input').type('FelLösenord1!');
@@ -98,8 +98,8 @@ describe('Settings Page', () => {
     // Spara
     cy.contains('button', 'Spara lösenord').click();
 
-    // Verifiera att ett felmeddelande visas i UI:t.
-    // OBS: Detta kommer krascha nu eftersom felmeddelandet inte finns än.
+    // Verifiera att ett felmeddelande visas i UI:t
+    // OBS: Detta kommer krascha nu eftersom felmeddelandet inte finns än
     cy.contains('Lösenorden matchar inte').should('be.visible');
   });
 
@@ -161,7 +161,7 @@ describe('Settings Page', () => {
       .should('have.attr', 'type', 'password')
       .type('hemligt123');
 
-    // Klicka på ögon-ikonen (hittas genom att leta efter en button bredvid input-fältet)
+    // Klicka på ögon-ikonen
     cy.contains('label', 'Nuvarande lösenord')
       .parent()
       .find('button')

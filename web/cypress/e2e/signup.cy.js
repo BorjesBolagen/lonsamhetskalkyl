@@ -1,16 +1,20 @@
+/**
+ * Test suite for the signup procedur
+ */
+
 describe('sign up tests', () => {
   beforeEach(() => {
     cy.loginAs('admin');
     
-    // 1. Sätt upp en lyssnare som väntar på att Next.js laddar klart data
+    // Sätt upp en lyssnare som väntar på att Next.js laddar klart data
     cy.intercept('GET', '**/api/users/get/currentUser*').as('adminLoad');
     
     cy.visit("/admin");
     
-    // 2. Vänta på API-anropet innan vi gör något annat
+    // Vänta på API-anropet innan vi gör något annat
     cy.wait('@adminLoad');
 
-    // 3. Nu är React redo, vi kan klicka upp modalen
+    // Nu är React redo
     cy.get('[data-testid="signup-button"]').should("be.visible").click();
     cy.get('[data-testid="close-signup-window"]').should("be.visible");
   });
