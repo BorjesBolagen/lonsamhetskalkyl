@@ -1,7 +1,7 @@
 "use client";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { getCurrentlySignedInUser, setFilters } from "../../lib/api";
+import { getCurrentlySignedInUser, setFilters, setPassword } from "../../lib/api";
 import {
   AREA_KEYS,
   AREA_OPTIONS,
@@ -12,10 +12,9 @@ import {
 } from "../../lib/areaLineConfig";
 import { Json } from "../../lib/supabaseServerSchema";
 import { useEffect, useMemo, useState } from "react";
-import { DEFAULT_PROFITABILITY_REFERENCE_VALUE, DEFAULT_MILE_COST} from "../../lib/backend/constants"
-import {
-  parseMileCostReferenceValue,
-} from "../../lib/backend/transportPlanningUtils";
+import { DEFAULT_PROFITABILITY_REFERENCE_VALUE, DEFAULT_MILE_COST } from "../../lib/backend/constants";
+import { parseMileCostReferenceValue } from "../../lib/backend/transportPlanningUtils";
+import { validatePassword } from "@/lib/validation";
 
 type ThemeMode = "light" | "dark";
 
@@ -93,6 +92,35 @@ export default function Settings() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+
+  // Password requirement tracking
+  const [passwordRequirements, setPasswordRequirements] = useState({
+    hasMinLength: false,
+    hasDigit: false,
+  });
+
+  // Update password requirements dynamically as user types
+  const updatePasswordRequirements = (pwd: string) => {
+    setPasswordRequirements({
+      hasMinLength: pwd.length >= 7,
+      hasDigit: /\d/.test(pwd),
+    });
+  };
+
+  // Generate dynamic requirement message showing only unfulfilled criteria
+  const passwordRequirementMessage =
+    !passwordRequirements.hasMinLength && !passwordRequirements.hasDigit
+      ? "Behöver minst 7 tecken och minst 1 siffra."
+      : !passwordRequirements.hasMinLength
+        ? "Behöver minst 7 tecken."
+        : !passwordRequirements.hasDigit
+          ? "Behöver minst 1 siffra."
+          : "";
 
   const [userId, setUserId] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("-");
@@ -119,7 +147,7 @@ export default function Settings() {
   const [draftTheme, setDraftTheme] = useState<ThemeMode>(DEFAULT_THEME);
   const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
     useState<number | "">(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
-  const [mileCostReferenceValue, setMileCostReferenceValue] = 
+  const [mileCostReferenceValue, setMileCostReferenceValue] =
     useState<number>(DEFAULT_MILE_COST);
 
   const clusterGroups = useMemo(() => {
@@ -158,7 +186,6 @@ export default function Settings() {
                 [distKey]: !districts[distKey],
               });
               setHasUnsavedChanges(true);
-
             }}
             className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
           />
@@ -218,9 +245,7 @@ export default function Settings() {
           parseProfitabilityReferenceValue(user.filters),
         );
 
-        setMileCostReferenceValue(
-          parseMileCostReferenceValue(user.filters),
-        );
+        setMileCostReferenceValue(parseMileCostReferenceValue(user.filters));
       } catch (error) {
         setFiltersStatus({
           type: "error",
@@ -261,7 +286,7 @@ export default function Settings() {
       setFiltersStatus(null);
 
       // Om rutan är tom eller mindre än noll när man klickar spara, sätt den till 0
-      const validReferenceValue = 
+      const validReferenceValue =
         profitabilityReferenceValue === "" || profitabilityReferenceValue < 0
           ? 0
           : profitabilityReferenceValue;
@@ -290,6 +315,60 @@ export default function Settings() {
     }
   };
 
+  const handleSavePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordStatus(null);
+
+    // Validate all password fields filled
+    if (!currentPassword || !newPassword || !repeatPassword) {
+      setPasswordStatus({
+        type: "error",
+        message: "Fyll i alla lösenordsfält.",
+      });
+      return;
+    }
+
+    // Validate new passwords match
+    if (newPassword !== repeatPassword) {
+      setPasswordStatus({
+        type: "error",
+        message: "De nya lösenorden matchar inte.",
+      });
+      return;
+    }
+
+    // Validate password requirements
+    if (!validatePassword(newPassword)) {
+      setPasswordStatus({
+        type: "error",
+        message:
+          "Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra.",
+      });
+      return;
+    }
+
+    try {
+      setIsSavingPassword(true);
+      // Call API to update password with current password verification
+      const response = await setPassword(currentPassword, newPassword);
+      setPasswordStatus({ type: "success", message: response.message });
+      // Clear form after successful update
+      setCurrentPassword("");
+      setNewPassword("");
+      setRepeatPassword("");
+    } catch (error) {
+      setPasswordStatus({
+        type: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Kunde inte uppdatera lösenordet.",
+      });
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
+
   // Ikoner för ögat
   const EyeIcon = () => (
     <svg
@@ -300,8 +379,16 @@ export default function Settings() {
       stroke="currentColor"
       className="w-6 h-6"
     >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
     </svg>
   );
 
@@ -314,7 +401,11 @@ export default function Settings() {
       stroke="currentColor"
       className="w-6 h-6"
     >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"
+      />
     </svg>
   );
 
@@ -337,10 +428,11 @@ export default function Settings() {
             {/* KONTO-FLIKEN */}
             <button
               onClick={() => setActiveTab("konto")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "konto"
-                ? "bg-[var(--primary-element)] border-[#446E30]"
-                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-                }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
+                activeTab === "konto"
+                  ? "bg-[var(--primary-element)] border-[#446E30]"
+                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+              }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -362,10 +454,11 @@ export default function Settings() {
             {/* LÖSENORD-FLIKEN */}
             <button
               onClick={() => setActiveTab("losenord")}
-              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${activeTab === "losenord"
-                ? "bg-[var(--primary-element)] border-[#446E30]"
-                : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
-                }`}
+              className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-t-lg text-lg font-bold transition-colors min-w-[160px] border-b-4 ${
+                activeTab === "losenord"
+                  ? "bg-[var(--primary-element)] border-[#446E30]"
+                  : "bg-transparent border-transparent hover:bg-[var(--secondary-element)]"
+              }`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -430,10 +523,11 @@ export default function Settings() {
                             setDraftTheme("light");
                             setHasUnsavedChanges(true);
                           }}
-                          className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "light"
-                            ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
-                            : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
-                            }`}
+                          className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
+                            draftTheme === "light"
+                              ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                              : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                          }`}
                         >
                           Light
                         </button>
@@ -443,10 +537,11 @@ export default function Settings() {
                             setDraftTheme("dark");
                             setHasUnsavedChanges(true);
                           }}
-                          className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${draftTheme === "dark"
-                            ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
-                            : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
-                            }`}
+                          className={`flex-1 font-bold py-3 px-6 rounded-lg shadow-sm border transition-transform active:scale-95 ${
+                            draftTheme === "dark"
+                              ? "bg-[var(--button-fetch)] text-[var(--text-primary)] border-[var(--text-primary)]"
+                              : "bg-[var(--primary-element)] text-[var(--text-primary)] border-[var(--seperating-gray)]"
+                          }`}
                         >
                           Dark
                         </button>
@@ -473,7 +568,12 @@ export default function Settings() {
                           value={profitabilityReferenceValue}
                           onKeyDown={(e) => {
                             // Förhindra inmatning av minus-tecken (både vanliga och på numpad, samt plusstecken)
-                            if (e.key === "-" || e.key === "Subtract" || e.key === "+" || e.key === "Add") {
+                            if (
+                              e.key === "-" ||
+                              e.key === "Subtract" ||
+                              e.key === "+" ||
+                              e.key === "Add"
+                            ) {
                               e.preventDefault();
                             }
                           }}
@@ -483,11 +583,11 @@ export default function Settings() {
                               setProfitabilityReferenceValue("");
                               return;
                             }
-    
+
                             const parsed = Number(e.target.value);
-    
+
                             // Ignorerar knapptrycket om de försöker skriva ett minustal
-                            if (parsed < 0) return; 
+                            if (parsed < 0) return;
 
                             setProfitabilityReferenceValue(parsed);
                           }}
@@ -498,29 +598,28 @@ export default function Settings() {
                     {/* DEL 5: Milpris för simulator */}
                     <div>
                       <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
-                          Milkostnad för simulator
+                        Milkostnad för simulator
                       </h3>
                       <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2">
                         <label
-                        htmlFor="mileCostReferenceValue"
-                        className="block text-sm font-medium text-[var(--text-primary)]"
-                        >
-                        </label>
+                          htmlFor="mileCostReferenceValue"
+                          className="block text-sm font-medium text-[var(--text-primary)]"
+                        ></label>
                         <input
-                        id="mileCostReferenceValue"
-                        type="number"
-                        step={5}
-                        value={mileCostReferenceValue}
-                        onChange={(e) => {
-                          const parsed = Number(e.target.value);
-                          setMileCostReferenceValue(
-                          Number.isFinite(parsed) && parsed > 0
-                            ? parsed
-                            : DEFAULT_MILE_COST,
-                        );
-                        setHasUnsavedChanges(true);
-                      }}
-                      className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                          id="mileCostReferenceValue"
+                          type="number"
+                          step={5}
+                          value={mileCostReferenceValue}
+                          onChange={(e) => {
+                            const parsed = Number(e.target.value);
+                            setMileCostReferenceValue(
+                              Number.isFinite(parsed) && parsed > 0
+                                ? parsed
+                                : DEFAULT_MILE_COST,
+                            );
+                            setHasUnsavedChanges(true);
+                          }}
+                          className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                         />
                       </div>
                     </div>
@@ -601,10 +700,7 @@ export default function Settings() {
                 <h3 className="font-bold text-xl mb-6 text-center border-b-2 border-[var(--primary-color)] pb-2">
                   Byt lösenord
                 </h3>
-                <form
-                  className="space-y-6"
-                  onSubmit={(e) => e.preventDefault()}
-                >
+                <form className="space-y-6" onSubmit={handleSavePassword}>
                   <div className="bg-[var(--secondary-element)] flex flex-col p-4 rounded-lg shadow-sm">
                     <label className="mb-2 text-sm font-bold">
                       Nuvarande lösenord
@@ -614,14 +710,19 @@ export default function Settings() {
                         type={showCurrentPassword ? "text" : "password"}
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
-                        className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-3 w-full"
+                        className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-3 pr-12 w-full"
                       />
                       <button
                         type="button"
                         onClick={() =>
                           setShowCurrentPassword(!showCurrentPassword)
                         }
-                        className="absolute right-3 top-3.5 text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
+                        className="absolute right-3 top-3 text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors p-1"
+                        aria-label={
+                          showCurrentPassword
+                            ? "Dölj lösenord"
+                            : "Visa lösenord"
+                        }
                       >
                         {showCurrentPassword ? <EyeIcon /> : <EyeSlashIcon />}
                       </button>
@@ -636,13 +737,19 @@ export default function Settings() {
                       <input
                         type={showNewPassword ? "text" : "password"}
                         value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-3 w-full"
+                        onChange={(e) => {
+                          setNewPassword(e.target.value);
+                          updatePasswordRequirements(e.target.value);
+                        }}
+                        className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-3 pr-12 w-full"
                       />
                       <button
                         type="button"
                         onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-3 top-3.5 text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
+                        className="absolute right-3 top-3 text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors p-1"
+                        aria-label={
+                          showNewPassword ? "Dölj lösenord" : "Visa lösenord"
+                        }
                       >
                         {showNewPassword ? <EyeIcon /> : <EyeSlashIcon />}
                       </button>
@@ -658,22 +765,43 @@ export default function Settings() {
                         type={showRepeatPassword ? "text" : "password"}
                         value={repeatPassword}
                         onChange={(e) => setRepeatPassword(e.target.value)}
-                        className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-3 w-full"
+                        className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-3 pr-12 w-full"
                       />
                       <button
                         type="button"
                         onClick={() =>
                           setShowRepeatPassword(!showRepeatPassword)
                         }
-                        className="absolute right-3 top-3.5 text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
+                        className="absolute right-3 top-3 text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors p-1"
+                        aria-label={
+                          showRepeatPassword ? "Dölj lösenord" : "Visa lösenord"
+                        }
                       >
                         {showRepeatPassword ? <EyeIcon /> : <EyeSlashIcon />}
                       </button>
                     </div>
                   </div>
 
-                  <button className="mt-8 w-full bg-[var(--button-submit)] hover:bg-[var(--button-submit-hover)] text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md">
-                    Spara lösenord
+                  {passwordRequirementMessage && (
+                    <p className="text-xs text-gray-500 -mt-2">
+                      {passwordRequirementMessage}
+                    </p>
+                  )}
+
+                  {passwordStatus && (
+                    <p
+                      className={`text-sm font-medium ${passwordStatus.type === "success" ? "text-green-700" : "text-red-700"}`}
+                    >
+                      {passwordStatus.message}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSavingPassword}
+                    className="mt-8 w-full bg-[var(--button-submit)] hover:bg-[var(--button-submit-hover)] disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md"
+                  >
+                    {isSavingPassword ? "Sparar..." : "Spara lösenord"}
                   </button>
                 </form>
               </div>

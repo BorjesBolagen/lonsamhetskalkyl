@@ -3,7 +3,6 @@
 import {
   calculateProfitability,
   getCurrentlySignedInUser,
-  getIlogEquipages,
   getIlogLines,
 } from "../api";
 import type { ProfitabilityValue } from "../api";
@@ -23,6 +22,7 @@ import {
   DEFAULT_PROFITABILITY_REFERENCE_VALUE,
 } from "./constants";
 
+// Linjer kompletteras med kluster för att kunna filtreras mot användarens områdesval.
 export type LineWithCluster = LineItem & {
   cluster: string;
 };
@@ -32,6 +32,7 @@ export type FilteredLinesAndEquipages = {
   filteredEquipages: EquipageItem[];
 };
 
+// Normaliserad uppdelning av taxerelation, exempelvis 12345-67890.
 export type ParsedTaxPointRelation = {
   sender: string;
   receiver: string;
@@ -53,11 +54,13 @@ export type TransportPlanningUserSettings = {
   mileCostReferenceValue: number;
 };
 
+// Resultat från ruttavstånd där saknade relationer sparas för felsökning i UI:t.
 export type RouteDistanceResult = {
   distanceKm: number;
   missingDistanceRelation: string | null;
 };
 
+// Beskriver bästa placeringen av pickup och leverans i en befintlig stoppsekvens.
 export type BestConsecutiveInsertionResult = {
   originalDistanceKm: number;
   optimizedDistanceKm: number | null;
@@ -199,7 +202,7 @@ export function safeSetSessionStorageJson<T>(key: string, value: T): void {
   try {
     sessionStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // ignore storage errors
+    // Ignorera lagringsfel, exempelvis privat läge eller full sessionStorage.
   }
 }
 
@@ -425,19 +428,40 @@ export function filterLinesAndEquipagesBySelectedAreas(
 }
 
 /**
+ * Filtrerar ekipage så att endast ekipage kopplade till exakt vald linje visas.
+ */
+export function filterEquipagesForSelectedLine(
+  equipages: EquipageItem[],
+  selectedLine: LineItem,
+): EquipageItem[] {
+  const selectedLineName = normalizeLineName(selectedLine.name);
+  const result = new Map<number, EquipageItem>();
+
+  for (const equipage of equipages) {
+    const linkedById = equipage.linkedLineIds.includes(selectedLine.id);
+    const linkedByName = equipage.linkedLineNames.some(
+      (lineName) => normalizeLineName(lineName) === selectedLineName,
+    );
+
+    if ((linkedById || linkedByName) && !result.has(equipage.id)) {
+      result.set(equipage.id, equipage);
+    }
+  }
+
+  return Array.from(result.values());
+}
+
+/**
  * Hämtar och filtrerar linjer/ekipage för valda områden.
  */
 export async function loadFilteredLinesAndEquipagesForSelectedAreas(
   selectedAreaLabels: string[],
 ): Promise<FilteredLinesAndEquipages> {
-  const [linesResponse, equipagesResponse] = await Promise.all([
-    getIlogLines(),
-    getIlogEquipages(),
-  ]);
+  const linesResponse = await getIlogLines();
 
   return filterLinesAndEquipagesBySelectedAreas(
     (linesResponse.data ?? []) as LineItem[],
-    (equipagesResponse.data ?? []) as EquipageItem[],
+    [],
     selectedAreaLabels,
   );
 }
@@ -639,6 +663,10 @@ export async function calculateRouteDistanceKm(
     const from = stops[index];
     const to = stops[index + 1];
 
+    if (from === to) {
+      continue;
+    }
+
     const distanceKm = await getDistanceKm(from, to);
 
     if (distanceKm === null) {
@@ -763,8 +791,13 @@ export async function calculateBestPickupBeforeDeliveryInsertion(
       candidateStops.splice(pickupIndex, 0, pickupTaxPoint);
       candidateStops.splice(deliveryIndex, 0, deliveryTaxPoint);
 
+      const compactCandidateStops = candidateStops.filter(
+        (taxPoint, index, route) =>
+          index === 0 || taxPoint !== route[index - 1],
+      );
+
       const candidateDistanceResult = await calculateRouteDistanceKm(
-        candidateStops,
+        compactCandidateStops,
         getDistanceKm,
       );
 
@@ -776,9 +809,9 @@ export async function calculateBestPickupBeforeDeliveryInsertion(
 
       if (candidateDistanceResult.distanceKm < bestDistanceKm) {
         bestDistanceKm = candidateDistanceResult.distanceKm;
-        bestStops = candidateStops;
-        bestPickupIndex = pickupIndex;
-        bestDeliveryIndex = deliveryIndex;
+        bestStops = compactCandidateStops;
+        bestPickupIndex = compactCandidateStops.indexOf(pickupTaxPoint);
+        bestDeliveryIndex = compactCandidateStops.indexOf(deliveryTaxPoint);
       }
     }
   }

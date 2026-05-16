@@ -1,7 +1,7 @@
 "use client";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { addMessage, signUpProcedure } from "@/lib/api";
 import { Enums, Constants, TablesUpdate } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
@@ -10,36 +10,44 @@ import { validatePassword } from "@/lib/validation";
 import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
-const mockTrafficLeaders = [
-  {
-    id: 1,
-    name: "Kalle Karlsson",
-    email: "kalle@gmail.se",
-    district: "Växjö",
-    kpi: "187 kr/flm",
-    arbetsvolym: "24 aktiva bilar",
-  },
-  {
-    id: 2,
-    name: "Anna Andersson",
-    email: "anna@gmail.se",
-    district: "Linköping",
-    kpi: "145 kr/flm",
-    arbetsvolym: "18 aktiva bilar",
-  },
-  {
-    id: 3,
-    name: "Sven Svensson",
-    email: "sven@gmail.se",
-    district: "Jönköping",
-    kpi: "192 kr/flm",
-    arbetsvolym: "32 aktiva bilar",
-  },
-];
 
-type TrafficLeader = (typeof mockTrafficLeaders)[number];
+type TrafficLeader = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  role: string | null;
+  // add any other fields your User table has
+};
 
 export default function Admin() {
+  const [trafficLeaders, setTrafficLeaders] = useState<TrafficLeader[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [userSearch, setUserSearch] = useState(""); //For serch
+  const [userPage, setUserPage] = useState(1);
+  const USERS_PER_PAGE = 5;
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [editUser, setEditUser] = useState<TrafficLeader | null>(null);
+  const normalize = (str: string) =>
+    str.toLowerCase().replace(/\s+/g, " ").trim();
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res = await fetch("/api/users"); // adjust path to match where route.ts lives
+        const json = await res.json();
+        if (!json.status) throw new Error(json.message);
+        setTrafficLeaders(json.data);
+      } catch (err) {
+        setUsersError((err as Error).message);
+      } finally {
+        setIsLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, []);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isMessagePopupOpen, setIsMessagePopupOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<TrafficLeader | null>(null);
@@ -70,10 +78,10 @@ export default function Admin() {
     handleCSVSelected,
   } = useHistoricalImport();
 
-  // State för att visa/dölja lösenordet när admin skapar en ny användare
+  // State for password visibility toggle in admin user creation
   const [showSignupPassword, setShowSignupPassword] = useState(false);
 
-  // Ikoner för ögat
+  // Eye icon SVN (also used in reset-password/page.tsx - consider extracting to shared component)
   const EyeIcon = () => (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -95,6 +103,54 @@ export default function Admin() {
       />
     </svg>
   );
+  const handleUpdateUser = async (user: TrafficLeader) => {
+  const res = await fetch("/api/users", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(user),
+  });
+
+  const json = await res.json();
+
+  if (!json.status) {
+    alert(json.message);
+    return;
+  }
+
+  setTrafficLeaders((prev) =>
+    prev.map((u) => (u.id === user.id ? user : u))
+  );
+
+  setEditUser(null);
+};
+  const handleDeleteUser = async (userId: string) => {
+    const confirmDelete = window.confirm(
+      "Är du säker på att du vill ta bort denna användare?",
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      const res = await fetch("/api/users", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const json = await res.json();
+
+      if (!json.status) {
+        throw new Error(json.message || "Kunde inte ta bort användaren");
+      }
+
+      // Uppdatera UI direkt (optimistic update)
+      setTrafficLeaders((prev) => prev.filter((user) => user.id !== userId));
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
 
   const EyeSlashIcon = () => (
     <svg
@@ -131,6 +187,7 @@ export default function Admin() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate all fields are filled
     if (
       !signupFirstName.trim() ||
       !signupLastName.trim() ||
@@ -144,31 +201,37 @@ export default function Admin() {
 
     try {
       const supabase = getSupabaseBrowserClient();
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
 
-      // Check if email already exists - Transmits password for validation, not actually used in backend logic
+      // Verify email is valid before signup
       const APIsignUpResponse = await signUpProcedure(signupEmail);
       if (!APIsignUpResponse.status) throw new Error(APIsignUpResponse.message);
 
-      // signUpProcedure kollar om email är valid. Kolla om password också är valid
+      // Validate password requirements
       if (!validatePassword(signupPassword))
         throw new Error(
           "Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra",
         );
 
-      // Supabase signup
+      // Create user in Supabase auth
       const { data, error } = await supabase.auth.signUp({
         email: signupEmail,
         password: signupPassword,
+        options: {
+          emailRedirectTo: `${siteUrl}/login`,
+        },
       });
 
       if (error) throw error;
       if (!data.user) throw new Error("Kunde inte skapa användare");
 
+      // Set default user preferences
       const defaultFilters = {
         areas: DEFAULT_AREAS,
         theme: "light",
       };
 
+      // Update user profile with role, name, and preferences
       const userUpdate: TablesUpdate<"User"> = {
         role,
         first_name: signupFirstName.trim(),
@@ -176,7 +239,6 @@ export default function Admin() {
         filters: defaultFilters,
       };
 
-      // Update role and profile information in User table
       const { error: updateError } = await supabase
         .from("User")
         .update(userUpdate)
@@ -184,10 +246,11 @@ export default function Admin() {
 
       if (updateError) throw updateError;
 
-      // Success
+      // Confirm successful user creation
       setSignupResponse(
         `Skapade användare ${data.user.email}. Ett verifieringsmail har skickats. Kom ihåg att kolla skräpposten.`,
       );
+      // Clear form after successful signup
       setSignupFirstName("");
       setSignupLastName("");
       setSignupEmail("");
@@ -201,6 +264,22 @@ export default function Admin() {
       setIsSigningUp(false);
     }
   };
+  const filteredUsers = trafficLeaders.filter((u) => {
+    const query = normalize(userSearch);
+
+    const fullName = normalize(`${u.first_name ?? ""} ${u.last_name ?? ""}`);
+
+    const email = normalize(u.email ?? "");
+
+    return fullName.includes(query) || email.includes(query);
+  });
+
+  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
+
+  const paginatedUsers = filteredUsers.slice(
+    (userPage - 1) * USERS_PER_PAGE,
+    userPage * USERS_PER_PAGE,
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
@@ -236,111 +315,115 @@ export default function Admin() {
             </div>
           </div>
 
-          {/* INFO rutor */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md border-t-4 border-[#7ec58a]">
-              <p className="text-sm text-gray-500 font-medium">
-                Fyllnadsgrad Totalt
-              </p>
-              <p className="text-3xl font-bold mt-1">88%</p>
-            </div>
-            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md border-t-4 border-[#446E30]">
-              <p className="text-sm text-gray-500 font-medium">
-                Snitt Intäkt / FLM
-              </p>
-              <p className="text-3xl font-bold mt-1">184 kr</p>
-            </div>
-            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md border-t-4 border-gray-400">
-              <p className="text-sm text-gray-500 font-medium">Aktiva Bilar</p>
-              <p className="text-3xl font-bold mt-1">32 st</p>
-            </div>
-            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md border-t-4 border-gray-400">
-              <p className="text-sm text-gray-500 font-medium">
-                Körningar idag
-              </p>
-              <p className="text-3xl font-bold mt-1">142</p>
-            </div>
-          </div>
-
-          {/* GRAFER (Placeholders) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md flex flex-col">
-              <h3 className="font-bold mb-4 border-b-2 border-green-500 pb-2">
-                Fyllnadsgrad per Distrikt
-              </h3>
-              <div className="flex-grow bg-[var(--secondary-element)] rounded flex flex-col justify-end p-4 min-h-[12rem]">
-                <div className="flex items-end justify-around h-full border-b-2 border-gray-300 pb-1">
-                  <div
-                    className="w-12 sm:w-16 bg-[#7ec58a] h-[80%] rounded-t-sm hover:opacity-80 transition-opacity"
-                    title="Växjö: 80%"
-                  ></div>
-                  <div
-                    className="w-12 sm:w-16 bg-[#446E30] h-[60%] rounded-t-sm hover:opacity-80 transition-opacity"
-                    title="Linköping: 60%"
-                  ></div>
-                  <div
-                    className="w-12 sm:w-16 bg-[#7ec58a] h-[90%] rounded-t-sm hover:opacity-80 transition-opacity"
-                    title="Jönköping: 90%"
-                  ></div>
-                </div>
-                <div className="flex justify-around mt-3">
-                  <span className="text-xs sm:text-sm font-bold text-[var(--text-secondary)] w-12 sm:w-16 text-center">
-                    Växjö
-                  </span>
-                  <span className="text-xs sm:text-sm font-bold text-[var(--text-secondary)] w-12 sm:w-16 text-center">
-                    Linköping
-                  </span>
-                  <span className="text-xs sm:text-sm font-bold text-[var(--text-secondary)] w-12 sm:w-16 text-center">
-                    Jönköping
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md flex flex-col">
-              <h3 className="font-bold mb-4 border-b-2 border-green-500 pb-2">
-                Intäkt per FLM
-              </h3>
-              <div className="flex-grow bg-[var(--secondary-element)] rounded flex items-center justify-center text-gray-400 min-h-[12rem]">
-                [ Här ska en graf visas senare ]
-              </div>
-            </div>
-          </div>
-
           {/* TRAFIKLEDARLISTA */}
+
           <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md overflow-hidden">
             <h3 className="font-bold text-lg mb-4 border-b-2 border-green-500 pb-2">
               Trafikledare
             </h3>
+
+            <div className="mb-4">
+              <input
+                type="text"
+                value={userSearch}
+                onChange={(e) => {
+                  setUserSearch(e.target.value);
+                  setUserPage(1); // viktigt så man inte fastnar på fel sida
+                }}
+                placeholder="Sök efter namn eller email..."
+                className="w-full p-2 border rounded bg-[var(--input-text)] text-[var(--text-primary)]"
+              />
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[var(--secondary-element)] border-y-2 border-gray-200">
                     <th className="p-4 font-semibold">Namn / Email</th>
-                    <th className="p-4 font-semibold">Distrikt</th>
-                    <th className="p-4 font-semibold">Snitt Intäkt/FLM</th>
-                    <th className="p-4 font-semibold">Arbetsvolym</th>
+                    <th className="p-4 font-semibold">Role</th>
+                    <th className="p-4 font-semibold">Hantera</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {mockTrafficLeaders.map((user) => (
-                    <tr
-                      key={user.id}
-                      className="border-b border-gray-100 hover:bg-[var(--secondary-element)]-50 cursor-pointer transition-colors"
-                      onClick={() => setSelectedUser(user)}
-                    >
-                      <td className="p-4 font-bold">
-                        {user.name} <br />
-                        <span className="text-sm font-normal text-[var(--text-secondary)]">
-                          {user.email}
-                        </span>
+                  {isLoadingUsers ? (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="p-4 text-center text-[var(--text-secondary)]"
+                      >
+                        Laddar användare...
                       </td>
-                      <td className="p-4">{user.district}</td>
-                      <td className="p-4">{user.kpi}</td>
-                      <td className="p-4">{user.arbetsvolym}</td>
                     </tr>
-                  ))}
+                  ) : usersError ? (
+                    <tr>
+                      <td colSpan={3} className="p-4 text-center text-red-500">
+                        Fel: {usersError}
+                      </td>
+                    </tr>
+                  ) : trafficLeaders.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="p-4 text-center text-[var(--text-secondary)]"
+                      >
+                        Inga användare hittades.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedUsers.map((user) => (
+                      <tr
+                        key={user.id}
+                        className="border-b border-gray-100 hover:bg-[var(--secondary-element)]-50 cursor-pointer transition-colors"
+                        onClick={() => setSelectedUser(user)}
+                      >
+                        <td className="p-4 font-bold">
+                          {user.first_name} {user.last_name}
+                          <br />
+                          <span className="text-sm font-normal text-[var(--text-secondary)]">
+                            {user.email}
+                          </span>
+                        </td>
+                        <td className="p-4">{user.role ?? "—"}</td>
+                        <td className="p-4">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditUser(user);
+                            }}
+                            className="px-3 py-1.5 rounded-md border border-[#446E30] text-[#446E30] font-semibold
+             hover:bg-[#446E30] hover:text-white transition-colors duration-200"
+                          >
+                            Ändra
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
+              <div className="flex justify-center items-center gap-4 mt-4">
+                <button
+                  onClick={() => setUserPage((p) => Math.max(p - 1, 1))}
+                  disabled={userPage === 1}
+                  className="px-3 py-1 border rounded disabled:opacity-50"
+                >
+                  Föregående
+                </button>
+
+                <span className="text-sm">
+                  Sida {userPage} av {totalPages || 1}
+                </span>
+
+                <button
+                  onClick={() =>
+                    setUserPage((p) => Math.min(p + 1, totalPages))
+                  }
+                  disabled={userPage === totalPages || totalPages === 0}
+                  className="px-3 py-1 border rounded disabled:opacity-50"
+                >
+                  Nästa
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -404,13 +487,14 @@ export default function Admin() {
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
                     data-testid="signup-set-password"
-                    className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 w-full"
+                    className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 pr-9 w-full"
                   />
                   <button
                     type="button"
                     onClick={() => setShowSignupPassword(!showSignupPassword)}
                     data-testid="signup-password-eye-icon"
-                    className="absolute right-3 top-2.5 text-[var(--text-secondary)] hover:text-black transition-colors"
+                    className="absolute right-2 top-2 text-[var(--text-secondary)] hover:text-black transition-colors p-1"
+                    aria-label={showSignupPassword ? "Dölj lösenord" : "Visa lösenord"}
                   >
                     {showSignupPassword ? <EyeSlashIcon /> : <EyeIcon />}
                   </button>
@@ -564,6 +648,130 @@ export default function Admin() {
           </div>
         </div>
       )}
+{editUser && (
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)]">
+
+      <button
+        onClick={() => setEditUser(null)}
+        className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
+      >
+        ✖
+      </button>
+
+      <h3 className="font-bold text-xl mb-6 border-b-2 border-[var(--primary-color)] pb-2">
+        Redigera användare
+      </h3>
+
+      <div className="space-y-4">
+
+        {/* Förnamn */}
+        <label className="block text-sm font-medium mb-1">
+          Förnamn
+        </label>
+        <input
+          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
+          value={editUser.first_name ?? ""}
+          onChange={(e) =>
+            setEditUser((prev) =>
+              prev ? { ...prev, first_name: e.target.value } : prev
+            )
+          }
+          placeholder="Förnamn"
+        />
+
+        {/* Efternamn */}
+        <label className="block text-sm font-medium mb-1">
+          Efternamn
+        </label>
+        <input
+          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
+          value={editUser.last_name ?? ""}
+          onChange={(e) =>
+            setEditUser((prev) =>
+              prev ? { ...prev, last_name: e.target.value } : prev
+            )
+          }
+          placeholder="Efternamn"
+        />
+
+        {/* Email */}
+        <label className="block text-sm font-medium mb-1">
+          Email
+        </label>
+        <input
+          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
+          value={editUser.email ?? ""}
+          onChange={(e) =>
+            setEditUser((prev) =>
+              prev ? { ...prev, email: e.target.value } : prev
+            )
+          }
+          placeholder="Email"
+        />
+
+        {/* Roll */}
+        <label className="block text-sm font-medium mb-1">
+          Roll
+        </label>
+        <select
+          value={editUser.role ?? ""}
+          onChange={(e) =>
+            setEditUser((prev) =>
+              prev ? { ...prev, role: e.target.value } : prev
+            )
+          }
+          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
+        >
+          <option value="">Välj roll</option>
+          {Constants.public.Enums["User_specialization_types"].map((r) => (
+            <option key={r} value={r}>
+              {r === "traffic_leader" ? "Trafikledare" : "Admin"}
+            </option>
+          ))}
+        </select>
+
+        {/* Lösenord */}
+        <label className="block text-sm font-medium mb-1">
+          Lösenord
+        </label>
+        <input
+          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
+          type="password"
+          placeholder="Nytt lösenord"
+        />
+
+        {/* ACTIONS */}
+        <div className="flex justify-between pt-4">
+
+          <button
+            className="px-4 py-2 rounded border border-red-300 text-red-500 font-semibold hover:bg-red-50 transition"
+            onClick={() => handleDeleteUser(editUser.id)}
+          >
+            Radera användare
+          </button>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setEditUser(null)}
+              className="px-4 py-2 rounded border"
+            >
+              Avbryt
+            </button>
+
+            <button
+              className="px-4 py-2 rounded bg-[#75C07A] hover:bg-green-800 text-white font-semibold transition"
+              onClick={() => handleUpdateUser(editUser)}
+            >
+              Spara
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ANVÄNDARDETALJER */}
       {selectedUser && (
@@ -575,23 +783,13 @@ export default function Admin() {
             >
               ✖
             </button>
-            <h3 className="font-bold text-2xl mb-1">{selectedUser.name}</h3>
+            <h3 className="font-bold text-2xl mb-1">{selectedUser.first_name} {selectedUser.last_name}</h3>
             <p className="text-[var(--text-secondary)] mb-6">
               {selectedUser.email}
             </p>
             <div className="space-y-3 bg-[var(--secondary-element)]-50 p-4 rounded-lg">
               <p className="flex justify-between">
-                <strong>Distrikt:</strong> <span>{selectedUser.district}</span>
-              </p>
-              <p className="flex justify-between border-y border-gray-200 py-2">
-                <strong>Prestanda:</strong>{" "}
-                <span className="text-[#446E30] font-bold">
-                  {selectedUser.kpi}
-                </span>
-              </p>
-              <p className="flex justify-between">
-                <strong>Arbetsvolym:</strong>{" "}
-                <span>{selectedUser.arbetsvolym}</span>
+                <strong>Role:</strong> <span>{selectedUser.role ?? "-"}</span>
               </p>
             </div>
             <button

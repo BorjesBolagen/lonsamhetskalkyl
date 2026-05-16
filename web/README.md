@@ -125,4 +125,6 @@ ILOG_TRANSPORTER_NUMBER=...
 ILOG_PASSWORD=...
 ```
 
+För att testa beta-varianten av iLog lokalt kan `ILOG_BASE_URL` tillfälligt sättas till `https://ilogbeta.wip.se`. När API:t returnerar `ownStatus` filtreras bokningar med värdet `Ej i lastlista` bort automatiskt i vår egen mappning. Vanligen är det `https://ilog.btf.se` som gäller.
+
 `SUPABASE_SERVICE_ROLE_KEY` får endast användas i serverkod.
