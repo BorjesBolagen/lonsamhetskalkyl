@@ -152,12 +152,10 @@ export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: num
  */
 export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
     
-    const t0 = performance.now();
     // Hämta variabler
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-    const t1 = performance.now();
 
     // Kolla om supabase har match på bara kundnamn
     const supabase = await getSupabaseServerClient();
@@ -166,8 +164,6 @@ export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: num
             supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep }),
             supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight_plus_one, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep })
         ]);
-    
-    const t2 = performance.now();
 
     if (error_orginal) {
         throw new Error("Fel vid steg 3: " + JSON.stringify(error_orginal, null, 2));
@@ -192,12 +188,6 @@ export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: num
         return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
     }
 
-    const t3 = performance.now();
-    console.log({
-        setup: t1 - t0,
-        supabase: t2 - t1,
-        extra: t3 - t2,
-    });
     return estimeratPris_orginal ?? estimeratPris_plus_ett ?? null;
 
 }
