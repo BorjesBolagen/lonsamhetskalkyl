@@ -3,7 +3,13 @@
 import { useState, useEffect, useCallback } from "react";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { getMessages, deleteMessage, getAmountOfPages, getCurrentlySignedInUser, getUser } from "../../lib/api";
+import {
+  getMessages,
+  deleteMessage,
+  getAmountOfPages,
+  getCurrentlySignedInUser,
+  getUser,
+} from "../../lib/api";
 
 type Notification = {
   id: number;
@@ -73,21 +79,26 @@ export default function NotificationsPage() {
     }
   }, []);
 
-  useEffect(() => { loadTotalPages(); }, [loadTotalPages]);
-  useEffect(() => { loadNotifications(currentPage); }, [currentPage, loadNotifications]);
+  useEffect(() => {
+    loadTotalPages();
+  }, [loadTotalPages]);
+  useEffect(() => {
+    loadNotifications(currentPage);
+  }, [currentPage, loadNotifications]);
 
   const removeNotification = async (id: number) => {
     try {
       await deleteMessage(id);
       const newTotal = await loadTotalPages();
-      const targetPage = currentPage > newTotal ? Math.max(1, newTotal) : currentPage;
+      const targetPage =
+        currentPage > newTotal ? Math.max(1, newTotal) : currentPage;
       if (targetPage !== currentPage) {
         setCurrentPage(targetPage);
       } else {
         await loadNotifications(targetPage);
       }
-    } catch (error: any) {
-      alert(error.message);
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "Ett fel inträffade");
     } finally {
       setConfirmId(null);
     }
@@ -101,7 +112,6 @@ export default function NotificationsPage() {
 
       <main className="flex-grow flex justify-center p-6">
         <div className="bg-[var(--primary-element)] max-w-4xl w-full rounded-xl shadow-md p-8 flex flex-col">
-
           {/* Header */}
           <h1 className="flex-shrink-0 text-3xl text-[var(--text-heading)] font-bold text-center mb-6 border-b-2 pb-2">
             Notifikationer
@@ -112,7 +122,10 @@ export default function NotificationsPage() {
             {loading ? (
               <div className="space-y-3">
                 {Array.from({ length: PAGE_SIZE }).map((_, i) => (
-                  <div key={i} className="h-[68px] rounded-lg bg-gray-200 animate-pulse" />
+                  <div
+                    key={i}
+                    className="h-[68px] rounded-lg bg-gray-200 animate-pulse"
+                  />
                 ))}
               </div>
             ) : notifications.length === 0 ? (
@@ -159,7 +172,12 @@ export default function NotificationsPage() {
         text-gray-700 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20
         opacity-0 group-hover:opacity-100"
                       >
-                        <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 14 14"
+                          fill="none"
+                        >
                           <path
                             d="M1 3.5h12M5 3.5V2.5a.5.5 0 01.5-.5h3a.5.5 0 01.5.5v1M5.5 6.5v4M8.5 6.5v4M2.5 3.5l.8 8a.5.5 0 00.5.5h6.4a.5.5 0 00.5-.5l.8-8"
                             stroke="currentColor"
@@ -192,9 +210,10 @@ export default function NotificationsPage() {
                 key={page}
                 onClick={() => setCurrentPage(page)}
                 className={`w-8 h-8 rounded-md text-sm font-medium
-                  ${page === currentPage
-                    ? "bg-green-700 text-white"
-                    : "text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-800"
+                  ${
+                    page === currentPage
+                      ? "bg-green-700 text-white"
+                      : "text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-800"
                   }`}
               >
                 {page}
@@ -210,7 +229,6 @@ export default function NotificationsPage() {
               ›
             </button>
           </div>
-
         </div>
       </main>
 

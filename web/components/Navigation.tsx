@@ -20,7 +20,6 @@ export default function Navigation({
   // Hämta antal olästa vid mount, nollställ när man är på notis-sidan
   useEffect(() => {
     if (currentPage === "notifications") {
-      setUnreadCount(0);
       return;
     }
 
@@ -35,22 +34,26 @@ export default function Navigation({
     return () => clearInterval(timer);
   }, [currentPage]);
 
-  const [userRole, setUserRole] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      return window.localStorage.getItem("userRole");
-    } catch {
-      return null;
-    }
-  });
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
-    if (userRole) return;
+    let cancelled = false;
+
+    try {
+      const storedRole = window.localStorage.getItem("userRole");
+      if (storedRole) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setUserRole(storedRole);
+        return;
+      }
+    } catch {
+      // ignore storage errors and fall back to the server lookup below
+    }
 
     const fetchUserRole = async () => {
       try {
         const response = await getCurrentlySignedInUser();
-        if (response.status && response.data) {
+        if (!cancelled && response.status && response.data) {
           setUserRole(response.data.role);
           if (response.data.role) {
             try {
@@ -66,7 +69,10 @@ export default function Navigation({
     };
 
     fetchUserRole();
-  }, [userRole]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogout = async () => {
     if (hasUnsavedChanges) {
@@ -97,6 +103,7 @@ export default function Navigation({
    after:bg-[var(--text-primary)] after:origin-left after:transition-transform after:duration-300
    ${isActive ? "after:scale-x-100" : "after:scale-x-0"}
    ${!isActive ? "text-[var(--text-heading)] hover:bg-[var(--text-primary)]/10" : ""}`;
+  const visibleUnreadCount = currentPage === "notifications" ? 0 : unreadCount;
 
   return (
     <nav className="sticky top-0 z-[60] bg-[var(--navbar)] text-[var(--text-primary)] shadow-sm">
@@ -152,9 +159,9 @@ export default function Navigation({
               hasUnsavedChanges={hasUnsavedChanges}
             >
               Notifikationer
-              {unreadCount > 0 && (
+              {visibleUnreadCount > 0 && (
                 <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[11px] font-bold flex items-center justify-center leading-none">
-                  {unreadCount > 99 ? "99+" : unreadCount}
+                  {visibleUnreadCount > 99 ? "99+" : visibleUnreadCount}
                 </span>
               )}
             </GuardedLink>

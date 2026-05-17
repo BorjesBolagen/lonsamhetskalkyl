@@ -21,6 +21,12 @@ type TrafficLeader = {
   // add any other fields your User table has
 };
 
+const formatRole = (role: string | null) => {
+  if (role === "admin") return "Admin";
+  if (role === "traffic_leader") return "Trafikledare";
+  return role ?? "—";
+};
+
 export default function Admin() {
   const [trafficLeaders, setTrafficLeaders] = useState<TrafficLeader[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
@@ -28,8 +34,12 @@ export default function Admin() {
   const [userSearch, setUserSearch] = useState(""); //For serch
   const [userPage, setUserPage] = useState(1);
   const USERS_PER_PAGE = 5;
-  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [editUser, setEditUser] = useState<TrafficLeader | null>(null);
+  const [editPassword, setEditPassword] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [deleteConfirmUser, setDeleteConfirmUser] =
+    useState<TrafficLeader | null>(null);
+  const [isDeleteAcknowledged, setIsDeleteAcknowledged] = useState(false);
   const normalize = (str: string) =>
     str.toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -80,34 +90,63 @@ export default function Admin() {
   } = useHistoricalImport();
 
   const handleUpdateUser = async (user: TrafficLeader) => {
-  const res = await fetch("/api/users", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(user),
-  });
+    const trimmedPassword = editPassword.trim();
 
-  const json = await res.json();
+    if (trimmedPassword && !validatePassword(trimmedPassword)) {
+      alert(
+        "Lösenordet måste vara minst 7 tecken långt och innehålla minst 1 siffra",
+      );
+      return;
+    }
 
-  if (!json.status) {
-    alert(json.message);
-    return;
-  }
-
-  setTrafficLeaders((prev) =>
-    prev.map((u) => (u.id === user.id ? user : u))
-  );
-
-  setEditUser(null);
-};
-  const handleDeleteUser = async (userId: string) => {
-    const confirmDelete = window.confirm(
-      "Är du säker på att du vill ta bort denna användare?",
-    );
-
-    if (!confirmDelete) return;
+    setIsSavingEdit(true);
 
     try {
       const res = await fetch("/api/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+          role: user.role,
+          newPassword: trimmedPassword || undefined,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.status) {
+        alert(json.message || "Kunde inte uppdatera användaren");
+        return;
+      }
+
+      if (json.data) {
+        setTrafficLeaders((prev) =>
+          prev.map((u) => (u.id === user.id ? json.data : u)),
+        );
+      }
+
+      setEditUser(null);
+      setEditPassword("");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+  const openDeleteConfirm = (user: TrafficLeader) => {
+    setDeleteConfirmUser(user);
+    setIsDeleteAcknowledged(false);
+  };
+
+  const closeDeleteConfirm = () => {
+    setDeleteConfirmUser(null);
+    setIsDeleteAcknowledged(false);
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    try {
+      const res = await fetch("/api/users/delete/user", {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -123,6 +162,9 @@ export default function Admin() {
 
       // Uppdatera UI direkt (optimistic update)
       setTrafficLeaders((prev) => prev.filter((user) => user.id !== userId));
+      closeDeleteConfirm();
+      setEditUser(null);
+      setEditPassword("");
     } catch (err) {
       alert((err as Error).message);
     }
@@ -160,7 +202,8 @@ export default function Admin() {
 
     try {
       const supabase = getSupabaseBrowserClient();
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+      const siteUrl =
+        process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
 
       // Verify email is valid before signup
       const APIsignUpResponse = await signUpProcedure(signupEmail);
@@ -179,9 +222,9 @@ export default function Admin() {
         options: {
           emailRedirectTo: `${siteUrl}/login`,
           data: {
-            first_name: signupFirstName.trim()
-          }
-        }
+            first_name: signupFirstName.trim(),
+          },
+        },
       });
 
       if (error) throw error;
@@ -236,9 +279,31 @@ export default function Admin() {
     return fullName.includes(query) || email.includes(query);
   });
 
-  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    const lastNameCompare = (a.last_name ?? "").localeCompare(
+      b.last_name ?? "",
+      "sv",
+      { sensitivity: "base" },
+    );
 
-  const paginatedUsers = filteredUsers.slice(
+    if (lastNameCompare !== 0) return lastNameCompare;
+
+    const firstNameCompare = (a.first_name ?? "").localeCompare(
+      b.first_name ?? "",
+      "sv",
+      { sensitivity: "base" },
+    );
+
+    if (firstNameCompare !== 0) return firstNameCompare;
+
+    return (a.email ?? "").localeCompare(b.email ?? "", "sv", {
+      sensitivity: "base",
+    });
+  });
+
+  const totalPages = Math.ceil(sortedUsers.length / USERS_PER_PAGE);
+
+  const paginatedUsers = sortedUsers.slice(
     (userPage - 1) * USERS_PER_PAGE,
     userPage * USERS_PER_PAGE,
   );
@@ -300,8 +365,8 @@ export default function Admin() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[var(--secondary-element)] border-y-2 border-gray-200">
-                    <th className="p-4 font-semibold">Namn / Email</th>
-                    <th className="p-4 font-semibold">Role</th>
+                    <th className="p-4 font-semibold">Användare</th>
+                    <th className="p-4 font-semibold">Roll</th>
                     <th className="p-4 font-semibold">Hantera</th>
                   </tr>
                 </thead>
@@ -345,12 +410,13 @@ export default function Admin() {
                             {user.email}
                           </span>
                         </td>
-                        <td className="p-4">{user.role ?? "—"}</td>
+                        <td className="p-4">{formatRole(user.role)}</td>
                         <td className="p-4">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditUser(user);
+                              setEditPassword("");
                             }}
                             className="px-3 py-1.5 rounded-md border border-[#446E30] text-[#446E30] font-semibold
              hover:bg-[#446E30] hover:text-white transition-colors duration-200"
@@ -598,129 +664,184 @@ export default function Admin() {
           </div>
         </div>
       )}
-{editUser && (
-  <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
-    <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)]">
-
-      <button
-        onClick={() => setEditUser(null)}
-        className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
-      >
-        ✖
-      </button>
-
-      <h3 className="font-bold text-xl mb-6 border-b-2 border-[var(--primary-color)] pb-2">
-        Redigera användare
-      </h3>
-
-      <div className="space-y-4">
-
-        {/* Förnamn */}
-        <label className="block text-sm font-medium mb-1">
-          Förnamn
-        </label>
-        <input
-          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
-          value={editUser.first_name ?? ""}
-          onChange={(e) =>
-            setEditUser((prev) =>
-              prev ? { ...prev, first_name: e.target.value } : prev
-            )
-          }
-          placeholder="Förnamn"
-        />
-
-        {/* Efternamn */}
-        <label className="block text-sm font-medium mb-1">
-          Efternamn
-        </label>
-        <input
-          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
-          value={editUser.last_name ?? ""}
-          onChange={(e) =>
-            setEditUser((prev) =>
-              prev ? { ...prev, last_name: e.target.value } : prev
-            )
-          }
-          placeholder="Efternamn"
-        />
-
-        {/* Email */}
-        <label className="block text-sm font-medium mb-1">
-          Email
-        </label>
-        <input
-          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
-          value={editUser.email ?? ""}
-          onChange={(e) =>
-            setEditUser((prev) =>
-              prev ? { ...prev, email: e.target.value } : prev
-            )
-          }
-          placeholder="Email"
-        />
-
-        {/* Roll */}
-        <label className="block text-sm font-medium mb-1">
-          Roll
-        </label>
-        <select
-          value={editUser.role ?? ""}
-          onChange={(e) =>
-            setEditUser((prev) =>
-              prev ? { ...prev, role: e.target.value } : prev
-            )
-          }
-          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
-        >
-          <option value="">Välj roll</option>
-          {Constants.public.Enums["User_specialization_types"].map((r) => (
-            <option key={r} value={r}>
-              {r === "traffic_leader" ? "Trafikledare" : "Admin"}
-            </option>
-          ))}
-        </select>
-
-        {/* Lösenord */}
-        <label className="block text-sm font-medium mb-1">
-          Lösenord
-        </label>
-        <PasswordInput
-          placeholder="Nytt lösenord"
-          className="bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-[#75C07A] transition p-2.5 rounded-lg"
-        />
-
-        {/* ACTIONS */}
-        <div className="flex justify-between pt-4">
-
-          <button
-            className="px-4 py-2 rounded border border-red-300 text-red-500 font-semibold hover:bg-red-50 transition"
-            onClick={() => handleDeleteUser(editUser.id)}
-          >
-            Radera användare
-          </button>
-
-          <div className="flex gap-2">
+      {editUser && (
+        <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
+          <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)]">
             <button
-              onClick={() => setEditUser(null)}
-              className="px-4 py-2 rounded border"
+              onClick={() => {
+                setEditUser(null);
+                setEditPassword("");
+              }}
+              className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
             >
-              Avbryt
+              ✖
             </button>
 
-            <button
-              className="px-4 py-2 rounded bg-[#75C07A] hover:bg-green-800 text-white font-semibold transition"
-              onClick={() => handleUpdateUser(editUser)}
-            >
-              Spara
-            </button>
+            <h3 className="font-bold text-xl mb-6 border-b-2 border-[var(--primary-color)] pb-2">
+              Redigera användare
+            </h3>
+
+            <div className="space-y-4">
+              {/* Förnamn */}
+              <label className="block text-sm font-medium mb-1">Förnamn</label>
+              <input
+                className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
+                value={editUser.first_name ?? ""}
+                onChange={(e) =>
+                  setEditUser((prev) =>
+                    prev ? { ...prev, first_name: e.target.value } : prev,
+                  )
+                }
+                placeholder="Förnamn"
+              />
+
+              {/* Efternamn */}
+              <label className="block text-sm font-medium mb-1">
+                Efternamn
+              </label>
+              <input
+                className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
+                value={editUser.last_name ?? ""}
+                onChange={(e) =>
+                  setEditUser((prev) =>
+                    prev ? { ...prev, last_name: e.target.value } : prev,
+                  )
+                }
+                placeholder="Efternamn"
+              />
+
+              {/* Email */}
+              <label className="block text-sm font-medium mb-1">Email</label>
+              <input
+                className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
+                value={editUser.email ?? ""}
+                onChange={(e) =>
+                  setEditUser((prev) =>
+                    prev ? { ...prev, email: e.target.value } : prev,
+                  )
+                }
+                placeholder="Email"
+              />
+
+              {/* Roll */}
+              <label className="block text-sm font-medium mb-1">Roll</label>
+              <select
+                value={editUser.role ?? ""}
+                onChange={(e) =>
+                  setEditUser((prev) =>
+                    prev ? { ...prev, role: e.target.value } : prev,
+                  )
+                }
+                className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
+              >
+                <option value="">Välj roll</option>
+                {Constants.public.Enums["User_specialization_types"].map(
+                  (r) => (
+                    <option key={r} value={r}>
+                      {r === "traffic_leader" ? "Trafikledare" : "Admin"}
+                    </option>
+                  ),
+                )}
+              </select>
+
+              {/* Lösenord */}
+              <label className="block text-sm font-medium mb-1">Lösenord</label>
+              <PasswordInput
+                placeholder="Nytt lösenord"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                data-testid="edit-set-password"
+                className="bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-[#75C07A] transition p-2.5 rounded-lg"
+              />
+              <p className="text-xs text-[var(--text-secondary)]">
+                Lämna tomt för att behålla nuvarande lösenord.
+              </p>
+
+              {/* ACTIONS */}
+              <div className="flex justify-between pt-4">
+                <button
+                  className="px-4 py-2 rounded border border-red-300 text-red-500 font-semibold hover:bg-red-50 transition"
+                  onClick={() => openDeleteConfirm(editUser)}
+                >
+                  Radera användare
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setEditUser(null);
+                      setEditPassword("");
+                    }}
+                    className="px-4 py-2 rounded border"
+                  >
+                    Avbryt
+                  </button>
+
+                  <button
+                    disabled={isSavingEdit}
+                    className="px-4 py-2 rounded bg-[#75C07A] hover:bg-green-800 text-white font-semibold transition disabled:opacity-50"
+                    onClick={() => handleUpdateUser(editUser)}
+                  >
+                    {isSavingEdit ? "Sparar..." : "Spara"}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-
         </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
+
+      {deleteConfirmUser && (
+        <div className="fixed inset-0 z-[130] bg-black/55 flex items-center justify-center p-4">
+          <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)] border border-red-200">
+            <button
+              onClick={closeDeleteConfirm}
+              className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
+            >
+              ✖
+            </button>
+
+            <h3 className="font-bold text-xl mb-3 border-b-2 border-red-500 pb-2 text-red-700">
+              Är du säker?
+            </h3>
+
+            <p className="text-sm text-[var(--text-secondary)] leading-6 mb-4">
+              Om du tar bort {deleteConfirmUser.first_name}{" "}
+              {deleteConfirmUser.last_name} försvinner användaren och all
+              tillhörande information direkt. Det här går inte att ångra.
+            </p>
+
+            <label className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50/70 p-3 text-sm text-[var(--text-primary)] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isDeleteAcknowledged}
+                onChange={(e) => setIsDeleteAcknowledged(e.target.checked)}
+                className="mt-1 h-4 w-4 accent-red-600"
+              />
+              <span>
+                Jag förstår att detta tar bort användaren permanent och att det
+                inte går att få tillbaka.
+              </span>
+            </label>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={closeDeleteConfirm}
+                className="px-4 py-2 rounded border border-gray-300 font-semibold hover:bg-[var(--secondary-element)] transition"
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={() => handleDeleteUser(deleteConfirmUser.id)}
+                disabled={!isDeleteAcknowledged}
+                className="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Radera permanent
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ANVÄNDARDETALJER */}
       {selectedUser && (
@@ -732,13 +853,16 @@ export default function Admin() {
             >
               ✖
             </button>
-            <h3 className="font-bold text-2xl mb-1">{selectedUser.first_name} {selectedUser.last_name}</h3>
+            <h3 className="font-bold text-2xl mb-1">
+              {selectedUser.first_name} {selectedUser.last_name}
+            </h3>
             <p className="text-[var(--text-secondary)] mb-6">
               {selectedUser.email}
             </p>
             <div className="space-y-3 bg-[var(--secondary-element)]-50 p-4 rounded-lg">
               <p className="flex justify-between">
-                <strong>Role:</strong> <span>{selectedUser.role ?? "-"}</span>
+                <strong>Roll:</strong>{" "}
+                <span>{formatRole(selectedUser.role)}</span>
               </p>
             </div>
             <button

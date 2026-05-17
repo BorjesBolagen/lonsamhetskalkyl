@@ -118,7 +118,10 @@ export default function Login() {
               />
               Kom ihåg mig
             </label>
-            <Link href="/forgot-password" className="underline hover:text-black transition-colors">
+            <Link
+              href="/forgot-password"
+              className="underline hover:text-black transition-colors"
+            >
               Glömt lösenord?
             </Link>
           </div>

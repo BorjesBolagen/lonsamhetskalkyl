@@ -2,7 +2,11 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import PasswordInput from "../../components/PasswordInput";
-import { getCurrentlySignedInUser, setFilters, setPassword } from "../../lib/api";
+import {
+  getCurrentlySignedInUser,
+  setFilters,
+  setPassword,
+} from "../../lib/api";
 import {
   AREA_KEYS,
   AREA_OPTIONS,
@@ -13,7 +17,10 @@ import {
 } from "../../lib/areaLineConfig";
 import { Json } from "../../lib/supabaseServerSchema";
 import { useEffect, useMemo, useState } from "react";
-import { DEFAULT_PROFITABILITY_REFERENCE_VALUE, DEFAULT_MILE_COST } from "../../lib/backend/constants";
+import {
+  DEFAULT_PROFITABILITY_REFERENCE_VALUE,
+  DEFAULT_MILE_COST,
+} from "../../lib/backend/constants";
 import { parseMileCostReferenceValue } from "../../lib/backend/transportPlanningUtils";
 import { validatePassword } from "@/lib/validation";
 
