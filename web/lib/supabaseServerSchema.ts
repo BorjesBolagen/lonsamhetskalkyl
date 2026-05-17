@@ -425,6 +425,13 @@ export type Database = {
         Args: { in_source_file_name?: string }
         Returns: number
       }
+      find_best_name_match: {
+        Args: { input_name: string }
+        Returns: {
+          best_name: string
+          best_score: number
+        }[]
+      }
       get_amount_of_unread_messages: {
         Args: { user_id: string }
         Returns: number
@@ -455,6 +462,7 @@ export type Database = {
       get_weight_class: { Args: { input_weight: number }; Returns: number }
       is_admin: { Args: { user_id: string }; Returns: boolean }
       is_traffic_leader: { Args: { user_id: string }; Returns: boolean }
+      jaro_winkler: { Args: { s1: string; s2: string }; Returns: number }
       round_up_weight: { Args: { input_weight: number }; Returns: number }
       steg_1: {
         Args: {

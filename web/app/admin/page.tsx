@@ -178,7 +178,10 @@ export default function Admin() {
         password: signupPassword,
         options: {
           emailRedirectTo: `${siteUrl}/login`,
-        },
+          data: {
+            first_name: signupFirstName.trim()
+          }
+        }
       });
 
       if (error) throw error;
