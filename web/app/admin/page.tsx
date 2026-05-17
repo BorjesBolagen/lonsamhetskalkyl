@@ -8,6 +8,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
 import { validatePassword } from "@/lib/validation";
 import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
+import PasswordInput from "../../components/PasswordInput";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 
@@ -78,31 +79,6 @@ export default function Admin() {
     handleCSVSelected,
   } = useHistoricalImport();
 
-  // State for password visibility toggle in admin user creation
-  const [showSignupPassword, setShowSignupPassword] = useState(false);
-
-  // Eye icon SVN (also used in reset-password/page.tsx - consider extracting to shared component)
-  const EyeIcon = () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={1.5}
-      stroke="currentColor"
-      className="w-6 h-6"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M2.036 12.322a1.012 1.012 0 010-.644C3.542 4.639 8.05 1 12 1c3.95 0 8.454 3.469 9.964 10.678.07.322.07.653 0 0.976 C20.457 18.332 15.947 22 12 22c-3.95 0-8.454-3.469-9.964-10.678z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-      />
-    </svg>
-  );
   const handleUpdateUser = async (user: TrafficLeader) => {
   const res = await fetch("/api/users", {
     method: "PATCH",
@@ -151,23 +127,6 @@ export default function Admin() {
       alert((err as Error).message);
     }
   };
-
-  const EyeSlashIcon = () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={1.5}
-      stroke="currentColor"
-      className="w-6 h-6"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"
-      />
-    </svg>
-  );
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -431,7 +390,7 @@ export default function Admin() {
 
       {/* POPUP: LÄGG TILL ANVÄNDARE */}
       {isAddUserOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
           <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)]">
             <button
               onClick={() => setIsAddUserOpen(false)}
@@ -478,27 +437,15 @@ export default function Admin() {
                 />
               </div>
 
-              {/* Uppdaterat fält för lösenord med ögon-ikonen */}
+              {/* Fält för lösenord med den nya komponenten */}
               <div className="">
-                <div className="relative">
-                  <input
-                    type={showSignupPassword ? "text" : "password"}
-                    placeholder="Lösenord"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    data-testid="signup-set-password"
-                    className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none rounded p-2 pr-9 w-full"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSignupPassword(!showSignupPassword)}
-                    data-testid="signup-password-eye-icon"
-                    className="absolute right-2 top-2 text-[var(--text-secondary)] hover:text-black transition-colors p-1"
-                    aria-label={showSignupPassword ? "Dölj lösenord" : "Visa lösenord"}
-                  >
-                    {showSignupPassword ? <EyeSlashIcon /> : <EyeIcon />}
-                  </button>
-                </div>
+                <PasswordInput
+                  placeholder="Lösenord"
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
+                  data-testid="signup-set-password"
+                  className="bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none p-2"
+                />
               </div>
 
               <div className="">
@@ -541,7 +488,7 @@ export default function Admin() {
 
       {/* POPUP: IMPORTERA HISTORISK CSV */}
       {isCSVImportPopupOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
           <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-xl relative text-[var(--text-secondary)]">
             <button
               onClick={closeCSVImportPopup}
@@ -612,7 +559,7 @@ export default function Admin() {
 
       {/* SKICKA MEDDELANDE */}
       {isMessagePopupOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
           <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-secondary)]">
             <button
               onClick={() => setIsMessagePopupOpen(false)}
@@ -649,7 +596,7 @@ export default function Admin() {
         </div>
       )}
 {editUser && (
-  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+  <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
     <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-primary)]">
 
       <button
@@ -735,10 +682,9 @@ export default function Admin() {
         <label className="block text-sm font-medium mb-1">
           Lösenord
         </label>
-        <input
-          className="w-full rounded-lg p-2.5 bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus.ring-2 focus:ring-[#75C07A] transition"
-          type="password"
+        <PasswordInput
           placeholder="Nytt lösenord"
+          className="bg-[var(--input-text)] border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-[#75C07A] transition p-2.5 rounded-lg"
         />
 
         {/* ACTIONS */}
@@ -775,7 +721,7 @@ export default function Admin() {
 
       {/* ANVÄNDARDETALJER */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
           <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-sm relative border-t-8 border-[#446E30] text-[var(--text-secondary)]">
             <button
               onClick={() => setSelectedUser(null)}
