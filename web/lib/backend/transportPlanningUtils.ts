@@ -294,17 +294,22 @@ export async function calculateConsignmentProfitabilityPrice(
     return null;
   }
 
-  const response = await calculateProfitability(
-    kundnamn,
-    taxPointRelation,
-    weight,
-  );
-
-  if (!response.success || !response.value) {
+  let response;
+  try {
+    response = await calculateProfitability(
+      kundnamn,
+      taxPointRelation,
+      weight,
+    );
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : "Okänt fel vid lönsamhetskalkyl");
+  }
+  
+  if (!response!.success || !response!.value) {
     return null;
   }
 
-  return response.value as ProfitabilityValue;
+  return response!.value as ProfitabilityValue;
 }
 
 /**

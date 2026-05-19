@@ -287,14 +287,13 @@ export const calculateProfitability = async (
 	taxPointRelation: string,
 	chargeableWeight: number
 ): Promise<ProfitabilityResponse> => {
-	const response = await fetch("/api/profitability", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			kundnamn,
-			taxPointRelation,
-			chargeable_weight: chargeableWeight,
-		}),
+
+	const uriKundnamn = encodeURIComponent(String(kundnamn));
+	const uriTaxPointRelation = encodeURIComponent(String(taxPointRelation));
+	const uriChargeableWeight = encodeURIComponent(Number(chargeableWeight));
+
+	const response = await fetch(`/api/profitability?kundnamn=${uriKundnamn}&taxPointRelation=${uriTaxPointRelation}&chargeable_weight=${uriChargeableWeight}`, {
+		method: "GET",
 	});
 
 	const contentType = response.headers.get("content-type") || "";

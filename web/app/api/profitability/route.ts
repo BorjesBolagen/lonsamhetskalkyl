@@ -1,14 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateProfitability } from "@/profitability/service";
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    const body = await req.json();
 
+    const { searchParams } = new URL(req.url);
+    const kundnamn = searchParams.get("kundnamn");
+    const taxPointRelation = searchParams.get("taxPointRelation");
+    const chargeable_weight = searchParams.get("chargeable_weight");
+
+    if (!kundnamn || !taxPointRelation || !chargeable_weight) {
+      return NextResponse.json({
+        success: false,
+        error: "Inget kundnamn, taxepunktsrelation eller vikt angiven"
+      });
+    }
+
+    if (isNaN(Number(chargeable_weight))) {
+      return NextResponse.json({
+        success: false,
+        error: "Angiven vikt är inte ett nummer"
+      });
+    }
+    
     const result = await calculateProfitability({
-      kundnamn: body.kundnamn,
-      taxPointRelation: body.taxPointRelation,
-      chargeable_weight: body.chargeable_weight,
+      kundnamn: kundnamn,
+      taxPointRelation: taxPointRelation,
+      chargeable_weight: Number(chargeable_weight),
     });
 
     return NextResponse.json({
