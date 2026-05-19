@@ -110,7 +110,6 @@ export default function SimulatorPage() {
     activeCurrentEquipageSummary?.consignments ?? [];
 
   const selectedBookingCount =
-    selectedCurrentConsignments.length +
     selectedConsignmentIds.length +
     selectedOtherEquipageConsignmentKeys.length +
     selectedFictitiousBookingIds.length;
@@ -467,21 +466,21 @@ export default function SimulatorPage() {
   function renderTableHeader(includeSource = false) {
     return (
       <thead className="sticky top-0 z-10 bg-[var(--primary-element)]">
-        <tr className="border-b border-[var(--seperating-gray)] text-[11px] uppercase tracking-[0.06em] text-[var(--text-secondary)]">
-          <th className="px-2 py-2 text-left w-8">Välj</th>
-          <th className="px-2 py-2 text-left w-[18%]">Kund</th>
+        <tr className="border-b border-[var(--seperating-gray)] text-[10px] uppercase tracking-[0.035em] text-[var(--text-secondary)]">
+          <th className="px-1.5 py-2 text-left w-8">Välj</th>
+          <th className="px-1.5 py-2 text-left w-[18%]">Kund</th>
           {includeSource && (
-            <th className="px-2 py-2 text-left w-[10%]">Ekipage</th>
+            <th className="px-1.5 py-2 text-left w-[10%]">Ekipage</th>
           )}
-          <th className="px-2 py-2 text-left w-[13%]">Hämtort</th>
-          <th className="px-2 py-2 text-left w-[13%]">Mottagarort</th>
-          <th className="px-2 py-2 text-left w-[14%]">Taxerelation</th>
-          <th className="px-2 py-2 text-right">Vikt</th>
-          <th className="px-2 py-2 text-right">FLM</th>
-          <th className="px-2 py-2 text-right">Extra km</th>
-          <th className="px-2 py-2 text-right">Intäkt</th>
-          <th className="px-2 py-2 text-left">Steg</th>
-          <th className="px-2 py-2 text-right">Kostnad</th>
+          <th className="px-1.5 py-2 text-left w-[13%]">Hämtort</th>
+          <th className="px-1.5 py-2 text-left w-[13%]">Mottagarort</th>
+          <th className="px-1.5 py-2 text-left w-[14%]">Taxerelation</th>
+          <th className="px-1.5 py-2 text-right">Vikt</th>
+          <th className="px-1.5 py-2 text-right">FLM</th>
+          <th className="px-1.5 py-2 text-right">Extra km</th>
+          <th className="px-1.5 py-2 text-right">Intäkt</th>
+          <th className="px-1.5 py-2 text-left">Steg</th>
+          <th className="px-1.5 py-2 text-right min-w-[68px]">Kostnad</th>
         </tr>
       </thead>
     );
@@ -837,29 +836,29 @@ export default function SimulatorPage() {
                     <div className="mt-4 overflow-hidden rounded-3xl border border-[var(--seperating-gray)] bg-[var(--primary-element)]">
                       <table className="w-full table-fixed border-collapse text-xs leading-snug">
                         <thead className="sticky top-0 z-10 bg-[var(--primary-element)]">
-                          <tr className="border-b border-[var(--seperating-gray)] text-[11px] uppercase tracking-[0.06em] text-[var(--text-secondary)]">
-                            <th className="px-2 py-2 text-left w-8">Välj</th>
-                            <th className="px-2 py-2 text-left w-[18%]">
+                          <tr className="border-b border-[var(--seperating-gray)] text-[9px] uppercase tracking-[0.005em] text-[var(--text-secondary)]">
+                            <th className="px-1 py-2 text-left w-[4%]">Välj</th>
+                            <th className="px-1 py-2 text-left w-[14%]">
                               Kund
                             </th>
-                            <th className="px-2 py-2 text-left w-[10%]">
+                            <th className="px-1 py-2 text-left w-[8%]">
                               Ekipage
                             </th>
-                            <th className="px-2 py-2 text-left w-[13%]">
+                            <th className="px-1 py-2 text-left w-[12%]">
                               Hämtort
                             </th>
-                            <th className="px-2 py-2 text-left w-[13%]">
+                            <th className="px-1 py-2 text-left w-[12%]">
                               Mottagarort
                             </th>
-                            <th className="px-2 py-2 text-left w-[14%]">
+                            <th className="px-1 py-2 text-left w-[13%]">
                               Taxerelation
                             </th>
-                            <th className="px-2 py-2 text-right">Vikt</th>
-                            <th className="px-2 py-2 text-right">FLM</th>
-                            <th className="px-2 py-2 text-right">Extra km</th>
-                            <th className="px-2 py-2 text-right">Intäkt</th>
-                            <th className="px-2 py-2 text-left">Steg</th>
-                            <th className="px-2 py-2 text-right">Kostnad</th>
+                            <th className="px-1 py-2 text-right w-[6%]">Vikt</th>
+                            <th className="px-1 py-2 text-right w-[5%]">FLM</th>
+                            <th className="px-1 py-2 text-right w-[7%]">Extra km</th>
+                            <th className="px-1 py-2 text-right w-[6%]">Intäkt</th>
+                            <th className="px-1 py-2 text-left w-[5%]">Steg</th>
+                            <th className="pl-1 pr-3 py-2 text-right w-[8%] whitespace-nowrap">Kostnad</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1001,7 +1000,7 @@ export default function SimulatorPage() {
                         setFictitiousFieldErrors({});
                         setIsFictitiousModalOpen(true);
                       }}
-                      className={sectionActionButtonClass()}
+                      className="rounded-2xl border border-[var(--button-fetch)] bg-[var(--button-fetch)] px-3 py-2 text-sm font-semibold text-[var(--navbar)] shadow-sm transition hover:bg-[var(--button-fetch-hover)]"
                     >
                       Lägg till fiktiv bokning
                     </button>
@@ -1024,15 +1023,15 @@ export default function SimulatorPage() {
                     <div className="mt-4 overflow-hidden rounded-3xl border border-[var(--seperating-gray)] bg-[var(--primary-element)]">
                       <table className="w-full table-fixed border-collapse text-xs leading-snug">
                         <thead className="sticky top-0 z-10 bg-[var(--primary-element)]">
-                          <tr className="border-b border-[var(--seperating-gray)] text-[11px] uppercase tracking-[0.06em] text-[var(--text-secondary)]">
-                            <th className="px-2 py-2 text-left w-8">Välj</th>
-                            <th className="px-2 py-2 text-left">
+                          <tr className="border-b border-[var(--seperating-gray)] text-[10px] uppercase tracking-[0.035em] text-[var(--text-secondary)]">
+                            <th className="px-1.5 py-2 text-left w-8">Välj</th>
+                            <th className="px-1.5 py-2 text-left">
                               Taxerelation
                             </th>
-                            <th className="px-2 py-2 text-right">Extra km</th>
-                            <th className="px-2 py-2 text-right">Intäkt</th>
-                            <th className="px-2 py-2 text-right">Kostnad</th>
-                            <th className="px-2 py-2 text-right">Åtgärd</th>
+                            <th className="px-1.5 py-2 text-right">Extra km</th>
+                            <th className="px-1.5 py-2 text-right">Intäkt</th>
+                            <th className="px-1.5 py-2 text-right min-w-[68px]">Kostnad</th>
+                            <th className="px-1.5 py-2 text-right">Åtgärd</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1087,20 +1086,20 @@ export default function SimulatorPage() {
                                       </p>
                                     )}
                                 </td>
-                                <td className="px-2 py-2 text-right text-[var(--text-primary)]">
+                                <td className="px-1.5 py-2 text-right text-[var(--text-primary)]">
                                   {extraDistanceKm != null
                                     ? `${formatDecimal(extraDistanceKm)} km`
                                     : "-"}
                                 </td>
-                                <td className="px-2 py-2 text-right font-semibold text-[var(--text-primary)]">
+                                <td className="px-1.5 py-2 text-right font-semibold text-[var(--text-primary)]">
                                   {formatNumber(revenue)} kr
                                 </td>
-                                <td className="px-2 py-2 text-right font-semibold text-[var(--text-primary)]">
+                                <td className="px-1.5 py-2 text-right font-semibold text-[var(--text-primary)]">
                                   {extraDrivingCost != null
                                     ? `${formatNumber(extraDrivingCost)} kr`
                                     : "-"}
                                 </td>
-                                <td className="px-2 py-2 text-right">
+                                <td className="px-1.5 py-2 text-right">
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -1149,11 +1148,7 @@ export default function SimulatorPage() {
                   <button
                     type="button"
                     onClick={handleRunSimulation}
-                    disabled={
-                      !selectedEquipageId ||
-                      totalChangeCount === 0 ||
-                      isSimulating
-                    }
+                    disabled={!selectedEquipageId || isSimulating}
                     className={sectionActionButtonClass(true)}
                   >
                     {isSimulating ? "Simulerar..." : "Simulera"}
