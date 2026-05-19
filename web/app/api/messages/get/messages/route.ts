@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { PageNotFoundError } from "next/dist/shared/lib/utils";
 import { User } from "@/lib/databaseTypes";
 import { getCurrentUser } from "@/lib/backend/utils";
 import { MAX_NUMBER_OF_MESSAGES_PER_PAGE } from "@/lib/backend/constants";

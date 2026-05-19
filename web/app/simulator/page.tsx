@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
+import type { ConsignmentListItem } from "../../lib/ilogTypes";
 import { useSimulatorPlanner } from "./useSimulatorPlanner";
 
 type RevenueFields = {
@@ -196,12 +197,16 @@ export default function SimulatorPage() {
 
   const proposedRouteEntries = (primaryRoute?.optimizedRouteStops ?? []).map(
     (location, index) => {
-      const pickupCount = takeMarkerCandidateCount(selectedPickupMarkers, location);
+      const pickupCount = takeMarkerCandidateCount(
+        selectedPickupMarkers,
+        location,
+      );
       const deliveryCount =
         pickupCount === 0
           ? takeMarkerCandidateCount(selectedDeliveryMarkers, location)
           : 0;
-      const type = pickupCount > 0 ? "pickup" : deliveryCount > 0 ? "delivery" : "stop";
+      const type =
+        pickupCount > 0 ? "pickup" : deliveryCount > 0 ? "delivery" : "stop";
       const bookingCount = Math.max(pickupCount, deliveryCount, 1);
 
       return {
@@ -410,7 +415,7 @@ export default function SimulatorPage() {
         </td>
         <td className="px-2 py-2 align-top">
           <div className="whitespace-normal break-words font-semibold leading-snug text-[var(--text-primary)]">
-            {getDisplayCustomerName(consignment as any) || "-"}
+            {getDisplayCustomerName(consignment as ConsignmentListItem) || "-"}
           </div>
           {sourceLabel && (
             <div className="mt-1 inline-flex rounded-full border border-[var(--seperating-gray)] bg-[var(--secondary-element)] px-2 py-0.5 text-xs font-semibold text-[var(--text-secondary)]">
@@ -853,12 +858,20 @@ export default function SimulatorPage() {
                             <th className="px-1 py-2 text-left w-[13%]">
                               Taxerelation
                             </th>
-                            <th className="px-1 py-2 text-right w-[6%]">Vikt</th>
+                            <th className="px-1 py-2 text-right w-[6%]">
+                              Vikt
+                            </th>
                             <th className="px-1 py-2 text-right w-[5%]">FLM</th>
-                            <th className="px-1 py-2 text-right w-[7%]">Extra km</th>
-                            <th className="px-1 py-2 text-right w-[6%]">Intäkt</th>
+                            <th className="px-1 py-2 text-right w-[7%]">
+                              Extra km
+                            </th>
+                            <th className="px-1 py-2 text-right w-[6%]">
+                              Intäkt
+                            </th>
                             <th className="px-1 py-2 text-left w-[5%]">Steg</th>
-                            <th className="pl-1 pr-3 py-2 text-right w-[8%] whitespace-nowrap">Kostnad</th>
+                            <th className="pl-1 pr-3 py-2 text-right w-[8%] whitespace-nowrap">
+                              Kostnad
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -906,7 +919,9 @@ export default function SimulatorPage() {
                                   />
                                 </td>
                                 <td className="px-2 py-2 align-top font-semibold leading-snug text-[var(--text-primary)] whitespace-normal break-words">
-                                  {getDisplayCustomerName(consignment as any)}
+                                  {getDisplayCustomerName(
+                                    consignment as ConsignmentListItem,
+                                  )}
                                 </td>
                                 <td className="px-2 py-2 align-top">
                                   <span className="inline-block rounded-full border border-[var(--seperating-gray)] bg-[var(--secondary-element)] px-1.5 py-0.5 text-[11px] font-bold leading-snug text-[var(--text-primary)] whitespace-normal break-words">
@@ -1030,7 +1045,9 @@ export default function SimulatorPage() {
                             </th>
                             <th className="px-1.5 py-2 text-right">Extra km</th>
                             <th className="px-1.5 py-2 text-right">Intäkt</th>
-                            <th className="px-1.5 py-2 text-right min-w-[68px]">Kostnad</th>
+                            <th className="px-1.5 py-2 text-right min-w-[68px]">
+                              Kostnad
+                            </th>
                             <th className="px-1.5 py-2 text-right">Åtgärd</th>
                           </tr>
                         </thead>
@@ -1252,7 +1269,9 @@ export default function SimulatorPage() {
                     Föreslagen rutt
                   </h2>
                   <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
-                    Stoppen visas i den ordning bilen föreslås köra. Hämtning och leverans gäller bokningar som valts in i simuleringen. Övriga stopp är platser som redan ingår i rutten.
+                    Stoppen visas i den ordning bilen föreslås köra. Hämtning
+                    och leverans gäller bokningar som valts in i simuleringen.
+                    Övriga stopp är platser som redan ingår i rutten.
                   </p>
                 </div>
 

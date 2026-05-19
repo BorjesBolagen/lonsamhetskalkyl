@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { MAX_NUMBER_OF_MESSAGES_PER_PAGE } from "@/lib/backend/constants";
 import { getCurrentUser } from "@/lib/backend/utils";
-import { User } from "@/lib/databaseTypes";
 
 export async function GET(request: Request) {
 
@@ -34,12 +33,10 @@ export async function GET(request: Request) {
 
     // Make sure user is signed in
 
-    let currentUser: User;
     const supabase = await getSupabaseServerClient();
 
     try {
-        const response = await getCurrentUser(supabase);
-        currentUser = response.data!;
+        await getCurrentUser(supabase);
     } catch (e) {
         return NextResponse.json(
             { status: false, message: e instanceof Error ? e.message : "Kunde inte verifiera inloggad användare. Försök logga in på nytt." },

@@ -58,7 +58,7 @@ export default function NotificationsPage() {
         setUserNames((prev) => ({ ...prev, [id]: id }));
       }
     });
-  }, [notifications]);
+  }, [notifications, userNames]);
 
   const loadTotalPages = useCallback(async (): Promise<number> => {
     const res = await getAmountOfPages(PAGE_SIZE);
