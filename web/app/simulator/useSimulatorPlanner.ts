@@ -62,6 +62,12 @@ type SimulatedConsignment = ConsignmentListItem & {
   missingDistanceRelation?: string | null;
 };
 
+// Bokningar från andra ekipage kan simuleras som inflyttade till valt ekipage.
+type OtherEquipageConsignment = SimulatedConsignment & {
+  sourceEquipageId: number;
+  sourceEquipageName: string;
+};
+
 // Lokal modell för en manuell bokning som inte finns i iLog.
 export type FictitiousBooking = {
   id: string;
@@ -115,6 +121,7 @@ type SimulatorCachePayload = {
   selectedEquipageId: number | null;
   selectedConsignmentIds: number[];
   selectedFictitiousBookingIds: string[];
+  selectedOtherEquipageConsignmentKeys?: string[];
   excludedCurrentConsignmentIds: number[];
   unassignedConsignments: SimulatedConsignment[];
   fictitiousBookings: FictitiousBooking[];
@@ -212,7 +219,6 @@ function normalizeFictitiousTaxPointRelation(value: string): string {
   return value.trim().replace(/\s+/g, "");
 }
 
-
 // Tar bort gamla simuleringsvärden så nya körningar bara speglar aktuellt urval.
 function clearConsignmentSimulationFields<T extends SimulatedConsignment>(
   consignment: T,
@@ -263,6 +269,12 @@ function hasSimulationResult(
   );
 }
 
+function getOtherEquipageConsignmentKey(
+  consignment: OtherEquipageConsignment,
+): string {
+  return `${consignment.sourceEquipageId}:${consignment.consignmentId}`;
+}
+
 export function useSimulatorPlanner() {
   const [selectedAreas, setSelectedAreas] = useState<AreaState>(DEFAULT_AREAS);
   const [areasLoaded, setAreasLoaded] = useState(false);
@@ -297,6 +309,13 @@ export function useSimulatorPlanner() {
   >([]);
   const [selectedFictitiousBookingIds, setSelectedFictitiousBookingIds] =
     useState<string[]>([]);
+  const [otherEquipageConsignments, setOtherEquipageConsignments] = useState<
+    OtherEquipageConsignment[]
+  >([]);
+  const [
+    selectedOtherEquipageConsignmentKeys,
+    setSelectedOtherEquipageConsignmentKeys,
+  ] = useState<string[]>([]);
 
   const [currentEquipageSummary, setCurrentEquipageSummary] =
     useState<CurrentEquipageSummary | null>(null);
@@ -308,6 +327,10 @@ export function useSimulatorPlanner() {
   const [isLoadingUnassigned, setIsLoadingUnassigned] = useState(false);
   const [isLoadingCurrentEquipage, setIsLoadingCurrentEquipage] =
     useState(false);
+  const [
+    isLoadingOtherEquipageConsignments,
+    setIsLoadingOtherEquipageConsignments,
+  ] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isAddingFictitiousBooking, setIsAddingFictitiousBooking] =
     useState(false);
@@ -379,6 +402,16 @@ export function useSimulatorPlanner() {
     [fictitiousBookings, selectedFictitiousBookingIds],
   );
 
+  const selectedOtherEquipageConsignments = useMemo(
+    () =>
+      otherEquipageConsignments.filter((consignment) =>
+        selectedOtherEquipageConsignmentKeys.includes(
+          getOtherEquipageConsignmentKey(consignment),
+        ),
+      ),
+    [otherEquipageConsignments, selectedOtherEquipageConsignmentKeys],
+  );
+
   // Summeringen byggs alltid från aktuella markerade rader och deras senaste simuleringsfält.
   const simulationSummary = useMemo(() => {
     const selectedCurrentConsignments =
@@ -389,16 +422,19 @@ export function useSimulatorPlanner() {
     const addedWeightKg = [
       ...selectedCurrentConsignments,
       ...selectedConsignments,
+      ...selectedOtherEquipageConsignments,
     ].reduce((sum, consignment) => sum + (consignment.weight ?? 0), 0);
 
     const addedFlm = [
       ...selectedCurrentConsignments,
       ...selectedConsignments,
+      ...selectedOtherEquipageConsignments,
     ].reduce((sum, consignment) => sum + (consignment.flm ?? 0), 0);
 
     const selectedItems = [
       ...selectedCurrentConsignments,
       ...selectedConsignments,
+      ...selectedOtherEquipageConsignments,
       ...selectedFictitiousBookings,
     ];
 
@@ -456,6 +492,10 @@ export function useSimulatorPlanner() {
       selectedConsignments.reduce(
         (sum, consignment) => sum + (consignment.flm ?? 0),
         0,
+      ) +
+      selectedOtherEquipageConsignments.reduce(
+        (sum, consignment) => sum + (consignment.flm ?? 0),
+        0,
       );
 
     return {
@@ -471,6 +511,7 @@ export function useSimulatorPlanner() {
   }, [
     activeCurrentEquipageSummary,
     selectedConsignments,
+    selectedOtherEquipageConsignments,
     selectedFictitiousBookings,
   ]);
 
@@ -483,8 +524,10 @@ export function useSimulatorPlanner() {
     // Datumbyte ska behålla vald linje och valt ekipage så att användaren kan jämföra dagar.
     setSelectedDate(value);
     setSelectedConsignmentIds([]);
+    setSelectedOtherEquipageConsignmentKeys([]);
     setExcludedCurrentConsignmentIds([]);
     setUnassignedConsignments([]);
+    setOtherEquipageConsignments([]);
     setCurrentEquipageSummary(null);
   }
 
@@ -493,8 +536,10 @@ export function useSimulatorPlanner() {
     setSelectedLineId(lineId);
     setSelectedEquipageId(null);
     setSelectedConsignmentIds([]);
+    setSelectedOtherEquipageConsignmentKeys([]);
     setExcludedCurrentConsignmentIds([]);
     setUnassignedConsignments([]);
+    setOtherEquipageConsignments([]);
     setCurrentEquipageSummary(null);
     setAvailableEquipages([]);
   }
@@ -503,6 +548,7 @@ export function useSimulatorPlanner() {
   function handleEquipageChange(equipageId: number | null) {
     setSelectedEquipageId(equipageId);
     setExcludedCurrentConsignmentIds([]);
+    setSelectedOtherEquipageConsignmentKeys([]);
   }
 
   function toggleCurrentConsignment(consignmentId: number) {
@@ -520,6 +566,14 @@ export function useSimulatorPlanner() {
       current.includes(consignmentId)
         ? current.filter((id) => id !== consignmentId)
         : [...current, consignmentId],
+    );
+  }
+
+  function toggleOtherEquipageConsignment(consignmentKey: string) {
+    setSelectedOtherEquipageConsignmentKeys((current) =>
+      current.includes(consignmentKey)
+        ? current.filter((key) => key !== consignmentKey)
+        : [...current, consignmentKey],
     );
   }
 
@@ -665,6 +719,7 @@ export function useSimulatorPlanner() {
     if (
       selectedCurrentConsignments.length === 0 &&
       selectedConsignmentIds.length === 0 &&
+      selectedOtherEquipageConsignmentKeys.length === 0 &&
       selectedFictitiousBookingIds.length === 0 &&
       excludedCurrentConsignmentIds.length === 0
     ) {
@@ -678,6 +733,7 @@ export function useSimulatorPlanner() {
     try {
       const selectedIdSet = new Set(selectedConsignmentIds);
       const selectedFictitiousIdSet = new Set(selectedFictitiousBookingIds);
+      const selectedOtherKeySet = new Set(selectedOtherEquipageConsignmentKeys);
       const distanceCache = new Map<string, number | null>();
 
       // Cache minskar antalet uppslag för samma taxepunktsrelation under en körning.
@@ -718,6 +774,7 @@ export function useSimulatorPlanner() {
       const simulatedById = new Map<number, SimulatedConsignment>();
       const simulatedCurrentById = new Map<number, SimulatedConsignment>();
       const simulatedFictitiousById = new Map<string, FictitiousBooking>();
+      const simulatedOtherByKey = new Map<string, OtherEquipageConsignment>();
 
       // Simulerar en iLog-bokning som pickup + leverans och beräknar marginaldata.
       async function simulateConsignmentInsertion(
@@ -800,6 +857,21 @@ export function useSimulatorPlanner() {
         );
       }
 
+      // Markerade bokningar från andra ekipage simuleras som inflyttade till valt ekipage.
+      for (const consignment of otherEquipageConsignments) {
+        const key = getOtherEquipageConsignmentKey(consignment);
+
+        if (!selectedOtherKeySet.has(key)) {
+          continue;
+        }
+
+        simulatedOtherByKey.set(key, {
+          ...(await simulateConsignmentInsertion(consignment)),
+          sourceEquipageId: consignment.sourceEquipageId,
+          sourceEquipageName: consignment.sourceEquipageName,
+        });
+      }
+
       // Fiktiva bokningar använder användarens pris som intäkt och hoppar över prissteg.
       for (const booking of fictitiousBookings) {
         if (!selectedFictitiousIdSet.has(booking.id)) {
@@ -873,7 +945,9 @@ export function useSimulatorPlanner() {
                   consignment.consignmentId,
                 );
 
-                return simulated ?? clearConsignmentSimulationFields(consignment);
+                return (
+                  simulated ?? clearConsignmentSimulationFields(consignment)
+                );
               }),
             }
           : current,
@@ -882,6 +956,15 @@ export function useSimulatorPlanner() {
       setUnassignedConsignments((current) =>
         current.map((consignment) => {
           const simulated = simulatedById.get(consignment.consignmentId);
+
+          return simulated ?? clearConsignmentSimulationFields(consignment);
+        }),
+      );
+
+      setOtherEquipageConsignments((current) =>
+        current.map((consignment) => {
+          const key = getOtherEquipageConsignmentKey(consignment);
+          const simulated = simulatedOtherByKey.get(key);
 
           return simulated ?? clearConsignmentSimulationFields(consignment);
         }),
@@ -905,17 +988,39 @@ export function useSimulatorPlanner() {
     }
   }
 
-  // Tömmer endast valen, men lämnar eventuellt visade beräkningsresultat kvar.
-  function clearSimulationSelection() {
-    setSelectedConsignmentIds([]);
-    setSelectedFictitiousBookingIds([]);
+  // Återställer valt ekipage till grundläget: alla befintliga bokningar ingår.
+  function clearCurrentEquipageSelection() {
     setExcludedCurrentConsignmentIds([]);
+  }
+
+  // Rensar endast markerade oplacerade bokningar.
+  function clearUnassignedSelection() {
+    setSelectedConsignmentIds([]);
+  }
+
+  // Rensar endast markerade bokningar från andra ekipage.
+  function clearOtherEquipageSelection() {
+    setSelectedOtherEquipageConsignmentKeys([]);
+  }
+
+  // Rensar endast markerade fiktiva bokningar.
+  function clearFictitiousSelection() {
+    setSelectedFictitiousBookingIds([]);
+  }
+
+  // Tömmer alla urval, men lämnar eventuellt visade beräkningsresultat kvar.
+  function clearSimulationSelection() {
+    clearUnassignedSelection();
+    clearFictitiousSelection();
+    clearOtherEquipageSelection();
+    clearCurrentEquipageSelection();
   }
 
   // Återställer både val och beräkningsfält till ett osimulerat läge.
   function resetSimulationResults() {
     setSelectedConsignmentIds([]);
     setSelectedFictitiousBookingIds([]);
+    setSelectedOtherEquipageConsignmentKeys([]);
     setExcludedCurrentConsignmentIds([]);
     setCurrentEquipageSummary((current) =>
       current
@@ -928,7 +1033,14 @@ export function useSimulatorPlanner() {
         : current,
     );
     setUnassignedConsignments((current) =>
-      current.map((consignment) => clearConsignmentSimulationFields(consignment)),
+      current.map((consignment) =>
+        clearConsignmentSimulationFields(consignment),
+      ),
+    );
+    setOtherEquipageConsignments((current) =>
+      current.map((consignment) =>
+        clearConsignmentSimulationFields(consignment),
+      ),
     );
     setFictitiousBookings((current) =>
       current.map((booking) => clearFictitiousSimulationFields(booking)),
@@ -961,6 +1073,9 @@ export function useSimulatorPlanner() {
       setSelectedFictitiousBookingIds(
         cached.selectedFictitiousBookingIds ?? [],
       );
+      setSelectedOtherEquipageConsignmentKeys(
+        cached.selectedOtherEquipageConsignmentKeys ?? [],
+      );
       setExcludedCurrentConsignmentIds(
         cached.excludedCurrentConsignmentIds ?? [],
       );
@@ -983,6 +1098,7 @@ export function useSimulatorPlanner() {
       selectedEquipageId,
       selectedConsignmentIds,
       selectedFictitiousBookingIds,
+      selectedOtherEquipageConsignmentKeys,
       excludedCurrentConsignmentIds,
       unassignedConsignments,
       fictitiousBookings,
@@ -993,6 +1109,7 @@ export function useSimulatorPlanner() {
     selectedDate,
     selectedEquipageId,
     selectedFictitiousBookingIds,
+    selectedOtherEquipageConsignmentKeys,
     excludedCurrentConsignmentIds,
     selectedLineId,
     selectedConsignmentIds,
@@ -1192,6 +1309,105 @@ export function useSimulatorPlanner() {
   }, [hasHydrated, selectedLine, selectedDate]);
 
   useEffect(() => {
+    // Hämtar bokningar från övriga ekipage så de kan simuleras på valt ekipage.
+    async function loadOtherEquipageConsignments() {
+      if (
+        !selectedEquipageId ||
+        !selectedDate ||
+        availableEquipages.length === 0
+      ) {
+        setOtherEquipageConsignments([]);
+        setSelectedOtherEquipageConsignmentKeys([]);
+        return;
+      }
+
+      const ilogDate = toIlogDate(selectedDate);
+      if (!ilogDate) {
+        return;
+      }
+
+      const sourceEquipages = availableEquipages.filter(
+        (equipage) => equipage.id !== selectedEquipageId,
+      );
+
+      if (sourceEquipages.length === 0) {
+        setOtherEquipageConsignments([]);
+        setSelectedOtherEquipageConsignmentKeys([]);
+        return;
+      }
+
+      setIsLoadingOtherEquipageConsignments(true);
+      setErrorMsg("");
+
+      try {
+        const responses = await Promise.all(
+          sourceEquipages.map(async (equipage) => ({
+            equipage,
+            response: await getIlogConsignments(ilogDate, equipage.id),
+          })),
+        );
+
+        const incoming = responses.flatMap(({ equipage, response }) =>
+          ((response.data ?? []) as SimulatedConsignment[]).map(
+            (consignment) => ({
+              ...consignment,
+              sourceEquipageId: equipage.id,
+              sourceEquipageName: equipage.name,
+            }),
+          ),
+        );
+
+        const previousMap = new Map(
+          otherEquipageConsignments.map((consignment) => [
+            getOtherEquipageConsignmentKey(consignment),
+            consignment,
+          ]),
+        );
+
+        const merged = incoming.map((consignment) => {
+          const previous = previousMap.get(
+            getOtherEquipageConsignmentKey(consignment),
+          );
+
+          return previous
+            ? {
+                ...consignment,
+                simulatedProfitability: previous.simulatedProfitability,
+                revenueMatchStep: previous.revenueMatchStep,
+                extraDistanceKm: previous.extraDistanceKm,
+                extraDrivingCost: previous.extraDrivingCost,
+                originalRouteDistanceKm: previous.originalRouteDistanceKm,
+                optimizedRouteDistanceKm: previous.optimizedRouteDistanceKm,
+                optimizedRouteStops: previous.optimizedRouteStops,
+                insertionPickupIndex: previous.insertionPickupIndex,
+                insertionDeliveryIndex: previous.insertionDeliveryIndex,
+                missingDistanceRelation: previous.missingDistanceRelation,
+              }
+            : consignment;
+        });
+
+        setOtherEquipageConsignments(merged);
+        setSelectedOtherEquipageConsignmentKeys((current) =>
+          current.filter((key) =>
+            merged.some(
+              (consignment) =>
+                getOtherEquipageConsignmentKey(consignment) === key,
+            ),
+          ),
+        );
+      } catch {
+        setErrorMsg("Kunde inte hämta bokningar från andra ekipage.");
+        setOtherEquipageConsignments([]);
+        setSelectedOtherEquipageConsignmentKeys([]);
+      } finally {
+        setIsLoadingOtherEquipageConsignments(false);
+      }
+    }
+
+    void loadOtherEquipageConsignments();
+  }, [availableEquipages, selectedEquipageId, selectedDate]);
+
+  useEffect(() => {
     // Hämtar bokningar som redan ligger på valt ekipage för valt datum.
     async function loadCurrentEquipage() {
       if (!selectedEquipageId || !selectedDate) {
@@ -1257,10 +1473,19 @@ export function useSimulatorPlanner() {
     fictitiousBookings,
     selectedFictitiousBookingIds,
     selectedFictitiousBookings,
+    otherEquipageConsignments,
+    selectedOtherEquipageConsignmentKeys,
+    selectedOtherEquipageConsignments,
+    getOtherEquipageConsignmentKey,
+    toggleOtherEquipageConsignment,
     addFictitiousBooking,
     removeFictitiousBooking,
     toggleFictitiousBooking,
     toggleConsignment,
+    clearCurrentEquipageSelection,
+    clearUnassignedSelection,
+    clearOtherEquipageSelection,
+    clearFictitiousSelection,
     clearSimulationSelection,
     resetSimulationResults,
     currentEquipageSummary,
@@ -1275,6 +1500,7 @@ export function useSimulatorPlanner() {
     isLoadingEquipages,
     isLoadingUnassigned,
     isLoadingCurrentEquipage,
+    isLoadingOtherEquipageConsignments,
     isSimulating,
     isAddingFictitiousBooking,
     errorMsg,
