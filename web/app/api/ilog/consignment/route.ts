@@ -41,7 +41,7 @@ const parseBoolean = (value: string | null, defaultValue: boolean): boolean => {
 export async function GET(request: Request) {
   // Plockar query-parametrar från URL.
   const { searchParams } = new URL(request.url);
-  const debugRaw = searchParams.get("debugRaw") === "true";
+  const debugRaw = process.env.NODE_ENV !== "production" && searchParams.get("debugRaw") === "true";
 
   const consignmentId = searchParams.get("consignmentId");
 

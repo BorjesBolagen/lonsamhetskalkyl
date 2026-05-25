@@ -178,11 +178,7 @@ export function normalizeNumber(value: string | undefined): number | null {
 
     const parsed = Number(normalized);
 
-    const result = Number.isFinite(parsed) ? parsed : null;
-    if (result === null) {
-        console.log(`Normalize ${value} -> ${normalized} -> ${parsed} -> ${result} gav NaN, returnerar null`);
-    }
-    return result;
+    return Number.isFinite(parsed) ? parsed : null;
 }
 
 /**

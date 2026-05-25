@@ -120,10 +120,11 @@ export const ilogGet = async <T>(path: string, query?: QueryParams): Promise<T> 
   const responseText = await response.text();
 
   if (!response.ok) {
+    if (responseText) {
+      console.error(`iLog API responded with status ${response.status}: ${responseText}`);
+    }
     throw new IlogHttpError(
-      responseText
-        ? `iLog API responded with status ${response.status}: ${responseText}`
-        : `iLog API responded with status ${response.status}`,
+      `iLog API responded with status ${response.status}`,
       // Mappar 401 från extern tjänst till 502 internt,
       // eftersom frontend pratar med vår API, inte direkt med iLog.
       // 401 från iLog = felaktig/saknad auth → vi presenterar det som iLog är ned.

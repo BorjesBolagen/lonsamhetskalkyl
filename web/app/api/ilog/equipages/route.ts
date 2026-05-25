@@ -29,7 +29,7 @@ import { mapEquipages } from "@/lib/ilogMappers";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const debugRaw = searchParams.get("debugRaw") === "true";
+    const debugRaw = process.env.NODE_ENV !== "production" && searchParams.get("debugRaw") === "true";
 
     // Externt iLog-anrop: hämta ekipage i användarens grupp.
     const rawEquipages = await ilogGet<unknown[]>("/ilog-api-web/driver/equipages");

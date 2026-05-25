@@ -102,8 +102,8 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(
-        { 
-            status: false, message: "Hämtade meddelanden",
+        {
+            status: true, message: "Hämtade meddelanden",
             last_read_messages: lastReadData.last_read_messages_at,
             messages: messagesData
         },
