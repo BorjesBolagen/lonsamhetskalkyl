@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
       });
     }
     
+    console.log("Test");
     const result = await calculateProfitability({
       kundnamn: kundnamn,
       taxPointRelation: taxPointRelation,
