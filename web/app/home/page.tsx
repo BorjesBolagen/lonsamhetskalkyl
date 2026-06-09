@@ -319,7 +319,7 @@ export default function Home() {
                         {consignment.profitabilityValue
                           ? consignment.profitabilityValue.step_used === -1
                             ? consignment.profitabilityValue.detail || "-"
-                            : `${consignment.profitabilityValue.estimated_revenue.toFixed(0)} kr`
+                            : `${(consignment.profitabilityValue.estimated_revenue ?? 0).toFixed(0)} kr`
                           : "-"}
                       </td>
                       <td className="py-2 pr-3">

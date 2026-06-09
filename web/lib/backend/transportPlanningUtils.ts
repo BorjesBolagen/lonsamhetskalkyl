@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  calculateProfitability,
   getCurrentlySignedInUser,
   getIlogLines,
 } from "../api";
@@ -281,35 +280,37 @@ export function calculateConsignmentTotals(
 
 /**
  * Räknar prognos för en bokning via profitability-motorn.
- * Används av Home.
+ * Används av Home och Simulator.
  */
 export async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
 ): Promise<ProfitabilityValue | null> {
-  const kundnamn = consignment.customerName?.trim();
-  const taxPointRelation = consignment.taxPointRelation?.trim();
-  const weight = Number(consignment.weight);
-
-  if (!kundnamn || !taxPointRelation || !Number.isFinite(weight)) {
-    return null;
-  }
-
-  let response;
   try {
-    response = await calculateProfitability(
-      kundnamn,
-      taxPointRelation,
-      weight,
-    );
+    const res = await fetch("/api/profitability", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ consignment }), 
+    });
+
+    if (!res.ok) {
+       console.error("API-fel i simulatorn:", res.status, res.statusText);
+       return null; // Returnera null mjukt istället för att krascha
+    }
+
+    const data = await res.json();
+
+    if (!data.success) {
+      console.error("Fel i kalkyl:", data.error);
+      return null;
+    }
+
+    return data.value;
   } catch (error) {
-    console.error(error instanceof Error ? error.message : "Okänt fel vid lönsamhetskalkyl");
-  }
-  
-  if (!response!.success || !response!.value) {
+    console.error("Fel vid anrop till profitability_simulation", error);
     return null;
   }
-
-  return response!.value as ProfitabilityValue;
 }
 
 /**

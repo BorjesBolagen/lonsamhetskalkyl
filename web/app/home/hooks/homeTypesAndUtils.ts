@@ -1,5 +1,4 @@
 import {
-  calculateProfitability,
   getIlogConsignments,
   ProfitabilityValue,
 } from "../../../lib/api";
@@ -268,30 +267,34 @@ export function getConsignmentFlm(consignment: ConsignmentListItem): number {
 export async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
 ): Promise<ProfitabilityValue | null> {
-  const kundnamn = consignment.customerName?.trim();
-  const taxPointRelation = consignment.taxPointRelation?.trim();
-  const weight = Number(consignment.weight);
-
-  if (!kundnamn || !taxPointRelation || !Number.isFinite(weight)) {
-    return null;
-  }
-
-  let response;
   try {
-    response = await calculateProfitability(
-      kundnamn,
-      taxPointRelation,
-      weight,
-    );
+    const res = await fetch("/api/profitability", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      // Vi skickar med HELA bokningen till din nya backend-route
+      body: JSON.stringify({ consignment }), 
+    });
+
+    // Kontrollera om svaret faktiskt är OK innan vi kör .json()
+    if (!res.ok) {
+       console.error("API-fel:", res.status, res.statusText);
+       return null;
+    }
+
+    const data = await res.json();
+
+    if (!data.success) {
+      console.error("Fel i kalkyl:", data.error);
+      return null;
+    }
+
+    return data.value;
   } catch (error) {
-    console.error(error instanceof Error ? error.message : "Okänt fel vid lönsamhetskalkyl");
-  }
-  
-  if (!response!.success || !response!.value) {
+    console.error("Fel vid anrop till profitability_simulation", error);
     return null;
   }
-
-  return response!.value as ProfitabilityValue;
 }
 
 /**
