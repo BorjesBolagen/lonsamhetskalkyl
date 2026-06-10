@@ -54,6 +54,28 @@ export async function calculateProfitability(
     }
   }
 
+  const t0 = performance.now();
+  const jaro = await supabase.rpc("find_best_name_match", {
+    input_name: input.kundnamn
+  });
+  const time = performance.now() - t0;
+
+  if (jaro.error || !jaro.data) {
+    console.error("Fel vid jaroberäkning");
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail: "Fel vid Jaro"
+    }
+  }
+
+  console.log(`Jaro took ${time} ms.`);
+  console.log("kundnamn: ", input.kundnamn);
+  console.log(`Jaro result: ${jaro.data[0].best_name} ${jaro.data[0].best_score}`);
+
+
+
+
   valideraInput(input);
   const weight_plus_one = await roundUpWeight(input.chargeable_weight);
 
