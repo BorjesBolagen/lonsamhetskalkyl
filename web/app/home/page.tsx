@@ -8,6 +8,8 @@ import {
   getDisplayCustomerName,
   useHomeDashboardData,
 } from "./useHomeDashboardData";
+import { InfoTooltip } from "@/components/InformationBubble";
+import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
 
 const STANDARD_FLM = 19.2;
 
@@ -282,9 +284,19 @@ export default function Home() {
                 <thead>
                   <tr className="border-b-2 border-[var(--border-primary)]">
                     <th className="text-left py-2 pr-3">Destination</th>
-                    <th className="text-left py-2 pr-3">Kund</th>
-                    <th className="text-left py-2 pr-3">Jaro score</th>
-                    <th className="text-left py-2 pr-3">Jaro namn</th>
+                    <th className="text-left py-2 pr-3">Kundnamn</th>
+                    <th className="text-left py-2 pr-3">
+                      <span className="flex items-center gap-1">
+                        Likhet
+                        <InfoTooltip text={`Hur likt kundnamnet är det matchade namnet. Om likheten är över ${DEFAULT_NAME_SIMILARITY_THRESHOLD * 100}% så används det namnet i prognosestimeringen.`} />
+                      </span>
+                    </th>
+                    <th className="text-left py-2 pr-3">
+                      <span className="flex items-center gap-1">
+                        Matchat namn
+                        <InfoTooltip text="Det kundnamn som liknar det inkommande kundnamnet mest." />
+                      </span>
+                    </th>
                     <th className="text-left py-2 pr-3">Hämtadress</th>
                     <th className="text-left py-2 pr-3">Hämtort</th>
                     <th className="text-left py-2 pr-3">Godsuppgifter</th>
