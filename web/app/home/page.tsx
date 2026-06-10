@@ -283,6 +283,8 @@ export default function Home() {
                   <tr className="border-b-2 border-[var(--border-primary)]">
                     <th className="text-left py-2 pr-3">Destination</th>
                     <th className="text-left py-2 pr-3">Kund</th>
+                    <th className="text-left py-2 pr-3">Jaro score</th>
+                    <th className="text-left py-2 pr-3">Jaro namn</th>
                     <th className="text-left py-2 pr-3">Hämtadress</th>
                     <th className="text-left py-2 pr-3">Hämtort</th>
                     <th className="text-left py-2 pr-3">Godsuppgifter</th>
@@ -303,6 +305,15 @@ export default function Home() {
                       </td>
                       <td className="py-2 pr-3">
                         {getDisplayCustomerName(consignment)}
+                      </td>
+                      
+                      <td className="py-2 pr-3">
+                        {consignment.profitabilityValue?.best_score != null
+                          ? (consignment.profitabilityValue.best_score * 100).toFixed(0) + "%"
+                          : "-"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {consignment.profitabilityValue?.best_name ?? "-"}
                       </td>
                       <td className="py-2 pr-3">
                         {consignment.pickupLocationStreet ||

@@ -24,4 +24,6 @@ export type ProfitabilityResult = {
   step_used: number;
   estimated_revenue: number;
   detail?: string;
+  jaro_matched_name?: string;
+  jaro_score?: number;
 };

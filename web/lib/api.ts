@@ -273,6 +273,8 @@ export type ProfitabilityValue = {
 	step_used: number;
 	estimated_revenue: number;
 	detail?: string;
+	best_score?: number;
+	best_name?: string;
 };
 
 export type ProfitabilityResponse = {
@@ -280,6 +282,8 @@ export type ProfitabilityResponse = {
 	value?: ProfitabilityValue;
 	error?: string;
 	detail?: string;
+	best_score?: number;
+	best_name?: string;
 };
 
 export const calculateProfitability = async (
@@ -303,6 +307,7 @@ export const calculateProfitability = async (
 	}
 
 	const data = await response.json();
+	console.log(`kundnamn: ${kundnamn}`);
 	console.log("API response:", JSON.stringify(data));
 	return data as ProfitabilityResponse;
 };
