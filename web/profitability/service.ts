@@ -4,6 +4,7 @@ import type { ProfitabilityInput, ProfitabilityResult } from "./types";
 import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { roundUpWeight } from "@/lib/backend/utils";
+import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
 
 
 function valideraInput(input: ProfitabilityInput) {
@@ -74,7 +75,7 @@ export async function calculateProfitability(
   console.log(`Jaro result: ${jaro.data[0].best_name} ${jaro.data[0].best_score}`);
 
 
-const jaroMatch = jaro.data[0].best_score >= 0.9;
+const jaroMatch = jaro.data[0].best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
 
 // Bygg upp bas-resultat. Ändra sedan step_used och estimated_revenue baserat på steg och resultat från trappstegsmodellen
 let result = {
