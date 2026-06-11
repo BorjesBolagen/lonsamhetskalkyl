@@ -95,7 +95,7 @@ if (jaroMatch) {
 
   // Försök göra steg 1.
   try {
-    const steg1Estimated = await try_steg_1(input, weight_plus_one);
+    const steg1Estimated = await try_steg_1(input, weight_plus_one, jaroMatch);
 
     // Om steg 1 gav null så fick vi ingen träff. Fortsätt med steg 2
     if (steg1Estimated !== null) {
@@ -116,7 +116,7 @@ if (jaroMatch) {
 
   // Försök göra steg 2
   try {
-    const steg2Estimated = await try_steg_2(input, weight_plus_one);
+    const steg2Estimated = await try_steg_2(input, weight_plus_one, jaroMatch);
     
     // Om steg 2 gav null så fick vi ingen träff. Fortsätt med steg 3
     if (steg2Estimated !== null) {
@@ -137,7 +137,7 @@ if (jaroMatch) {
 
   // Försök göra steg 3
   try {
-    const steg3Estimated = await (try_steg_3(input, weight_plus_one));
+    const steg3Estimated = await (try_steg_3(input, weight_plus_one, jaroMatch));
 
     // Om steg 3 gav null så fick vi ingen träff. Fortsätt med steg 4
     if (steg3Estimated !== null) {
