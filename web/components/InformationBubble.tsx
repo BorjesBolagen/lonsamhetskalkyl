@@ -1,8 +1,19 @@
-
 /**
  * En informationsbubbla som man kan sväva med musen ovan för att se mer information
  */
-export function InfoTooltip({ text }: { text: string }) {
+export function InfoTooltip({
+  text,
+  align = "center",
+}: {
+  text: string;
+  align?: "left" | "center" | "right";
+}) {
+  const alignmentClasses = {
+    center: "left-1/2 -translate-x-1/2",
+    left: "left-0",
+    right: "right-0",
+  };
+
   return (
     <span className="relative group inline-flex items-center cursor-help">
       {/* Icon */}
@@ -23,11 +34,10 @@ export function InfoTooltip({ text }: { text: string }) {
           <line x1="12" y1="8" x2="12.01" y2="8" />
         </svg>
       </span>
-
       {/* Tooltip bubble */}
       <span
-        className="
-          absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+        className={`
+          absolute bottom-full mb-2 ${alignmentClasses[align]}
           w-52 text-xs leading-relaxed
           text-[var(--text-primary)]
           bg-neutral-100
@@ -38,17 +48,20 @@ export function InfoTooltip({ text }: { text: string }) {
           transition-opacity duration-150
           pointer-events-none z-10
           normal-case font-normal
-          whitespace-normal
-        "
+          whitespace-pre-line
+        `}
       >
         {text}
         {/* little arrow */}
         <span
-          className="
-            absolute top-full left-1/2 -translate-x-1/2
+          className={`
+            absolute top-full
+            ${align === "center" ? "left-1/2 -translate-x-1/2" : ""}
+            ${align === "left" ? "left-3" : ""}
+            ${align === "right" ? "right-3" : ""}
             border-4 border-transparent
             border-t-[var(--border-primary)]
-          "
+          `}
         />
       </span>
     </span>

@@ -301,7 +301,12 @@ export default function Home() {
                     <th className="text-left py-2 pr-3">Hämtort</th>
                     <th className="text-left py-2 pr-3">Godsuppgifter</th>
                     <th className="text-left py-2 pr-3">Prognos</th>
-                    <th className="text-left py-2 pr-3">Steg</th>
+                    <th className="text-left py-2 pr-3">
+                      <span className="flex items-center gap-1">
+                        Steg
+                        <InfoTooltip text={"Ett lägre steg innebär en bättre prognos."} align="right" />
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -315,7 +320,11 @@ export default function Home() {
                           consignment.receiverName ||
                           "-"}
                       </td>
-                      <td className="py-2 pr-3">
+                      <td className={`py-2 pr-3 ${
+                        (consignment.profitabilityValue?.best_score ?? 0) < DEFAULT_NAME_SIMILARITY_THRESHOLD
+                          ? "font-bold"
+                          : ""
+                      }`}>
                         {getDisplayCustomerName(consignment)}
                       </td>
                       
@@ -324,7 +333,11 @@ export default function Home() {
                           ? (consignment.profitabilityValue.best_score * 100).toFixed(0) + "%"
                           : "-"}
                       </td>
-                      <td className="py-2 pr-3">
+                      <td className={`py-2 pr-3 ${
+                        (consignment.profitabilityValue?.best_score ?? 0) >= DEFAULT_NAME_SIMILARITY_THRESHOLD
+                          ? "font-bold"
+                          : ""
+                      }`}>
                         {consignment.profitabilityValue?.best_name ?? "-"}
                       </td>
                       <td className="py-2 pr-3">
