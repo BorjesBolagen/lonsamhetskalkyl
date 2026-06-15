@@ -130,5 +130,6 @@ export function useHomeDashboardData() {
     closePopup,
     refreshEquipageConsignments,
     refreshLineConsignments,
+    updateEquipageInState,
   };
 }

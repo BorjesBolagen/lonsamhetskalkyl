@@ -13,7 +13,7 @@ import { normalizeText } from "./service";
  * @returns Estimerat pris eller null
  * @throws Error om input är fel eller om databasen inte får träff
  */
-export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
+export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: number, use_entire_name: boolean): Promise<number | null> {
 
     // Hämta input variabler
     const kundnamn = normalizeText(input.kundnamn);
@@ -28,7 +28,8 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
         in_name: kundnamn,
         in_input_weight: weight,
         in_taxep_sender: sender_taxep,
-        in_taxep_receiver: receiver_taxep
+        in_taxep_receiver: receiver_taxep,
+        in_use_entire_name: use_entire_name
     });
 
     if (error_orginal) {
@@ -40,7 +41,8 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
         in_name: kundnamn,
         in_input_weight: weight_plus_one,
         in_taxep_sender: sender_taxep,
-        in_taxep_receiver: receiver_taxep
+        in_taxep_receiver: receiver_taxep,
+        in_use_entire_name: use_entire_name
     })
 
     if (error_plus_ett) {
@@ -90,7 +92,7 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
  * @returns Estimerat pris eller null.
  * @throws Error om input är fel eller om databasanropet misslyckas.
  */
-export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
+export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: number, use_entire_name: boolean): Promise<number | null> {
 
     // Hämta input variabler
     const kundnamn = normalizeText(input.kundnamn);
@@ -103,7 +105,8 @@ export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: num
         in_name: kundnamn,
         in_input_weight: weight,
         in_taxep_sender: sender_taxep,
-        in_taxep_receiver: receiver_taxep
+        in_taxep_receiver: receiver_taxep,
+        in_use_entire_name: use_entire_name
     });
 
     if (error_orginal) {
@@ -115,7 +118,8 @@ export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: num
         in_name: kundnamn,
         in_input_weight: weight_plus_one,
         in_taxep_sender: sender_taxep,
-        in_taxep_receiver: receiver_taxep
+        in_taxep_receiver: receiver_taxep,
+        in_use_entire_name: use_entire_name
     });
 
     if (error_plus_ett) {
@@ -150,7 +154,7 @@ export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: num
  * @returns Estimerat pris eller null.
  * @throws Error om input är fel eller om databasanropet misslyckas.
  */
-export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
+export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: number, use_entire_name: boolean): Promise<number | null> {
     
     // Hämta variabler
     const kundnamn = normalizeText(input.kundnamn);
@@ -161,8 +165,8 @@ export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: num
     const supabase = await getSupabaseServerClient();
     const [{ data: data_orginal, error: error_orginal }, { data: data_plus_ett, error: error_plus_ett }] = 
         await Promise.all([
-            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep }),
-            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight_plus_one, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep })
+            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep, in_use_entire_name: use_entire_name }),
+            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight_plus_one, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep, in_use_entire_name: use_entire_name })
         ]);
 
     if (error_orginal) {

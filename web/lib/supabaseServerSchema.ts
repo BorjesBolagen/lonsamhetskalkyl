@@ -448,14 +448,21 @@ export type Database = {
           vkl: number
         }[]
       }
-      get_medel_forh_kundvis: { Args: { in_kundnamn: string }; Returns: number }
+      get_medel_forh_kundvis: {
+        Args: { in_kundnamn: string; in_use_entire_name?: boolean }
+        Returns: number
+      }
       get_medel_se: {
         Args: { in_kilometer: number; in_viktklass: number }
         Returns: number
       }
       get_office_for_taxep: { Args: { in_taxep: number }; Returns: string }
       get_snitt_forh_se_radvis: {
-        Args: { in_kundnamn: string; in_weight: number }
+        Args: {
+          in_kundnamn: string
+          in_use_entire_name?: boolean
+          in_weight: number
+        }
         Returns: number
       }
       get_taxep: { Args: { in_postal_code: number }; Returns: number }
@@ -464,7 +471,7 @@ export type Database = {
       is_traffic_leader: { Args: { user_id: string }; Returns: boolean }
       jaro_winkler: { Args: { s1: string; s2: string }; Returns: number }
       round_up_weight: { Args: { input_weight: number }; Returns: number }
-      steg_1: {
+      run_test_steg_1: {
         Args: {
           in_input_weight: number
           in_name: string
@@ -476,7 +483,7 @@ export type Database = {
           vikt: number
         }[]
       }
-      steg_2: {
+      run_test_steg_2: {
         Args: {
           in_input_weight: number
           in_name: string
@@ -491,12 +498,12 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      steg_3: {
+      run_test_steg_3: {
         Args: {
-          in_kundnamn: string
+          in_input_weight: number
+          in_name: string
           in_taxep_receiver: number
           in_taxep_sender: number
-          in_weight: number
         }
         Returns: Database["public"]["CompositeTypes"]["steg_3_result"]
         SetofOptions: {
@@ -506,6 +513,89 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      run_test_steg_4: {
+        Args: {
+          in_receiver_taxep: number
+          in_sender_taxep: number
+          in_weight: number
+        }
+        Returns: {
+          sum_kundnetto: number
+          sum_vikt: number
+        }[]
+      }
+      run_test_steg_5: {
+        Args: {
+          in_receiver_taxep: number
+          in_sender_taxep: number
+          in_weight: number
+        }
+        Returns: {
+          forh_linjevis: number
+          medel_se: number
+        }[]
+      }
+      steg_1: {
+        Args: {
+          in_input_weight: number
+          in_name: string
+          in_taxep_receiver: number
+          in_taxep_sender: number
+          in_use_entire_name?: boolean
+        }
+        Returns: {
+          kundnettofrakt: number
+          vikt: number
+        }[]
+      }
+      steg_2: {
+        Args: {
+          in_input_weight: number
+          in_name: string
+          in_taxep_receiver: number
+          in_taxep_sender: number
+          in_use_entire_name: boolean
+        }
+        Returns: Database["public"]["CompositeTypes"]["steg_2_result"]
+        SetofOptions: {
+          from: "*"
+          to: "steg_2_result"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      steg_3:
+        | {
+            Args: {
+              in_kundnamn: string
+              in_taxep_receiver: number
+              in_taxep_sender: number
+              in_weight: number
+            }
+            Returns: Database["public"]["CompositeTypes"]["steg_3_result"]
+            SetofOptions: {
+              from: "*"
+              to: "steg_3_result"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              in_kundnamn: string
+              in_taxep_receiver: number
+              in_taxep_sender: number
+              in_use_entire_name: boolean
+              in_weight: number
+            }
+            Returns: Database["public"]["CompositeTypes"]["steg_3_result"]
+            SetofOptions: {
+              from: "*"
+              to: "steg_3_result"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
       steg_4: {
         Args: {
           in_receiver_taxep: number
