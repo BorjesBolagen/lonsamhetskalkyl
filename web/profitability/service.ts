@@ -5,6 +5,7 @@ import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./tr
 import { roundUpWeight } from "@/lib/backend/utils";
 import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
+import { getSupabaseServerClient } from "@/lib/supabaseServer"
 
 // ============================================================================
 // STEG 1 - SORTERA FLÖDEN (ROUTER)
@@ -149,6 +150,7 @@ export async function calculateProfitability(
   input: ProfitabilityInput
 ): Promise<ProfitabilityResult> {
 
+  const supabase = await getSupabaseServerClient();
   const jaro = await supabase.rpc("find_best_name_match", {
     input_name: input.kundnamn
   });
