@@ -2,9 +2,125 @@ import "server-only";
 
 import type { ProfitabilityInput, ProfitabilityResult } from "./types";
 import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
-import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { roundUpWeight } from "@/lib/backend/utils";
+import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
+import { ConsignmentListItem } from "@/lib/ilogTypes";
+import { getSupabaseServerClient } from "@/lib/supabaseServer"
 
+// ============================================================================
+// STEG 1 - SORTERA FLÖDEN (ROUTER)
+// ============================================================================
+export enum FlowType {
+  PAKETBUR = "PAKETBUR",
+  STYCKEGODS = "STYCKEGODS",
+  FJARR = "FJARR", // = Trappstegsmodellen
+  EGENFAKTURERAT = "EGENFAKTURERAT",
+  SUNE = "SUNE",
+  UNKNOWN = "UNKNOWN"
+}
+
+// Identifierar vilket flöde en sändning tillhör.
+export function determineFlowType(consignment: ConsignmentListItem): FlowType {
+  const destCity = consignment.destinationCity?.toUpperCase() || "";
+  const customer = consignment.customerName?.toUpperCase() || "";
+  
+  // Hämta och slå ihop fälten för att vara på den säkra sidan
+  const sender = `${consignment.senderName || ""} ${consignment.pickupLocationName || ""}`.toUpperCase();
+  
+  const weight = Number(consignment.weight) || 0;
+
+  // 1. Egenfakturerat & Sune (Väntar på info)
+  // if (...) return FlowType.EGENFAKTURERAT;
+  // if (...) return FlowType.SUNE;
+
+  // =========================================================
+  // 2. PAKETBUR (Måste sorteras ut före styckegods!)
+  // =========================================================
+  if (
+    customer.includes("PAKETBUR") || 
+    customer.includes("PAKET") ||
+    customer.includes("PARCEL")
+  ) {
+    return FlowType.PAKETBUR;
+  }
+
+  // =========================================================
+  // 3. STYCKEGODS
+  // =========================================================
+  const isStyckegodsCustomer = customer.includes("STYCKEGODS") || customer.includes("STYCKE");
+  
+  // Schenker eller DSV (med mellanslag efter) i avsändare
+  const isSchenkerOrDSV = 
+    sender.includes("SCHENK") || sender.includes("DSV ");
+    
+  // Specifika sökord i avsändare
+  const hasStyckeKeywordsInSender = 
+    sender.includes("MARKPLAN") || 
+    sender.includes("TUNGGODS") || 
+    sender.includes("STYCKE") || 
+    sender.includes("FAST");
+    
+  // Saknar mottagarort (här kollar vi om den är helt tom. För specifika ej godkända ortnamn kan vi lägga till en lista framöver)
+  const isMissingDestCity = destCity === ""; 
+  
+  // Vikt-gränsen
+  const isUnder1000kg = weight > 0 && weight < 1000;
+
+  if (
+    isStyckegodsCustomer ||
+    isSchenkerOrDSV ||
+    hasStyckeKeywordsInSender ||
+    isMissingDestCity ||
+    isUnder1000kg
+  ) {
+    return FlowType.STYCKEGODS;
+  }
+
+  // =========================================================
+  // 4. FJÄRR / DIREKTLASTAT (Övrigt)
+  // =========================================================
+  return FlowType.FJARR;
+}
+
+export async function routeConsignment(
+  consignment: ConsignmentListItem,
+  input: ProfitabilityInput
+): Promise<ProfitabilityResult> {
+  const flowType = determineFlowType(consignment);
+
+  switch (flowType) {
+    case FlowType.FJARR:
+      // Om Fjärr saknar Taxepunkter, returnera ett fel istället för att krascha
+      if (!input.taxPointRelation || input.taxPointRelation.trim() === "") {
+        return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar taxepunktsrelation" };
+      }
+      if (!input.kundnamn || input.kundnamn.trim() === "") {
+        return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar kundnamn" };
+      }
+      
+      // Skicka in till trappstegsmodellen
+      return await calculateProfitability(input);
+
+    case FlowType.PAKETBUR:
+      return { step_used: -1, estimated_revenue: 0, detail: "Paketbur: Beräkningsmodell saknas ännu" };
+
+    case FlowType.STYCKEGODS:
+      return { step_used: -1, estimated_revenue: 0, detail: "Styckegods: Beräkningsmodell saknas ännu" };
+
+    case FlowType.EGENFAKTURERAT:
+      return { step_used: -1, estimated_revenue: 0, detail: "Egenfakturerat: Hanteras med angivet belopp" };
+
+    case FlowType.SUNE:
+      return { step_used: -1, estimated_revenue: 0, detail: "Sune: 'Tabell Johan' saknas ännu" };
+
+    default:
+      return { step_used: -1, estimated_revenue: 0, detail: "Okänd frakttyp, kunde inte sorteras" };
+  }
+}
+
+// ============================================================================
+// TRAPPSTEGSMODELLEN (Fjärr/Direktlastat)
+// ============================================================================
 
 function valideraInput(input: ProfitabilityInput) {
     // Validera input
@@ -33,37 +149,47 @@ function valideraInput(input: ProfitabilityInput) {
 export async function calculateProfitability(
   input: ProfitabilityInput
 ): Promise<ProfitabilityResult> {
-  const weight = Number(input.chargeable_weight);
 
   const supabase = await getSupabaseServerClient();
-  const { data, error } = await supabase.rpc("get_weight_class", {
-    input_weight: weight
-  })
+  const jaro = await supabase.rpc("find_best_name_match", {
+    input_name: input.kundnamn
+  });
 
-  if (error) {
-    console.error("Fel vid hämtning av viktklass: ", error);
-    throw new Error("Fel vid hämtning av viktklass: " + error.message);
-  }
-
-  // Vi ska bara köra trappstegsmodellen för viktklasser över 20. Skippa alla <= 20
-  if (data <= 20) {
+  if (jaro.error || !jaro.data) {
+    console.error("Fel vid jaroberäkning");
     return {
       step_used: -1,
       estimated_revenue: 0,
-      detail: "Endast viktklasser över 20 hanteras"
+      detail: "Fel vid Jaro"
     }
   }
+
+  const jaroMatch = jaro.data[0].best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
+
+  // Bygg upp bas-resultat. Ändra sedan step_used och estimated_revenue baserat på steg och resultat från trappstegsmodellen
+  let result = {
+    step_used: 0,
+    estimated_revenue: 0,
+    best_score: jaro.data[0].best_score,
+    best_name: jaro.data[0].best_name,
+  };
+
+  if (jaroMatch) {
+    input.kundnamn = jaro.data[0].best_name;
+  }
+
 
   valideraInput(input);
   const weight_plus_one = await roundUpWeight(input.chargeable_weight);
 
   // Försök göra steg 1.
   try {
-    const steg1Estimated = await try_steg_1(input, weight_plus_one);
+    const steg1Estimated = await try_steg_1(input, weight_plus_one, jaroMatch);
 
     // Om steg 1 gav null så fick vi ingen träff. Fortsätt med steg 2
     if (steg1Estimated !== null) {
       return {
+        ...result,
         step_used: 1,
         estimated_revenue: steg1Estimated
       }
@@ -79,11 +205,12 @@ export async function calculateProfitability(
 
   // Försök göra steg 2
   try {
-    const steg2Estimated = await try_steg_2(input, weight_plus_one);
+    const steg2Estimated = await try_steg_2(input, weight_plus_one, jaroMatch);
     
     // Om steg 2 gav null så fick vi ingen träff. Fortsätt med steg 3
     if (steg2Estimated !== null) {
       return {
+        ...result,
         step_used: 2,
         estimated_revenue: steg2Estimated
       }
@@ -99,11 +226,12 @@ export async function calculateProfitability(
 
   // Försök göra steg 3
   try {
-    const steg3Estimated = await (try_steg_3(input, weight_plus_one));
+    const steg3Estimated = await (try_steg_3(input, weight_plus_one, jaroMatch));
 
     // Om steg 3 gav null så fick vi ingen träff. Fortsätt med steg 4
     if (steg3Estimated !== null) {
       return {
+        ...result,
         step_used: 3,
         estimated_revenue: steg3Estimated
       }
@@ -124,6 +252,7 @@ export async function calculateProfitability(
     // Om steg 4 gav null så fick vi ingen träff. Fortsätt med steg 5
     if (steg4Estimated !== null) {
       return {
+        ...result,
         step_used: 4,
         estimated_revenue: steg4Estimated
       }
@@ -144,6 +273,7 @@ export async function calculateProfitability(
     // Om steg 5 gav null så fick vi ingen träff. Då har vi testat alla steg i modellen
     if (steg5Estimated !== null) {
       return {
+        ...result,
         step_used: 5,
         estimated_revenue: steg5Estimated
       }

@@ -23,13 +23,18 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies(); // async in Next 15+ [1](https://nextjs.org/docs/app/api-reference/functions/cookies)
+  const cookieStore = await cookies();
   const theme = cookieStore.get("theme")?.value;
-
   const safeTheme = theme === "dark" ? "dark" : "light";
 
   return (
     <html lang="en" data-theme={safeTheme}>
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"
+        />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
       </body>
