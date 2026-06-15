@@ -307,8 +307,6 @@ export const calculateProfitability = async (
 	}
 
 	const data = await response.json();
-	console.log(`kundnamn: ${kundnamn}`);
-	console.log("API response:", JSON.stringify(data));
 	return data as ProfitabilityResponse;
 };
 

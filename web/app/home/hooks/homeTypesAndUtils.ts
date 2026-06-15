@@ -13,6 +13,7 @@ export type ProfitabilityStatus = "idle" | "loading" | "done" | "error";
 
 export type ConsignmentWithProfitability = ConsignmentListItem & {
   profitabilityValue?: ProfitabilityValue | null;
+  activeNameOverride?: "original" | "best";
 };
 
 export type EquipageWithConsignments = {

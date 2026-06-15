@@ -40,13 +40,13 @@ export function InfoTooltip({
           absolute bottom-full mb-2 ${alignmentClasses[align]}
           w-52 text-xs leading-relaxed
           text-[var(--text-primary)]
-          bg-[var(--background-primary)]
+          bg-[var(--primary-element)]
           border border-[var(--border-secondary)]
           rounded-md shadow-md
           px-3 py-2
           opacity-0 group-hover:opacity-100
           transition-opacity duration-150
-          pointer-events-none z-10
+          pointer-events-none z-50
           normal-case font-normal
           whitespace-pre-line
         `}

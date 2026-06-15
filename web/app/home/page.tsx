@@ -10,6 +10,8 @@ import {
 } from "./useHomeDashboardData";
 import { InfoTooltip } from "@/components/InformationBubble";
 import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
+import { useState } from "react";
+import { calculateConsignmentProfitabilityPrice, ConsignmentWithProfitability, toBarPercent } from "./hooks/homeTypesAndUtils";
 
 const STANDARD_FLM = 19.2;
 
@@ -39,6 +41,7 @@ export default function Home() {
     closePopup,
     refreshEquipageConsignments,
     refreshLineConsignments,
+    updateEquipageInState,
   } = useHomeDashboardData();
 
   /**
@@ -70,6 +73,54 @@ export default function Home() {
     return Math.max(0, Math.min(100, (totalPrognosis / reference) * 100));
   }
 
+  const [loadingRows, setLoadingRows] = useState<Record<string, boolean>>({});
+  const [activeKeys, setActiveKeys] = useState<Record<string, "original" | "best">>({});
+
+  /**
+   * Handles when you click the buttons on the two different customer names
+   */
+  const handleNameSelect = async (
+    consignment: ConsignmentWithProfitability,
+    chosenName: string,
+    key: "original" | "best"
+  ) => {
+    const id = consignment.consignmentId;
+    setActiveKeys(prev => ({ ...prev, [id]: key }));
+    setLoadingRows(prev => ({ ...prev, [id]: true }));
+    try {
+      const profitabilityValue = await calculateConsignmentProfitabilityPrice({
+        ...consignment,
+        customerName: chosenName,
+      });
+      updateEquipageInState(selectedEquipage!.id, (current) => {
+        const updatedConsignments = current.consignments.map(c => {
+          if (c.consignmentId !== id) return c;
+          return {
+            ...c,
+            activeNameOverride: key,  // store "original" or "best", not the name string
+            profitabilityValue: profitabilityValue ? {
+              ...profitabilityValue,
+              best_score: c.profitabilityValue?.best_score,
+              best_name: c.profitabilityValue?.best_name,
+            } : null,
+          };
+        });
+        const totalProfitabilityPrice = updatedConsignments.reduce(
+          (sum, c) => sum + (c.profitabilityValue?.estimated_revenue ?? 0), 0
+        );
+        return {
+          ...current,
+          consignments: updatedConsignments,
+          totalProfitabilityPrice,
+          profitabilityBarPercent: toBarPercent(totalProfitabilityPrice, profitabilityReferenceValue),
+        };
+      });
+    } catch (e) {
+      console.error("Kunde inte beräkna lönsamhet:", e);
+    } finally {
+      setLoadingRows(prev => ({ ...prev, [id]: false }));
+    }
+  };
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="home" />
@@ -291,7 +342,7 @@ export default function Home() {
                     <th className="text-left py-2 pr-3">
                       <span className="flex items-center gap-1">
                         Likhet
-                        <InfoTooltip text={`Hur likt kundnamnet är det matchade namnet. Om likheten är över ${DEFAULT_NAME_SIMILARITY_THRESHOLD * 100}% så används det namnet i prognosestimeringen.`} />
+                        <InfoTooltip text={`Hur likt kundnamnet är det matchade namnet. Om likheten är över ${DEFAULT_NAME_SIMILARITY_THRESHOLD * 100}% så är det namnet rekommenderat`} />
                       </span>
                     </th>
                     <th className="text-left py-2 pr-3">
@@ -323,12 +374,31 @@ export default function Home() {
                           consignment.receiverName ||
                           "-"}
                       </td>
-                      <td className={`py-2 pr-3 ${
-                        (consignment.profitabilityValue?.best_score ?? 0) < DEFAULT_NAME_SIMILARITY_THRESHOLD
-                          ? "font-bold"
-                          : ""
-                      }`}>
-                        {getDisplayCustomerName(consignment)}
+                      <td className="py-2 pr-3">
+                        {(() => {
+                          const name = getDisplayCustomerName(consignment);
+                          const score = consignment.profitabilityValue?.best_score ?? 0;
+                          const isRecommended = score < DEFAULT_NAME_SIMILARITY_THRESHOLD;
+                          const isActive = (activeKeys[consignment.consignmentId] ?? (isRecommended ? "original" : "best")) === "original";
+                            (consignment.activeNameOverride === "original" || (!consignment.activeNameOverride && isRecommended));
+                          return (
+                            <button
+                              onClick={() => handleNameSelect(consignment, name, "original")}
+                              disabled={loadingRows[consignment.consignmentId] || isActive}
+                              title={isRecommended ? "Rekommenderat namn" : undefined}
+                              className={`text-left text-xs px-2 py-1 rounded border transition-all w-full
+                                ${isActive
+                                  ? "bg-[var(--primary-button)] border-[var(--border-primary)] text-[var(--text-primary)] translate-y-[2px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)]"
+                                  : "bg-[var(--primary-button)]/20 border-[var(--border-primary)] text-[var(--text-secondary)] shadow-[0_2px_0px_rgba(0,0,0,0.25)] hover:bg-[var(--primary-button)]/40 hover:text-[var(--text-primary)] active:translate-y-[2px] active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)] cursor-pointer"
+                                }`}
+                            >
+                              <span className="flex items-center gap-1">
+                                {isRecommended && <i className="ti ti-star text-amber-400 text-xl" aria-hidden="true" />}
+                                {name}
+                              </span>
+                            </button>
+                          );
+                        })()}
                       </td>
                       
                       <td className="py-2 pr-3">
@@ -336,12 +406,30 @@ export default function Home() {
                           ? (consignment.profitabilityValue.best_score * 100).toFixed(0) + "%"
                           : "-"}
                       </td>
-                      <td className={`py-2 pr-3 ${
-                        (consignment.profitabilityValue?.best_score ?? 0) >= DEFAULT_NAME_SIMILARITY_THRESHOLD
-                          ? "font-bold"
-                          : ""
-                      }`}>
-                        {consignment.profitabilityValue?.best_name ?? "-"}
+                      <td className="py-2 pr-3">
+                        {(() => {
+                          const bestName = consignment.profitabilityValue?.best_name;
+                          const score = consignment.profitabilityValue?.best_score ?? 0;
+                          const isRecommended = score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
+                          const isActive = (activeKeys[consignment.consignmentId] ?? (isRecommended ? "best" : "original")) === "best";
+                          return (
+                            <button
+                              onClick={() => handleNameSelect(consignment, bestName ?? "", "best")}
+                              disabled={loadingRows[consignment.consignmentId] || isActive}
+                              title={isRecommended ? "Rekommenderat namn" : undefined}
+                              className={`text-left text-xs px-2 py-1 rounded border transition-all w-full
+                                ${isActive
+                                  ? "bg-[var(--primary-button)] border-[var(--border-primary)] text-[var(--text-primary)] translate-y-[2px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)]"
+                                  : "bg-[var(--primary-button)]/20 border-[var(--border-primary)] text-[var(--text-secondary)] shadow-[0_2px_0px_rgba(0,0,0,0.25)] hover:bg-[var(--primary-button)]/40 hover:text-[var(--text-primary)] active:translate-y-[2px] active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)] cursor-pointer"
+                                }`}
+                            >
+                              <span className="flex items-center gap-1">
+                                {isRecommended && <i className="ti ti-star text-amber-400 text-xl" aria-hidden="true" />}
+                                {bestName ?? "-"}
+                              </span>
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="py-2 pr-3">
                         {consignment.pickupLocationStreet ||
@@ -355,18 +443,31 @@ export default function Home() {
                         {consignment.estimatedProperties || "-"}
                       </td>
                       <td className="py-2 pr-3">
-                        {consignment.profitabilityValue
-                          ? consignment.profitabilityValue.step_used === -1
-                            ? consignment.profitabilityValue.detail || "-"
-                            : `${consignment.profitabilityValue.estimated_revenue.toFixed(0)} kr`
-                          : "-"}
+                        {loadingRows[consignment.consignmentId] ? (
+                          <span className="inline-block animate-spin text-[var(--text-secondary)]">
+                            <i className="ti ti-loader-2" aria-hidden="true" />
+                          </span>
+                        ) : (
+                          consignment.profitabilityValue
+                            ? consignment.profitabilityValue.step_used === -1
+                              ? consignment.profitabilityValue.detail || "-"
+                              : `${consignment.profitabilityValue.estimated_revenue.toFixed(0)} kr`
+                            : "-"
+                        )}
                       </td>
+
                       <td className="py-2 pr-3">
-                        {consignment.profitabilityValue
-                          ? consignment.profitabilityValue.step_used === -1
-                            ? "-"
-                            : `${consignment.profitabilityValue.step_used}`
-                          : "-"}
+                        {loadingRows[consignment.consignmentId] ? (
+                          <span className="inline-block animate-spin text-[var(--text-secondary)]">
+                            <i className="ti ti-loader-2" aria-hidden="true" />
+                          </span>
+                        ) : (
+                          consignment.profitabilityValue
+                            ? consignment.profitabilityValue.step_used === -1
+                              ? "-"
+                              : `${consignment.profitabilityValue.step_used}`
+                            : "-"
+                        )}
                       </td>
                     </tr>
                   ))}

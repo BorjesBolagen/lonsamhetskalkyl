@@ -55,11 +55,9 @@ export async function calculateProfitability(
     }
   }
 
-  const t0 = performance.now();
   const jaro = await supabase.rpc("find_best_name_match", {
     input_name: input.kundnamn
   });
-  const time = performance.now() - t0;
 
   if (jaro.error || !jaro.data) {
     console.error("Fel vid jaroberäkning");
@@ -70,24 +68,19 @@ export async function calculateProfitability(
     }
   }
 
-  console.log(`Jaro took ${time} ms.`);
-  console.log("kundnamn: ", input.kundnamn);
-  console.log(`Jaro result: ${jaro.data[0].best_name} ${jaro.data[0].best_score}`);
+  const jaroMatch = jaro.data[0].best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
 
+  // Bygg upp bas-resultat. Ändra sedan step_used och estimated_revenue baserat på steg och resultat från trappstegsmodellen
+  let result = {
+    step_used: 0,
+    estimated_revenue: 0,
+    best_score: jaro.data[0].best_score,
+    best_name: jaro.data[0].best_name,
+  };
 
-const jaroMatch = jaro.data[0].best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
-
-// Bygg upp bas-resultat. Ändra sedan step_used och estimated_revenue baserat på steg och resultat från trappstegsmodellen
-let result = {
-  step_used: 0,
-  estimated_revenue: 0,
-  best_score: jaro.data[0].best_score,
-  best_name: jaro.data[0].best_name,
-};
-
-if (jaroMatch) {
-  input.kundnamn = jaro.data[0].best_name;
-}
+  if (jaroMatch) {
+    input.kundnamn = jaro.data[0].best_name;
+  }
 
 
   valideraInput(input);
