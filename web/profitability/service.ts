@@ -2,10 +2,124 @@ import "server-only";
 
 import type { ProfitabilityInput, ProfitabilityResult } from "./types";
 import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
-import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { roundUpWeight } from "@/lib/backend/utils";
 import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
+import { ConsignmentListItem } from "@/lib/ilogTypes";
 
+// ============================================================================
+// STEG 1 - SORTERA FLÖDEN (ROUTER)
+// ============================================================================
+export enum FlowType {
+  PAKETBUR = "PAKETBUR",
+  STYCKEGODS = "STYCKEGODS",
+  FJARR = "FJARR", // = Trappstegsmodellen
+  EGENFAKTURERAT = "EGENFAKTURERAT",
+  SUNE = "SUNE",
+  UNKNOWN = "UNKNOWN"
+}
+
+// Identifierar vilket flöde en sändning tillhör.
+export function determineFlowType(consignment: ConsignmentListItem): FlowType {
+  const destCity = consignment.destinationCity?.toUpperCase() || "";
+  const customer = consignment.customerName?.toUpperCase() || "";
+  
+  // Hämta och slå ihop fälten för att vara på den säkra sidan
+  const sender = `${consignment.senderName || ""} ${consignment.pickupLocationName || ""}`.toUpperCase();
+  
+  const weight = Number(consignment.weight) || 0;
+
+  // 1. Egenfakturerat & Sune (Väntar på info)
+  // if (...) return FlowType.EGENFAKTURERAT;
+  // if (...) return FlowType.SUNE;
+
+  // =========================================================
+  // 2. PAKETBUR (Måste sorteras ut före styckegods!)
+  // =========================================================
+  if (
+    customer.includes("PAKETBUR") || 
+    customer.includes("PAKET") ||
+    customer.includes("PARCEL")
+  ) {
+    return FlowType.PAKETBUR;
+  }
+
+  // =========================================================
+  // 3. STYCKEGODS
+  // =========================================================
+  const isStyckegodsCustomer = customer.includes("STYCKEGODS") || customer.includes("STYCKE");
+  
+  // Schenker eller DSV (med mellanslag efter) i avsändare
+  const isSchenkerOrDSV = 
+    sender.includes("SCHENK") || sender.includes("DSV ");
+    
+  // Specifika sökord i avsändare
+  const hasStyckeKeywordsInSender = 
+    sender.includes("MARKPLAN") || 
+    sender.includes("TUNGGODS") || 
+    sender.includes("STYCKE") || 
+    sender.includes("FAST");
+    
+  // Saknar mottagarort (här kollar vi om den är helt tom. För specifika ej godkända ortnamn kan vi lägga till en lista framöver)
+  const isMissingDestCity = destCity === ""; 
+  
+  // Vikt-gränsen
+  const isUnder1000kg = weight > 0 && weight < 1000;
+
+  if (
+    isStyckegodsCustomer ||
+    isSchenkerOrDSV ||
+    hasStyckeKeywordsInSender ||
+    isMissingDestCity ||
+    isUnder1000kg
+  ) {
+    return FlowType.STYCKEGODS;
+  }
+
+  // =========================================================
+  // 4. FJÄRR / DIREKTLASTAT (Övrigt)
+  // =========================================================
+  return FlowType.FJARR;
+}
+
+export async function routeConsignment(
+  consignment: ConsignmentListItem,
+  input: ProfitabilityInput
+): Promise<ProfitabilityResult> {
+  const flowType = determineFlowType(consignment);
+
+  switch (flowType) {
+    case FlowType.FJARR:
+      // Om Fjärr saknar Taxepunkter, returnera ett fel istället för att krascha
+      if (!input.taxPointRelation || input.taxPointRelation.trim() === "") {
+        return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar taxepunktsrelation" };
+      }
+      if (!input.kundnamn || input.kundnamn.trim() === "") {
+        return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar kundnamn" };
+      }
+      
+      // Skicka in till trappstegsmodellen
+      return await calculateProfitability(input);
+
+    case FlowType.PAKETBUR:
+      return { step_used: -1, estimated_revenue: 0, detail: "Paketbur: Beräkningsmodell saknas ännu" };
+
+    case FlowType.STYCKEGODS:
+      return { step_used: -1, estimated_revenue: 0, detail: "Styckegods: Beräkningsmodell saknas ännu" };
+
+    case FlowType.EGENFAKTURERAT:
+      return { step_used: -1, estimated_revenue: 0, detail: "Egenfakturerat: Hanteras med angivet belopp" };
+
+    case FlowType.SUNE:
+      return { step_used: -1, estimated_revenue: 0, detail: "Sune: 'Tabell Johan' saknas ännu" };
+
+    default:
+      return { step_used: -1, estimated_revenue: 0, detail: "Okänd frakttyp, kunde inte sorteras" };
+  }
+}
+
+// ============================================================================
+// TRAPPSTEGSMODELLEN (Fjärr/Direktlastat)
+// ============================================================================
 
 function valideraInput(input: ProfitabilityInput) {
     // Validera input
@@ -34,26 +148,6 @@ function valideraInput(input: ProfitabilityInput) {
 export async function calculateProfitability(
   input: ProfitabilityInput
 ): Promise<ProfitabilityResult> {
-  const weight = Number(input.chargeable_weight);
-
-  const supabase = await getSupabaseServerClient();
-  const { data, error } = await supabase.rpc("get_weight_class", {
-    input_weight: weight
-  })
-
-  if (error) {
-    console.error("Fel vid hämtning av viktklass: ", error);
-    throw new Error("Fel vid hämtning av viktklass: " + error.message);
-  }
-
-  // Vi ska bara köra trappstegsmodellen för viktklasser över 20. Skippa alla <= 20
-  if (data <= 20) {
-    return {
-      step_used: -1,
-      estimated_revenue: 0,
-      detail: "Endast viktklasser över 20 hanteras"
-    }
-  }
 
   const jaro = await supabase.rpc("find_best_name_match", {
     input_name: input.kundnamn
