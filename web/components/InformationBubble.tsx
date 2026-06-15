@@ -40,8 +40,8 @@ export function InfoTooltip({
           absolute bottom-full mb-2 ${alignmentClasses[align]}
           w-52 text-xs leading-relaxed
           text-[var(--text-primary)]
-          bg-neutral-100
-          border border-[var(--border-primary)]
+          bg-[var(--background-primary)]
+          border border-[var(--border-secondary)]
           rounded-md shadow-md
           px-3 py-2
           opacity-0 group-hover:opacity-100

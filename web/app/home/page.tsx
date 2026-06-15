@@ -257,32 +257,35 @@ export default function Home() {
             </div>
 
             <div className="p-6 overflow-auto max-h-[calc(90vh-74px)]">
-              <div className="mb-4 text-sm text-[var(--text-primary)]">
-                <p>
-                  <strong>Antal bokningar:</strong>{" "}
-                  {selectedEquipage.consignments.length}
-                </p>
-                <p>
-                  <strong>Total vikt:</strong>{" "}
-                  {selectedEquipage.totalWeightKg.toFixed(0)} kg
-                </p>
-                <p>
-                  <strong>Total FLM:</strong>{" "}
-                  {(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm
-                </p>
-                <p>
-                  <strong>Prognos (total):</strong>{" "}
-                  {selectedEquipage.profitabilityStatus === "done"
-                    ? `${selectedEquipage.totalProfitabilityPrice.toFixed(0)} kr`
-                    : selectedEquipage.profitabilityStatus === "error"
+              <div className="mb-4 grid grid-cols-4 gap-3">
+                {[
+                  { icon: "ti-package", label: "Antal bokningar", value: `${selectedEquipage.consignments.length}`, color: "bg-blue-500/10 text-blue-500" },
+                  { icon: "ti-weight", label: "Total vikt", value: `${selectedEquipage.totalWeightKg.toFixed(0)} kg`, color: "bg-amber-500/10 text-amber-500" },
+                  { icon: "ti-truck", label: "Total FLM", value: `${(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm`, color: "bg-green-500/10 text-green-500" },
+                  {
+                    icon: "ti-cash",
+                    label: "Prognos (total)",
+                    value: selectedEquipage.profitabilityStatus === "done"
+                      ? `${selectedEquipage.totalProfitabilityPrice.toFixed(0)} kr`
+                      : selectedEquipage.profitabilityStatus === "error"
                       ? "Kunde inte beräkna"
-                      : "Beräknar..."}
-                </p>
+                      : "Beräknar...",
+                    color: "bg-green-500/10 text-green-500"
+                  },
+                ].map(({ icon, label, value, color }) => (
+                  <div key={label} className="bg-[var(--secondary-element)] rounded-lg p-4 flex flex-col gap-2">
+                    <div className={`w-9 h-9 rounded-md flex items-center justify-center ${color}`}>
+                      <i className={`ti ${icon} text-lg`} />
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)]">{label}</p>
+                    <p className="text-xl font-medium text-[var(--text-primary)]">{value}</p>
+                  </div>
+                ))}
               </div>
 
               <table className="w-full text-sm text-[var(--text-secondary)] border-collapse" >
                 <thead>
-                  <tr className="border-b-2 border-[var(--border-primary)]">
+                  <tr className="border-b-2 border-[var(--border-primary)] dark:border-gray-600">
                     <th className="text-left py-2 pr-3">Destination</th>
                     <th className="text-left py-2 pr-3">Kundnamn</th>
                     <th className="text-left py-2 pr-3">
@@ -313,7 +316,7 @@ export default function Home() {
                   {selectedEquipage.consignments.map((consignment, index) => (
                     <tr
                       key={`${consignment.consignmentId}-${index}`}
-                      className="border-b border-[var(--border-primary)]"
+                      className="border-b border-[var(--border-primary)] dark:border-gray-600"
                     >
                       <td className="py-2 pr-3">
                         {consignment.destinationCity ||
