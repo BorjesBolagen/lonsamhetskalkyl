@@ -8,6 +8,10 @@ import {
   getDisplayCustomerName,
   useHomeDashboardData,
 } from "./useHomeDashboardData";
+import { InfoTooltip } from "@/components/InformationBubble";
+import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
+import { useState } from "react";
+import { calculateConsignmentProfitabilityPrice, ConsignmentWithProfitability, toBarPercent } from "./hooks/homeTypesAndUtils";
 
 const STANDARD_FLM = 19.2;
 
@@ -37,6 +41,7 @@ export default function Home() {
     closePopup,
     refreshEquipageConsignments,
     refreshLineConsignments,
+    updateEquipageInState,
   } = useHomeDashboardData();
 
   /**
@@ -68,6 +73,54 @@ export default function Home() {
     return Math.max(0, Math.min(100, (totalPrognosis / reference) * 100));
   }
 
+  const [loadingRows, setLoadingRows] = useState<Record<string, boolean>>({});
+  const [activeKeys, setActiveKeys] = useState<Record<string, "original" | "best">>({});
+
+  /**
+   * Handles when you click the buttons on the two different customer names
+   */
+  const handleNameSelect = async (
+    consignment: ConsignmentWithProfitability,
+    chosenName: string,
+    key: "original" | "best"
+  ) => {
+    const id = consignment.consignmentId;
+    setActiveKeys(prev => ({ ...prev, [id]: key }));
+    setLoadingRows(prev => ({ ...prev, [id]: true }));
+    try {
+      const profitabilityValue = await calculateConsignmentProfitabilityPrice({
+        ...consignment,
+        customerName: chosenName,
+      });
+      updateEquipageInState(selectedEquipage!.id, (current) => {
+        const updatedConsignments = current.consignments.map(c => {
+          if (c.consignmentId !== id) return c;
+          return {
+            ...c,
+            activeNameOverride: key,  // store "original" or "best", not the name string
+            profitabilityValue: profitabilityValue ? {
+              ...profitabilityValue,
+              best_score: c.profitabilityValue?.best_score,
+              best_name: c.profitabilityValue?.best_name,
+            } : null,
+          };
+        });
+        const totalProfitabilityPrice = updatedConsignments.reduce(
+          (sum, c) => sum + (c.profitabilityValue?.estimated_revenue ?? 0), 0
+        );
+        return {
+          ...current,
+          consignments: updatedConsignments,
+          totalProfitabilityPrice,
+          profitabilityBarPercent: toBarPercent(totalProfitabilityPrice, profitabilityReferenceValue),
+        };
+      });
+    } catch (e) {
+      console.error("Kunde inte beräkna lönsamhet:", e);
+    } finally {
+      setLoadingRows(prev => ({ ...prev, [id]: false }));
+    }
+  };
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="home" />
@@ -255,46 +308,66 @@ export default function Home() {
             </div>
 
             <div className="p-6 overflow-auto max-h-[calc(90vh-74px)]">
-              <div className="mb-4 text-sm text-[var(--text-primary)]">
-                <p>
-                  <strong>Antal bokningar:</strong>{" "}
-                  {selectedEquipage.consignments.length}
-                </p>
-                <p>
-                  <strong>Total vikt:</strong>{" "}
-                  {selectedEquipage.totalWeightKg.toFixed(0)} kg
-                </p>
-                <p>
-                  <strong>Total FLM:</strong>{" "}
-                  {(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm
-                </p>
-                <p>
-                  <strong>Prognos (total):</strong>{" "}
-                  {selectedEquipage.profitabilityStatus === "done"
-                    ? `${selectedEquipage.totalProfitabilityPrice.toFixed(0)} kr`
-                    : selectedEquipage.profitabilityStatus === "error"
+              <div className="mb-4 grid grid-cols-4 gap-3">
+                {[
+                  { icon: "ti-package", label: "Antal bokningar", value: `${selectedEquipage.consignments.length}`, color: "bg-blue-500/10 text-blue-500" },
+                  { icon: "ti-weight", label: "Total vikt", value: `${selectedEquipage.totalWeightKg.toFixed(0)} kg`, color: "bg-amber-500/10 text-amber-500" },
+                  { icon: "ti-truck", label: "Total FLM", value: `${(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm`, color: "bg-green-500/10 text-green-500" },
+                  {
+                    icon: "ti-cash",
+                    label: "Prognos (total)",
+                    value: selectedEquipage.profitabilityStatus === "done"
+                      ? `${selectedEquipage.totalProfitabilityPrice.toFixed(0)} kr`
+                      : selectedEquipage.profitabilityStatus === "error"
                       ? "Kunde inte beräkna"
-                      : "Beräknar..."}
-                </p>
+                      : "Beräknar...",
+                    color: "bg-green-500/10 text-green-500"
+                  },
+                ].map(({ icon, label, value, color }) => (
+                  <div key={label} className="bg-[var(--secondary-element)] rounded-lg p-4 flex flex-col gap-2">
+                    <div className={`w-9 h-9 rounded-md flex items-center justify-center ${color}`}>
+                      <i className={`ti ${icon} text-lg`} />
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)]">{label}</p>
+                    <p className="text-xl font-medium text-[var(--text-primary)]">{value}</p>
+                  </div>
+                ))}
               </div>
 
               <table className="w-full text-sm text-[var(--text-secondary)] border-collapse" >
                 <thead>
-                  <tr className="border-b-2 border-[var(--border-primary)]">
+                  <tr className="border-b-2 border-[var(--border-primary)] dark:border-gray-600">
                     <th className="text-left py-2 pr-3">Destination</th>
-                    <th className="text-left py-2 pr-3">Kund</th>
+                    <th className="text-left py-2 pr-3">Kundnamn</th>
+                    <th className="text-left py-2 pr-3">
+                      <span className="flex items-center gap-1">
+                        Likhet
+                        <InfoTooltip text={`Hur likt kundnamnet är det matchade namnet. Om likheten är över ${DEFAULT_NAME_SIMILARITY_THRESHOLD * 100}% så är det namnet rekommenderat`} />
+                      </span>
+                    </th>
+                    <th className="text-left py-2 pr-3">
+                      <span className="flex items-center gap-1">
+                        Matchat namn
+                        <InfoTooltip text="Det kundnamn som liknar det inkommande kundnamnet mest." />
+                      </span>
+                    </th>
                     <th className="text-left py-2 pr-3">Hämtadress</th>
                     <th className="text-left py-2 pr-3">Hämtort</th>
                     <th className="text-left py-2 pr-3">Godsuppgifter</th>
                     <th className="text-left py-2 pr-3">Prognos</th>
-                    <th className="text-left py-2 pr-3">Steg</th>
+                    <th className="text-left py-2 pr-3">
+                      <span className="flex items-center gap-1">
+                        Steg
+                        <InfoTooltip text={"Ett lägre steg innebär en bättre prognos."} align="right" />
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedEquipage.consignments.map((consignment, index) => (
                     <tr
                       key={`${consignment.consignmentId}-${index}`}
-                      className="border-b border-[var(--border-primary)]"
+                      className="border-b border-[var(--border-primary)] dark:border-gray-600"
                     >
                       <td className="py-2 pr-3">
                         {consignment.destinationCity ||
@@ -302,7 +375,61 @@ export default function Home() {
                           "-"}
                       </td>
                       <td className="py-2 pr-3">
-                        {getDisplayCustomerName(consignment)}
+                        {(() => {
+                          const name = getDisplayCustomerName(consignment);
+                          const score = consignment.profitabilityValue?.best_score ?? 0;
+                          const isRecommended = score < DEFAULT_NAME_SIMILARITY_THRESHOLD;
+                          const isActive = (activeKeys[consignment.consignmentId] ?? (isRecommended ? "original" : "best")) === "original";
+                            (consignment.activeNameOverride === "original" || (!consignment.activeNameOverride && isRecommended));
+                          return (
+                            <button
+                              onClick={() => handleNameSelect(consignment, name, "original")}
+                              disabled={loadingRows[consignment.consignmentId] || isActive}
+                              title={isRecommended ? "Rekommenderat namn" : undefined}
+                              className={`text-left text-xs px-2 py-1 rounded border transition-all w-full
+                                ${isActive
+                                  ? "bg-[var(--primary-button)] border-[var(--border-primary)] text-[var(--text-primary)] translate-y-[2px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)]"
+                                  : "bg-[var(--primary-button)]/20 border-[var(--border-primary)] text-[var(--text-secondary)] shadow-[0_2px_0px_rgba(0,0,0,0.25)] hover:bg-[var(--primary-button)]/40 hover:text-[var(--text-primary)] active:translate-y-[2px] active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)] cursor-pointer"
+                                }`}
+                            >
+                              <span className="flex items-center gap-1">
+                                {isRecommended && <i className="ti ti-star text-amber-400 text-xl" aria-hidden="true" />}
+                                {name}
+                              </span>
+                            </button>
+                          );
+                        })()}
+                      </td>
+                      
+                      <td className="py-2 pr-3">
+                        {consignment.profitabilityValue?.best_score != null
+                          ? (consignment.profitabilityValue.best_score * 100).toFixed(0) + "%"
+                          : "-"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {(() => {
+                          const bestName = consignment.profitabilityValue?.best_name;
+                          const score = consignment.profitabilityValue?.best_score ?? 0;
+                          const isRecommended = score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
+                          const isActive = (activeKeys[consignment.consignmentId] ?? (isRecommended ? "best" : "original")) === "best";
+                          return (
+                            <button
+                              onClick={() => handleNameSelect(consignment, bestName ?? "", "best")}
+                              disabled={loadingRows[consignment.consignmentId] || isActive}
+                              title={isRecommended ? "Rekommenderat namn" : undefined}
+                              className={`text-left text-xs px-2 py-1 rounded border transition-all w-full
+                                ${isActive
+                                  ? "bg-[var(--primary-button)] border-[var(--border-primary)] text-[var(--text-primary)] translate-y-[2px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)]"
+                                  : "bg-[var(--primary-button)]/20 border-[var(--border-primary)] text-[var(--text-secondary)] shadow-[0_2px_0px_rgba(0,0,0,0.25)] hover:bg-[var(--primary-button)]/40 hover:text-[var(--text-primary)] active:translate-y-[2px] active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)] cursor-pointer"
+                                }`}
+                            >
+                              <span className="flex items-center gap-1">
+                                {isRecommended && <i className="ti ti-star text-amber-400 text-xl" aria-hidden="true" />}
+                                {bestName ?? "-"}
+                              </span>
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="py-2 pr-3">
                         {consignment.pickupLocationStreet ||
@@ -316,20 +443,33 @@ export default function Home() {
                         {consignment.estimatedProperties || "-"}
                       </td>
                       <td className="py-2 pr-3">
-                        {consignment.profitabilityValue
-                          ? consignment.profitabilityValue.step_used === -1
-                            ? consignment.profitabilityValue.detail || "-"
-                            : `${(consignment.profitabilityValue.estimated_revenue ?? 0).toFixed(0)} kr`
-                          : "-"}
+                        {loadingRows[consignment.consignmentId] ? (
+                          <span className="inline-block animate-spin text-[var(--text-secondary)]">
+                            <i className="ti ti-loader-2" aria-hidden="true" />
+                          </span>
+                        ) : (
+                          consignment.profitabilityValue
+                            ? consignment.profitabilityValue.step_used === -1
+                              ? consignment.profitabilityValue.detail || "-"
+                              : `${consignment.profitabilityValue.estimated_revenue.toFixed(0)} kr`
+                            : "-"
+                        )}
                       </td>
+
                       <td className="py-2 pr-3">
-                        {consignment.profitabilityValue
-                          ? consignment.profitabilityValue.step_used === 0 //Om sunes användes
-                            ? "Sune"
-                            : consignment.profitabilityValue.step_used === -1
-                              ? "-"
-                              : `${consignment.profitabilityValue.step_used}`
-                          : "-"}
+                        {loadingRows[consignment.consignmentId] ? (
+                          <span className="inline-block animate-spin text-[var(--text-secondary)]">
+                            <i className="ti ti-loader-2" aria-hidden="true" />
+                          </span>
+                        ) : (
+                          consignment.profitabilityValue
+                            ? consignment.profitabilityValue.step_used === 0 // Om sunes användes
+                              ? "Sune"
+                              : consignment.profitabilityValue.step_used === -1
+                                ? "-"
+                                : `${consignment.profitabilityValue.step_used}`
+                            : "-"
+                        )}
                       </td>
                     </tr>
                   ))}

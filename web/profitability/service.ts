@@ -3,7 +3,9 @@ import "server-only";
 import type { ProfitabilityInput, ProfitabilityResult } from "./types";
 import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
 import { roundUpWeight } from "@/lib/backend/utils";
+import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
+import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { try_sune_lookup } from "./trappsteg_steg";
 
 // ============================================================================
@@ -194,16 +196,46 @@ export async function calculateProfitability(
   input: ProfitabilityInput
 ): Promise<ProfitabilityResult> {
 
+  const supabase = await getSupabaseServerClient();
+  const jaro = await supabase.rpc("find_best_name_match", {
+    input_name: input.kundnamn
+  });
+
+  if (jaro.error || !jaro.data) {
+    console.error("Fel vid jaroberäkning");
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail: "Fel vid Jaro"
+    }
+  }
+
+  const jaroMatch = jaro.data[0].best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
+
+  // Bygg upp bas-resultat. Ändra sedan step_used och estimated_revenue baserat på steg och resultat från trappstegsmodellen
+  let result = {
+    step_used: 0,
+    estimated_revenue: 0,
+    best_score: jaro.data[0].best_score,
+    best_name: jaro.data[0].best_name,
+  };
+
+  if (jaroMatch) {
+    input.kundnamn = jaro.data[0].best_name;
+  }
+
+
   valideraInput(input);
   const weight_plus_one = await roundUpWeight(input.chargeable_weight);
 
   // Försök göra steg 1.
   try {
-    const steg1Estimated = await try_steg_1(input, weight_plus_one);
+    const steg1Estimated = await try_steg_1(input, weight_plus_one, jaroMatch);
 
     // Om steg 1 gav null så fick vi ingen träff. Fortsätt med steg 2
     if (steg1Estimated !== null) {
       return {
+        ...result,
         step_used: 1,
         estimated_revenue: steg1Estimated
       }
@@ -219,11 +251,12 @@ export async function calculateProfitability(
 
   // Försök göra steg 2
   try {
-    const steg2Estimated = await try_steg_2(input, weight_plus_one);
+    const steg2Estimated = await try_steg_2(input, weight_plus_one, jaroMatch);
     
     // Om steg 2 gav null så fick vi ingen träff. Fortsätt med steg 3
     if (steg2Estimated !== null) {
       return {
+        ...result,
         step_used: 2,
         estimated_revenue: steg2Estimated
       }
@@ -239,11 +272,12 @@ export async function calculateProfitability(
 
   // Försök göra steg 3
   try {
-    const steg3Estimated = await (try_steg_3(input, weight_plus_one));
+    const steg3Estimated = await (try_steg_3(input, weight_plus_one, jaroMatch));
 
     // Om steg 3 gav null så fick vi ingen träff. Fortsätt med steg 4
     if (steg3Estimated !== null) {
       return {
+        ...result,
         step_used: 3,
         estimated_revenue: steg3Estimated
       }
@@ -264,6 +298,7 @@ export async function calculateProfitability(
     // Om steg 4 gav null så fick vi ingen träff. Fortsätt med steg 5
     if (steg4Estimated !== null) {
       return {
+        ...result,
         step_used: 4,
         estimated_revenue: steg4Estimated
       }
@@ -284,6 +319,7 @@ export async function calculateProfitability(
     // Om steg 5 gav null så fick vi ingen träff. Då har vi testat alla steg i modellen
     if (steg5Estimated !== null) {
       return {
+        ...result,
         step_used: 5,
         estimated_revenue: steg5Estimated
       }
