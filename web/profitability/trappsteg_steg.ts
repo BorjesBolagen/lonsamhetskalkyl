@@ -2,6 +2,7 @@ import { ProfitabilityInput } from "./types";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { roundUpWeight } from "../lib/backend/utils";
 import { normalizeText } from "./service";
+import { ConsignmentListItem } from "@/lib/ilogTypes";
 
 
 /**
@@ -99,8 +100,9 @@ export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: num
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
 
-    // Kolla om supabase har match på kundnamn, km och viktklass
     const supabase = await getSupabaseServerClient();
+
+    // Kolla om supabase har match på kundnamn, km och viktklass
     const { data: data_orginal, error: error_orginal } = await supabase.rpc("steg_2", {
         in_name: kundnamn,
         in_input_weight: weight,
@@ -295,4 +297,57 @@ export async function try_steg_5(input: ProfitabilityInput, weight_plus_one: num
         return Math.min(estimeratPris_orginal, estimeratPris_plus_ett);
     }
     return estimeratPris_orginal ?? estimeratPris_plus_ett ?? null;
+}
+
+/**
+ * Slår upp pris i Sunes-prislistan baserat på ihopslagen sträng:
+ * Avsändare + Avs-ort + Mottagare + Mott-ort
+ */
+export async function try_sune_lookup(consignment: ConsignmentListItem): Promise<number | null> {
+    const supabase = await getSupabaseServerClient();
+    
+    const sender = (consignment.senderName || "").trim().toUpperCase();
+    const pickupCity = (consignment.pickupLocationCity || "").trim().toUpperCase();
+    const receiver = (consignment.receiverName || "").trim().toUpperCase();
+    const destCity = (consignment.destinationCity || "").trim().toUpperCase();
+
+    if (!pickupCity || !destCity) return null;
+
+    // Skapa och sök med lookup
+    const fuzzy4Part = `%${sender}%${pickupCity}%${receiver}%${destCity}%`;
+
+    let { data, error } = await (supabase as any).from("sunes_pricing")
+        .select("genomsnittspris")
+        .ilike("lookup", fuzzy4Part) 
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error("Fel vid Sune-uppslag Försök 1:", error);
+    }
+
+    if (data && data.genomsnittspris) {
+        return Number(data.genomsnittspris); // Träff på första försöket!
+    }
+
+    // Sök utan mottagare, saknas ibland i prislistan
+    const fuzzy3Part = `%${sender}%${pickupCity}%${destCity}%`;
+
+    const { data: dataFallback, error: errorFallback } = await (supabase as any).from("sunes_pricing")
+        .select("genomsnittspris")
+        .ilike("lookup", fuzzy3Part) 
+        .limit(1)
+        .maybeSingle();
+
+    if (errorFallback) {
+        console.error("Fel vid Sune-uppslag Försök 2:", errorFallback);
+        return null;
+    }
+
+    if (dataFallback && dataFallback.genomsnittspris) {
+        return Number(dataFallback.genomsnittspris);
+    }
+
+    // Ingen träff
+    return null;
 }

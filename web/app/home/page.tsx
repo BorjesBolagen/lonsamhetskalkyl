@@ -463,9 +463,11 @@ export default function Home() {
                           </span>
                         ) : (
                           consignment.profitabilityValue
-                            ? consignment.profitabilityValue.step_used === -1
-                              ? "-"
-                              : `${consignment.profitabilityValue.step_used}`
+                            ? consignment.profitabilityValue.step_used === 0 // Om sunes användes
+                              ? "Sune"
+                              : consignment.profitabilityValue.step_used === -1
+                                ? "-"
+                                : `${consignment.profitabilityValue.step_used}`
                             : "-"
                         )}
                       </td>

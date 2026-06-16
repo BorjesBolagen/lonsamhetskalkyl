@@ -286,17 +286,22 @@ export async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
 ): Promise<ProfitabilityValue | null> {
   try {
-    const res = await fetch("/api/profitability", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ consignment }), 
+    // Bygg en sträng consignment-objektet
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(consignment)) {
+      if (value !== undefined && value !== null) {
+        params.append(key, String(value));
+      }
+    }
+
+    // Gör en GET-request
+    const res = await fetch(`/api/profitability?${params.toString()}`, {
+      method: "GET",
     });
 
     if (!res.ok) {
        console.error("API-fel i simulatorn:", res.status, res.statusText);
-       return null; // Returnera null mjukt istället för att krascha
+       return null;
     }
 
     const data = await res.json();
