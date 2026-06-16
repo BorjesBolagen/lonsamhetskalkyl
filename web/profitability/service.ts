@@ -46,7 +46,14 @@ export function determineFlowType(consignment: ConsignmentListItem): FlowType {
   // =========================================================
   // 2. EGENFAKTURERAT
   // =========================================================
-  // if (...) return FlowType.EGENFAKTURERAT;
+  if (
+    consignment.invoiceStatus && 
+    consignment.invoiceStatus.trim() !== "" && 
+    consignment.internalPrice && 
+    consignment.internalPrice > 0
+  ) {
+    return FlowType.EGENFAKTURERAT;
+  }
 
   // =========================================================
   // 3. PAKETBUR
@@ -127,7 +134,11 @@ export async function routeConsignment(
       return { step_used: -1, estimated_revenue: 0, detail: "Styckegods: Beräkningsmodell saknas ännu" };
 
     case FlowType.EGENFAKTURERAT:
-      return { step_used: -1, estimated_revenue: 0, detail: "Egenfakturerat: Hanteras med angivet belopp" };
+      return { 
+        step_used: 0,
+        estimated_revenue: consignment.internalPrice || 0, 
+        detail: `Egenfakturerat: ${consignment.invoiceStatus}`
+      };
 
     case FlowType.SUNE:
       try {

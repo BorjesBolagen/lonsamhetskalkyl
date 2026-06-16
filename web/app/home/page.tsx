@@ -451,7 +451,7 @@ export default function Home() {
                           consignment.profitabilityValue
                             ? consignment.profitabilityValue.step_used === -1
                               ? consignment.profitabilityValue.detail || "-"
-                              : `${consignment.profitabilityValue.estimated_revenue.toFixed(0)} kr`
+                              : `${(consignment.profitabilityValue.estimated_revenue ?? 0).toFixed(0)} kr`
                             : "-"
                         )}
                       </td>
@@ -463,8 +463,11 @@ export default function Home() {
                           </span>
                         ) : (
                           consignment.profitabilityValue
-                            ? consignment.profitabilityValue.step_used === 0 // Om sunes användes
-                              ? "Sune"
+                            ? consignment.profitabilityValue.step_used === 0 
+                              // Om step är 0 kollar vi om det var Sune eller Egenfakturerat
+                              ? consignment.profitabilityValue.detail?.includes("Sune")
+                                ? "Sune"
+                                : "Egen" 
                               : consignment.profitabilityValue.step_used === -1
                                 ? "-"
                                 : `${consignment.profitabilityValue.step_used}`

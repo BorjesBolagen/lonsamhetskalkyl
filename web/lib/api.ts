@@ -305,6 +305,8 @@ export const calculateProfitability = async (
         taxPointRelation: consignment.taxPointRelation || "",
 		pickupPostalCode: consignment.pickupPostalCode || "",
     	destinationPostalCode: consignment.destinationPostalCode || "",
+		invoiceStatus: consignment.invoiceStatus || "",
+        internalPrice: String(consignment.internalPrice || 0),
     });
 
     const url = `/api/profitability?${params.toString()}`;

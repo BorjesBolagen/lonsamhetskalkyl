@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
       taxPointRelation: searchParams.get("taxPointRelation") || "",
       pickupPostalCode: searchParams.get("pickupPostalCode") || "",
       destinationPostalCode: searchParams.get("destinationPostalCode") || "",
+      invoiceStatus: searchParams.get("invoiceStatus") || "",
+      internalPrice: Number(searchParams.get("internalPrice")) || 0,
     } as ConsignmentListItem;
 
     const supabase = await getSupabaseServerClient();
