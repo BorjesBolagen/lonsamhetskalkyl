@@ -561,11 +561,11 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
       const destinationLocation = asRecord(row.destinationLocation);
 
       const pickupPostalCode =
-        readPostalCodePart(pickupLocation, ["zip", "postalCode", "postCode", "postnummer"]) ||
+        readPostalCodePart(pickupLocation, ["areaCode", "zip", "postalCode", "postCode", "postnummer"]) ||
         readPostalCodePart(row, ["pickupZip", "pickupPostalCode", "senderZip"]);
 
       const destinationPostalCode =
-        readPostalCodePart(destinationLocation, ["zip", "postalCode", "postCode", "postnummer"]) ||
+        readPostalCodePart(destinationLocation, ["areaCode", "zip", "postalCode", "postCode", "postnummer"]) ||
         readPostalCodePart(row, [
           "destinationZip",
           "destinationPostalCode",

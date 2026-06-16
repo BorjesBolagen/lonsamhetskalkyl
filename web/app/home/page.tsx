@@ -324,9 +324,11 @@ export default function Home() {
                       </td>
                       <td className="py-2 pr-3">
                         {consignment.profitabilityValue
-                          ? consignment.profitabilityValue.step_used === -1
-                            ? "-"
-                            : `${consignment.profitabilityValue.step_used}`
+                          ? consignment.profitabilityValue.step_used === 0 //Om sunes användes
+                            ? "Sune"
+                            : consignment.profitabilityValue.step_used === -1
+                              ? "-"
+                              : `${consignment.profitabilityValue.step_used}`
                           : "-"}
                       </td>
                     </tr>

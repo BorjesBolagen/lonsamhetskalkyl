@@ -1,6 +1,7 @@
 import {
   getIlogConsignments,
   ProfitabilityValue,
+  calculateProfitability,
 } from "../../../lib/api";
 import type { ConsignmentListItem, LineItem } from "../../../lib/ilogTypes";
 import { normalizeText } from "../../../lib/areaLineConfig";
@@ -268,31 +269,16 @@ export async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
 ): Promise<ProfitabilityValue | null> {
   try {
-    const res = await fetch("/api/profitability", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      // Vi skickar med HELA bokningen till din nya backend-route
-      body: JSON.stringify({ consignment }), 
-    });
+    const data = await calculateProfitability(consignment);
 
-    // Kontrollera om svaret faktiskt är OK innan vi kör .json()
-    if (!res.ok) {
-       console.error("API-fel:", res.status, res.statusText);
-       return null;
-    }
-
-    const data = await res.json();
-
-    if (!data.success) {
-      console.error("Fel i kalkyl:", data.error);
+    if (!data || !data.success || !data.value) {
+      console.error("Fel i kalkyl:", data?.error);
       return null;
     }
 
     return data.value;
   } catch (error) {
-    console.error("Fel vid anrop till profitability_simulation", error);
+    console.error("Fel vid anrop till profitability", error);
     return null;
   }
 }

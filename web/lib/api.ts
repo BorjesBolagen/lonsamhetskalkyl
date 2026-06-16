@@ -283,28 +283,41 @@ export type ProfitabilityResponse = {
 };
 
 export const calculateProfitability = async (
-	kundnamn: string,
-	taxPointRelation: string,
-	chargeableWeight: number
+    consignment: ConsignmentListItem
 ): Promise<ProfitabilityResponse> => {
 
-	const uriKundnamn = encodeURIComponent(String(kundnamn));
-	const uriTaxPointRelation = encodeURIComponent(String(taxPointRelation));
-	const uriChargeableWeight = encodeURIComponent(Number(chargeableWeight));
+    const params = new URLSearchParams({
+        consignmentId: String(consignment.consignmentId || 0),
+        customerName: consignment.customerName || "",
+        destinationCity: consignment.destinationCity || "",
+        senderName: consignment.senderName || "",
+        pickupLocationName: consignment.pickupLocationName || "",
+        receiverName: consignment.receiverName || "",
+        destinationLocationName: consignment.destinationLocationName || "",
+        weight: String(consignment.weight || 0),
+        zoneName: consignment.zoneName || "",
+        consignmentProperties: consignment.consignmentProperties || "",
+        pickupLocationCity: consignment.pickupLocationCity || "",
+        taxPointRelation: consignment.taxPointRelation || "",
+		pickupPostalCode: consignment.pickupPostalCode || "",
+    	destinationPostalCode: consignment.destinationPostalCode || "",
+    });
 
-	const response = await fetch(`/api/profitability?kundnamn=${uriKundnamn}&taxPointRelation=${uriTaxPointRelation}&chargeable_weight=${uriChargeableWeight}`, {
-		method: "GET",
-	});
+    const url = `/api/profitability?${params.toString()}`;
 
-	const contentType = response.headers.get("content-type") || "";
+    const response = await fetch(url, {
+        method: "GET",
+        cache: "no-store", 
+    });
 
-	if (!contentType.includes("application/json")) {
-		throw new Error("API:t returnerade inte JSON.");
-	}
+    const contentType = response.headers.get("content-type") || "";
 
-	const data = await response.json();
-	console.log("API response:", JSON.stringify(data));
-	return data as ProfitabilityResponse;
+    if (!contentType.includes("application/json")) {
+        throw new Error("API:t returnerade inte JSON.");
+    }
+
+    const data = await response.json();
+    return data as ProfitabilityResponse;
 };
 
 // ============================================================

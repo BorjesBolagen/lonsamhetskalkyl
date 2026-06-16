@@ -4,9 +4,10 @@ import type { ProfitabilityInput, ProfitabilityResult } from "./types";
 import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
 import { roundUpWeight } from "@/lib/backend/utils";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
+import { try_sune_lookup } from "./trappsteg_steg";
 
 // ============================================================================
-// STEG 1 - SORTERA FLÖDEN (ROUTER)
+// STEG 1 - SORTERA FLÖDEN
 // ============================================================================
 export enum FlowType {
   PAKETBUR = "PAKETBUR",
@@ -22,17 +23,31 @@ export function determineFlowType(consignment: ConsignmentListItem): FlowType {
   const destCity = consignment.destinationCity?.toUpperCase() || "";
   const customer = consignment.customerName?.toUpperCase() || "";
   
-  // Hämta och slå ihop fälten för att vara på den säkra sidan
+  // Hämta och slå ihop fälten för att kolla båda samtidigt
   const sender = `${consignment.senderName || ""} ${consignment.pickupLocationName || ""}`.toUpperCase();
   
   const weight = Number(consignment.weight) || 0;
 
-  // 1. Egenfakturerat & Sune (Väntar på info)
-  // if (...) return FlowType.EGENFAKTURERAT;
-  // if (...) return FlowType.SUNE;
+  const lineOrZone = consignment.zoneName?.toUpperCase() || "";
 
   // =========================================================
-  // 2. PAKETBUR (Måste sorteras ut före styckegods!)
+  // 1. SUNE (Letar efter "SUNES" i Linje/Zon, Avsändare, Avs-ort och Mott-ort)
+  // =========================================================
+  if (
+    lineOrZone.includes("SUNES") || 
+    sender.includes("SUNES") || 
+    destCity.includes("SUNES")
+  ) {
+    return FlowType.SUNE;
+  }
+
+  // =========================================================
+  // 2. EGENFAKTURERAT
+  // =========================================================
+  // if (...) return FlowType.EGENFAKTURERAT;
+
+  // =========================================================
+  // 3. PAKETBUR
   // =========================================================
   if (
     customer.includes("PAKETBUR") || 
@@ -43,9 +58,9 @@ export function determineFlowType(consignment: ConsignmentListItem): FlowType {
   }
 
   // =========================================================
-  // 3. STYCKEGODS
+  // 4. STYCKEGODS
   // =========================================================
-  const isStyckegodsCustomer = customer.includes("STYCKEGODS") || customer.includes("STYCKE");
+  const isStyckegodsCustomer = customer.includes("STYCKE");
   
   // Schenker eller DSV (med mellanslag efter) i avsändare
   const isSchenkerOrDSV = 
@@ -58,24 +73,28 @@ export function determineFlowType(consignment: ConsignmentListItem): FlowType {
     sender.includes("STYCKE") || 
     sender.includes("FAST");
     
-  // Saknar mottagarort (här kollar vi om den är helt tom. För specifika ej godkända ortnamn kan vi lägga till en lista framöver)
+  // Saknar mottagarort
   const isMissingDestCity = destCity === ""; 
   
   // Vikt-gränsen
   const isUnder1000kg = weight > 0 && weight < 1000;
+  
+  //Postnummer/postort finns ej
+  const isInvalidInDatabase = (consignment as any)._isDbValidDestination === false;
 
   if (
     isStyckegodsCustomer ||
     isSchenkerOrDSV ||
     hasStyckeKeywordsInSender ||
     isMissingDestCity ||
-    isUnder1000kg
+    isUnder1000kg ||
+    isInvalidInDatabase
   ) {
     return FlowType.STYCKEGODS;
   }
 
   // =========================================================
-  // 4. FJÄRR / DIREKTLASTAT (Övrigt)
+  // 5. FJÄRR / DIREKTLASTAT (Övrigt)
   // =========================================================
   return FlowType.FJARR;
 }
@@ -109,7 +128,34 @@ export async function routeConsignment(
       return { step_used: -1, estimated_revenue: 0, detail: "Egenfakturerat: Hanteras med angivet belopp" };
 
     case FlowType.SUNE:
-      return { step_used: -1, estimated_revenue: 0, detail: "Sune: 'Tabell Johan' saknas ännu" };
+      try {
+          // Försök hitta pris i Sunes databastabell
+          const sunePrice = await try_sune_lookup(consignment);
+          
+          if (sunePrice !== null) {
+              return { 
+                  step_used: 0, // För frontend: 0 = "Sune"
+                  estimated_revenue: sunePrice, 
+                  detail: "Sunes prislista" 
+              };
+          }
+          
+          // Hittades inte, kör trappstegsmodellen
+          console.log("Sune-uppslag misslyckades (finns ej i prislistan), skickar till Fjärr...");
+          
+          if (!input.taxPointRelation || input.taxPointRelation.trim() === "") {
+            return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar taxepunktsrelation" };
+          }
+          if (!input.kundnamn || input.kundnamn.trim() === "") {
+            return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar kundnamn" };
+          }
+          
+          return await calculateProfitability(input);
+
+      } catch (error) {
+          console.error("Krasch i Sune-flödet:", error);
+          return { step_used: -1, estimated_revenue: 0, detail: "Sunes: Databasfel vid uppslag" };
+      }
 
     default:
       return { step_used: -1, estimated_revenue: 0, detail: "Okänd frakttyp, kunde inte sorteras" };
