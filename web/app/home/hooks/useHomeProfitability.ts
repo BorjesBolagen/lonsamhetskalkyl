@@ -9,6 +9,8 @@ import {
   EquipageWithConsignments,
   toBarPercent,
 } from "./homeTypesAndUtils";
+import { getBestNameMatch } from "@/lib/api";
+import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
 
 type UseHomeProfitabilityParams = {
   latestLoadIdRef: MutableRefObject<number>;
@@ -58,12 +60,33 @@ export function useHomeProfitability({
               await Promise.all(
                 equipage.consignments.map(async (consignment) => {
                   try {
+
+                    // Feed recommended name into profitability calculation
+                    const response = await getBestNameMatch(consignment.customerName);
+                    if (!response.status || !response.data) {
+                      console.warn(response.message);
+                      return {
+                        ...consignment,
+                        profitabilityValue: null,
+                      };
+                    }
+
+                    const { best_name, best_score } = response.data!;
+                    const useEntireName = best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
+                    const resolvedConsignment =
+                      useEntireName
+                        ? { ...consignment, customerName: best_name }
+                        : consignment;
+
+
                     const profitabilityValue =
-                      await calculateConsignmentProfitabilityPrice(consignment);
+                      await calculateConsignmentProfitabilityPrice(resolvedConsignment, useEntireName);
 
                     return {
                       ...consignment,
                       profitabilityValue,
+                      best_name: response.data.best_name,
+                      best_score: response.data.best_score,
                     };
                   } catch {
                     return {

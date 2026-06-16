@@ -18,12 +18,11 @@ export type ProfitabilityInput = {
   kundnamn: string;
   taxPointRelation: string;
   chargeable_weight: number;
+  use_entire_name: boolean;
 };
 
 export type ProfitabilityResult = {
   step_used: number;
   estimated_revenue: number;
   detail?: string;
-  jaro_matched_name?: string;
-  jaro_score?: number;
 };

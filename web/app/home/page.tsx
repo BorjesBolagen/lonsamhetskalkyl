@@ -88,10 +88,14 @@ export default function Home() {
     setActiveKeys(prev => ({ ...prev, [id]: key }));
     setLoadingRows(prev => ({ ...prev, [id]: true }));
     try {
+
+      const useEntireName = key === "best"; // useEntireName is true if user selects the best name, false if they select the original name
       const profitabilityValue = await calculateConsignmentProfitabilityPrice({
-        ...consignment,
-        customerName: chosenName,
-      });
+          ...consignment,
+          customerName: chosenName,
+        },
+        useEntireName
+      );
       updateEquipageInState(selectedEquipage!.id, (current) => {
         const updatedConsignments = current.consignments.map(c => {
           if (c.consignmentId !== id) return c;
@@ -100,8 +104,8 @@ export default function Home() {
             activeNameOverride: key,  // store "original" or "best", not the name string
             profitabilityValue: profitabilityValue ? {
               ...profitabilityValue,
-              best_score: c.profitabilityValue?.best_score,
-              best_name: c.profitabilityValue?.best_name,
+              best_score: c.best_name,
+              best_name: c.best_score,
             } : null,
           };
         });
@@ -377,7 +381,7 @@ export default function Home() {
                       <td className="py-2 pr-3">
                         {(() => {
                           const name = getDisplayCustomerName(consignment);
-                          const score = consignment.profitabilityValue?.best_score ?? 0;
+                          const score = consignment.best_score ?? 0;
                           const isRecommended = score < DEFAULT_NAME_SIMILARITY_THRESHOLD;
                           const isActive = (activeKeys[consignment.consignmentId] ?? (isRecommended ? "original" : "best")) === "original";
                             (consignment.activeNameOverride === "original" || (!consignment.activeNameOverride && isRecommended));
@@ -402,14 +406,14 @@ export default function Home() {
                       </td>
                       
                       <td className="py-2 pr-3">
-                        {consignment.profitabilityValue?.best_score != null
-                          ? (consignment.profitabilityValue.best_score * 100).toFixed(0) + "%"
+                        {consignment.best_score != null
+                          ? (consignment.best_score * 100).toFixed(0) + "%"
                           : "-"}
                       </td>
                       <td className="py-2 pr-3">
                         {(() => {
-                          const bestName = consignment.profitabilityValue?.best_name;
-                          const score = consignment.profitabilityValue?.best_score ?? 0;
+                          const bestName = consignment.best_name;
+                          const score = consignment.best_score ?? 0;
                           const isRecommended = score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
                           const isActive = (activeKeys[consignment.consignmentId] ?? (isRecommended ? "best" : "original")) === "best";
                           return (

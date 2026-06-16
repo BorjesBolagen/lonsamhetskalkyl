@@ -273,8 +273,6 @@ export type ProfitabilityValue = {
 	step_used: number;
 	estimated_revenue: number;
 	detail?: string;
-	best_score?: number;
-	best_name?: string;
 };
 
 export type ProfitabilityResponse = {
@@ -282,12 +280,16 @@ export type ProfitabilityResponse = {
 	value?: ProfitabilityValue;
 	error?: string;
 	detail?: string;
-	best_score?: number;
-	best_name?: string;
 };
 
+export type NameMatchResponse = {
+	best_name: string;
+	best_score: number;
+}
+
 export const calculateProfitability = async (
-    consignment: ConsignmentListItem
+    consignment: ConsignmentListItem,
+	useEntireName: boolean
 ): Promise<ProfitabilityResponse> => {
 
     const params = new URLSearchParams({
@@ -305,6 +307,7 @@ export const calculateProfitability = async (
         taxPointRelation: consignment.taxPointRelation || "",
 		pickupPostalCode: consignment.pickupPostalCode || "",
     	destinationPostalCode: consignment.destinationPostalCode || "",
+        useEntireName: String(useEntireName)
     });
 
     const url = `/api/profitability?${params.toString()}`;
@@ -323,6 +326,21 @@ export const calculateProfitability = async (
     const data = await response.json();
     return data as ProfitabilityResponse;
 };
+
+export const getBestNameMatch = async (name: string): Promise<BasicResponse<NameMatchResponse>> => {
+	
+	const params = new URLSearchParams({ name });
+	const response = await fetch(`/api/profitability/jaro-estimation?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		const error = await response.json() as { message?: string };
+		throw new Error(error.message || "Request failed");
+	}
+
+	return (await response.json()) as BasicResponse<NameMatchResponse>;
+}
 
 // ============================================================
 // Historical import

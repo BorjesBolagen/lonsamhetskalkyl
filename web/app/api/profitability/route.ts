@@ -100,10 +100,12 @@ export async function GET(req: NextRequest) {
         _isDbValidDestination: isValidDest 
     } as ConsignmentListItem & { _isDbValidDestination: boolean };
 
+
     const input = {
       kundnamn: enrichedConsignment.customerName,
       taxPointRelation: finalTaxPointRelation, 
       chargeable_weight: enrichedConsignment.weight ?? 0,
+      use_entire_name: searchParams.get("useEntireName") === "true",
     };
 
     const result = await routeConsignment(enrichedConsignment, input);
