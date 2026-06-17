@@ -59,6 +59,30 @@ export default function Admin() {
 
     fetchUsers();
   }, []);
+
+  const [lastImport, setLastImport] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSupabaseBrowserClient()
+      .from("Historical_shipment")
+      .select("imported_at")
+      .order("imported_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setLastImport(data?.imported_at ?? null));
+  }, []);
+
+  const [lastUploadDate, setLastUploadDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSupabaseBrowserClient()
+      .from("Historical_shipment")
+      .select("upload_date")
+      .order("upload_date", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setLastUploadDate(data?.upload_date ?? null));
+  }, []);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isMessagePopupOpen, setIsMessagePopupOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<TrafficLeader | null>(null);
@@ -572,6 +596,15 @@ export default function Admin() {
               <p className="text-sm text-[var(--text-secondary)]">
                 Välj en .csv-fil med historiska kusk-rader. Importen kör en full
                 kontroll, och eventuella fel visas i rutan nedan.
+              </p>
+              <p className="text-sm text-[var(--text-secondary)]">
+                <span>
+                  Senaste importen skedde <b>{lastImport ? new Date(lastImport).toLocaleString("sv-SE") : "Hämtar data..."}</b>
+                </span>
+                <br/>
+                <span>
+                  och täcker sändelser fram till <b>{lastUploadDate ? new Date(lastUploadDate).toLocaleString("sv-SE") : "Hämtar data..."}</b>.
+                </span>
               </p>
 
               <div className="flex justify-center">
