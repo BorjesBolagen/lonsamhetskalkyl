@@ -1,0 +1,467 @@
+================================================================================
+FÖRSLAG: Hämta bokningar (consignments) baserat på EKIPAGE istället för LINJEKLUSTER
+================================================================================
+Datum: 2026-06-17
+Status: FÖRSLAG – ingen kod är ändrad, detta dokument beskriver vad och var som
+        ska justeras samt ger konkreta kodförslag.
+
+--------------------------------------------------------------------------------
+0. VIKTIG UTGÅNGSPUNKT (läs detta först)
+--------------------------------------------------------------------------------
+Själva API-anropet mot iLog görs REDAN idag per ekipage:
+
+    GET /ilog-api-web/equipage/consignments?date=yyyyMMdd&equipageId=<id>
+
+(se web/app/api/ilog/consignments/route.ts, rad 72-75)
+
+Linjeklustren styr alltså INTE hur ett enskilt anrop ser ut – de styr URVALET,
+dvs. VILKA ekipage som ska hämtas. Idag går flödet:
+
+   Vald(a) kluster  ->  matchande linjer  ->  ekipage kopplade till de linjerna
+                    ->  ett consignment-anrop per ekipage
+
+Det vi vill ändra är urvalssteget: användaren ska välja EKIPAGE direkt i
+inställningarna i stället för linjekluster. Resten av kedjan (ett anrop per
+ekipage) är oförändrad.
+
+Konsekvens: vi behöver inte längre gå "kluster -> linje -> ekipage". Vi går
+direkt på "valda ekipage-id -> consignment-anrop". Linjedata hämtas fortfarande
+men endast för att gruppera/visa korten med linjenamn (kosmetiskt), inte för
+att avgöra vad som hämtas.
+
+--------------------------------------------------------------------------------
+1. ÖVERSIKT – DELAR SOM SKA JUSTERAS
+--------------------------------------------------------------------------------
+A. Datamodell / sparat filter (User.filters i Supabase)
+      - Nytt fält: filters.equipages = lista över valda ekipage-id.
+
+B. Konfig-/parserlager
+      - web/lib/equipageConfig.ts  (NY FIL)  – parser/normalisering för valet.
+      - (web/lib/areaLineConfig.ts kan behållas oförändrad; den används inte
+        längre för urval, men bryt inget annat som importerar den.)
+
+C. Inställningssidan (val av vad som ska hämtas)
+      - web/app/settings/page.tsx – ersätt kluster-kryssrutorna med en lista
+        av ekipage (hämtade från iLog) som kan kryssas i.
+
+D. Home-preferenser (läser sparat val)
+      - web/app/home/hooks/useHomePreferences.ts – exponera selectedEquipageIds
+        i stället för (eller utöver) selectedAreaLabels.
+
+E. Hämtningslogiken
+      - web/app/home/hooks/useHomeLoader.ts – filtrera ekipage på valda id i
+        stället för på linjekluster.
+
+F. Sammansättning + cache
+      - web/app/home/useHomeDashboardData.ts – plumba igenom nya värden.
+      - web/app/home/hooks/useHomeCache.ts – byt cache-nyckel och spara valda
+        ekipage-id i stället för klusteretiketter.
+
+G. (Valfritt) En befintlig endpoint /api/ilog/equipages används redan och
+   behöver inte ändras. Den returnerar EquipageItem[] med id + name (regnr)
+   + linkedLineNames.
+
+--------------------------------------------------------------------------------
+2. DATAMODELL – User.filters
+--------------------------------------------------------------------------------
+Idag sparas urvalet som:
+
+    filters.areas = { sml_nybro: true, ahl_borlange: false, ... }   // AreaState
+
+Förslag: lägg till ett nytt fält bredvid (behåll areas för bakåtkompatibilitet
+under en övergångsperiod):
+
+    filters.equipages = [8943, 7862, 9001]   // valda ekipage-id (number[])
+
+Att spara id (inte namn) är robust eftersom consignment-anropet kräver id.
+Vi kan dessutom spara en liten "snapshot" av namn för visning om man vill, men
+det är inte nödvändigt – namn hämtas ändå från /api/ilog/equipages.
+
+--------------------------------------------------------------------------------
+3. NY FIL: web/lib/equipageConfig.ts
+--------------------------------------------------------------------------------
+Syfte: en liten, testbar hjälpmodul för att läsa/skriva ekipagevalet ur det
+löst typade filters-objektet (samma mönster som parseAreaState i
+areaLineConfig.ts).
+
+KODFÖRSLAG (hela filen):
+
+    // web/lib/equipageConfig.ts
+    // Hanterar användarens val av vilka ekipage som ska hämtas.
+
+    /** Type guard för löst typad data från databas/storage. */
+    function isPlainObject(value: unknown): value is Record<string, unknown> {
+      return typeof value === "object" && value !== null && !Array.isArray(value);
+    }
+
+    /**
+     * Läs ut valda ekipage-id ur filters. Accepterar både
+     *   filters.equipages = number[]              (ny form)
+     *   filters.equipages = { "8943": true, ... }  (alternativ map-form)
+     */
+    export function parseSelectedEquipageIds(filters: unknown): number[] {
+      if (!isPlainObject(filters)) {
+        return [];
+      }
+
+      const raw = filters.equipages;
+
+      // Form 1: array av id
+      if (Array.isArray(raw)) {
+        return raw
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value > 0);
+      }
+
+      // Form 2: { id: boolean }
+      if (isPlainObject(raw)) {
+        return Object.entries(raw)
+          .filter(([, isActive]) => isActive === true)
+          .map(([id]) => Number(id))
+          .filter((value) => Number.isInteger(value) && value > 0);
+      }
+
+      return [];
+    }
+
+--------------------------------------------------------------------------------
+4. INSTÄLLNINGSSIDAN: web/app/settings/page.tsx
+--------------------------------------------------------------------------------
+Vad ska ändras: sektionen "Filtrera dina kluster" (rad ~591-637) byter innehåll
+från kluster-kryssrutor till en lista av ekipage. Listan hämtas live från iLog
+via getIlogEquipages(). Spara valda id i filters.equipages.
+
+4.1 Importer (rad ~5-18) – lägg till getIlogEquipages och parsern:
+
+    import {
+      getCurrentlySignedInUser,
+      setFilters,
+      setPassword,
+      getIlogEquipages,          // <-- NYTT
+    } from "../../lib/api";
+    import { parseSelectedEquipageIds } from "../../lib/equipageConfig";  // <-- NYTT
+    import type { EquipageItem } from "../../lib/ilogTypes";              // <-- NYTT
+
+    (Kluster-importerna AREA_KEYS/AREA_OPTIONS/... kan tas bort när
+     kluster-UI:t är borttaget.)
+
+4.2 Nya states (i komponenten, t.ex. nära rad 144):
+
+    // Ekipage hämtade från iLog
+    const [equipages, setEquipages] = useState<EquipageItem[]>([]);
+    const [isLoadingEquipages, setIsLoadingEquipages] = useState(true);
+    // Valda ekipage-id (Set för snabb on/off)
+    const [selectedEquipageIds, setSelectedEquipageIds] = useState<Set<number>>(
+      () => new Set(),
+    );
+    // Sökfält eftersom listan kan vara lång
+    const [equipageSearch, setEquipageSearch] = useState("");
+
+    (Ta bort: const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);)
+
+4.3 Ladda ekipage + initiera valet (ny useEffect, samt utöka befintlig
+    loadCurrentUser i useEffect rad ~210-263):
+
+    // I loadCurrentUser, ersätt: setDistricts(parseAreaState(user.filters));
+    // med:
+    setSelectedEquipageIds(new Set(parseSelectedEquipageIds(user.filters)));
+
+    // Ny effekt: hämta ekipagelistan från iLog
+    useEffect(() => {
+      async function loadEquipages() {
+        try {
+          setIsLoadingEquipages(true);
+          const response = await getIlogEquipages();
+          setEquipages((response.data ?? []) as EquipageItem[]);
+        } catch {
+          setFiltersStatus({
+            type: "error",
+            message: "Kunde inte hämta ekipage från iLog.",
+          });
+        } finally {
+          setIsLoadingEquipages(false);
+        }
+      }
+      void loadEquipages();
+    }, []);
+
+4.4 Toggle-funktion + filtrerad lista (ersätt renderClusterToggle/clusterGroups,
+    rad ~156-203):
+
+    const toggleEquipage = (id: number) => {
+      setSelectedEquipageIds((current) => {
+        const next = new Set(current);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return next;
+      });
+      setHasUnsavedChanges(true);
+    };
+
+    const visibleEquipages = useMemo(() => {
+      const query = equipageSearch.trim().toLowerCase();
+      const sorted = [...equipages].sort((a, b) =>
+        a.name.localeCompare(b.name, "sv"),
+      );
+      if (!query) return sorted;
+      return sorted.filter((eq) => {
+        const haystack = [eq.name, ...eq.linkedLineNames]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(query);
+      });
+    }, [equipages, equipageSearch]);
+
+4.5 Spara (handleSaveSettings, rad ~278-319) – byt areas mot equipages:
+
+    const nextFilters: Record<string, unknown> = {
+      ...storedFilters,
+      equipages: Array.from(selectedEquipageIds),   // <-- NYTT (ersätter areas)
+      theme: draftTheme,
+      profitabilityReferenceValue: validReferenceValue,
+      mileCostReferenceValue,
+    };
+
+    (Vill man behålla areas under övergången: lämna kvar "areas: districts" tills
+     hämtningslogiken helt slutat använda kluster.)
+
+4.6 UI – ersätt blocket "DEL 2: Områden" (rad ~591-637) med en ekipagelista:
+
+    {/* DEL 2: Ekipage (Interaktiv) */}
+    <div>
+      <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
+        Välj ekipage att hämta
+      </h3>
+
+      <input
+        type="text"
+        value={equipageSearch}
+        onChange={(e) => setEquipageSearch(e.target.value)}
+        placeholder="Sök ekipage eller linje..."
+        className="w-full p-3 mb-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+      />
+
+      {isLoadingEquipages && (
+        <p className="text-sm text-gray-600 mb-3">Laddar ekipage...</p>
+      )}
+
+      <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2 max-h-[480px] overflow-y-auto">
+        {visibleEquipages.map((eq) => (
+          <label
+            key={eq.id}
+            className="flex items-center justify-between cursor-pointer py-1.5 w-full hover:bg-[var(--text-hover)] transition-colors px-2 rounded"
+          >
+            <span className="flex flex-col">
+              <span className="font-bold text-base">{eq.name}</span>
+              {eq.linkedLineNames.length > 0 && (
+                <span className="text-xs text-[var(--text-secondary)]">
+                  {eq.linkedLineNames.join(", ")}
+                </span>
+              )}
+            </span>
+            <input
+              type="checkbox"
+              checked={selectedEquipageIds.has(eq.id)}
+              onChange={() => toggleEquipage(eq.id)}
+              className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
+            />
+          </label>
+        ))}
+        {!isLoadingEquipages && visibleEquipages.length === 0 && (
+          <p className="text-sm text-gray-600">Inga ekipage matchar sökningen.</p>
+        )}
+      </div>
+    </div>
+
+    (Behöver fortfarande importen useMemo, som redan finns på rad 19.)
+
+--------------------------------------------------------------------------------
+5. HOME-PREFERENSER: web/app/home/hooks/useHomePreferences.ts
+--------------------------------------------------------------------------------
+Vad ska ändras: exponera selectedEquipageIds i stället för selectedAreaLabels.
+
+5.1 Importer (rad ~4-10) – byt areaLineConfig mot equipageConfig:
+
+    import { parseSelectedEquipageIds } from "../../../lib/equipageConfig";
+
+5.2 State + härledning (rad ~22-35) – ersätt selectedAreas/selectedAreaLabels:
+
+    const [selectedEquipageIds, setSelectedEquipageIds] = useState<number[]>([]);
+    const [equipagesLoaded, setEquipagesLoaded] = useState(false);
+    // ... behåll selectedDate och profitabilityReferenceValue oförändrat ...
+
+    (Ta bort selectedAreaLabels/useMemo-blocket.)
+
+5.3 I loadCurrentUserSettings (rad ~37-62):
+
+    setSelectedEquipageIds(parseSelectedEquipageIds(user.filters));
+    // ...
+    // i finally: setEquipagesLoaded(true);   (ersätter setAreasLoaded)
+
+5.4 Returnera (rad ~64-71):
+
+    return {
+      selectedEquipageIds,        // <-- ersätter selectedAreaLabels
+      selectedDate,
+      setSelectedDate,
+      profitabilityReferenceValue,
+      areasLoaded: equipagesLoaded, // behåll namnet utåt om du vill minimera ändringar
+    };
+
+--------------------------------------------------------------------------------
+6. HÄMTNINGSLOGIKEN: web/app/home/hooks/useHomeLoader.ts
+--------------------------------------------------------------------------------
+Detta är kärnan i ändringen. I dag (rad 116-168):
+  - hämtar linjer + ekipage,
+  - filtrerar linjer på valda kluster (approvedLines),
+  - härleder ekipage från approvedLines.
+
+Nytt beteende:
+  - filtrera ekipage DIREKT på valda ekipage-id,
+  - hämta fortfarande linjer enbart för att kunna sätta linjenamn på korten.
+
+6.1 Params (rad 24-44): byt selectedAreaLabels mot selectedEquipageIds:
+
+    type UseHomeLoaderParams = {
+      selectedDate: string;
+      selectedEquipageIds: number[];   // <-- ersätter selectedAreaLabels: string[]
+      // ... resten oförändrat ...
+    };
+
+    (setAppliedClusterLabels kan behållas men matas nu t.ex. med ekipagenamn,
+     eller döpas om till setAppliedEquipageLabels. Enklast: behåll signaturen
+     och skicka in en lista av valda ekipagenamn för visningstexten.)
+
+6.2 Ersätt urvalslogiken (rad 74-86 samt 109-168). Borttag av
+    normalizedSelectedClusters / lineMatchesSelectedAreas. Ny kärna i loadLines:
+
+    // Tidig retur om inget ekipage valts
+    if (selectedEquipageIds.length === 0) {
+      resetDisplayedData();
+      setAppliedClusterLabels([]);
+      clearHomeCache();
+      return;
+    }
+
+    const [linesResponse, equipagesResponse] = await Promise.all([
+      getIlogLines(),
+      getIlogEquipages(),
+    ]);
+
+    // Linjer behålls endast för visning/gruppering (namnuppslag).
+    const lineById = new Map<number, LineItem>();
+    const lineByNormalizedName = new Map<string, LineItem>();
+    for (const line of (linesResponse.data ?? []) as LineItem[]) {
+      lineById.set(line.id, line);
+      lineByNormalizedName.set(normalizeLineName(line.name), line);
+    }
+
+    // NYTT URVAL: ta exakt de ekipage användaren valt.
+    const selectedIdSet = new Set(selectedEquipageIds);
+    const filteredEquipages = ((equipagesResponse.data ?? []) as EquipageItem[])
+      .filter((equipage) => selectedIdSet.has(equipage.id));
+
+    setCandidateEquipageCount(filteredEquipages.length);
+
+6.3 Per-ekipage-loopen (rad 176-241): consignment-anropet är OFÖRÄNDRAT
+    (getIlogConsignmentsWithRetry(ilogDate, equipage.id)). Det enda som ändras
+    är hur "displayLine" tas fram – nu via lineById/lineByNormalizedName i
+    stället för approvedLines. Exempel på namnuppslag inuti map():
+
+    const matchingLine =
+      equipage.linkedLineIds
+        .map((id) => lineById.get(id))
+        .find((line): line is LineItem => Boolean(line)) ??
+      equipage.linkedLineNames
+        .map((name) => lineByNormalizedName.get(normalizeLineName(name)))
+        .find((line): line is LineItem => Boolean(line));
+
+    // Fallback om ekipaget saknar känd linje: använd ekipagenamnet som rubrik.
+    const displayLineId = matchingLine?.id ?? equipage.id;
+    const displayLineName = matchingLine?.name ?? equipage.name;
+
+    Använd sedan displayLineId/displayLineName där koden idag använder
+    displayLine.id / displayLine.name. Gruppering per linje (groupedByDirectedLine)
+    fungerar likadant, men nu kan ett ekipage utan matchande linje hamna i en
+    grupp med ekipagets eget namn (det är ok – inget tappas bort).
+
+    OBS: orientLineNameForSelectedAreas(...) tar idag emot requestedClusterLabels.
+    Eftersom kluster försvinner kan du antingen:
+      (a) skicka en tom lista och låta linjenamnet visas som det kommer, eller
+      (b) ta bort orienteringssteget och använda displayLineName rakt av.
+
+6.4 refreshConsignmentsForEquipages / refreshEquipageConsignments /
+    refreshLineConsignments (rad 309-417): OFÖRÄNDRADE. De jobbar redan per
+    equipageId och bryr sig inte om kluster.
+
+--------------------------------------------------------------------------------
+7. SAMMANSÄTTNING: web/app/home/useHomeDashboardData.ts
+--------------------------------------------------------------------------------
+Byt namnet selectedAreaLabels -> selectedEquipageIds genomgående:
+
+  - Rad 28-31: destrukturera selectedEquipageIds från useHomePreferences().
+  - Rad 73-87: skicka selectedEquipageIds till useHomeLoader (i stället för
+    selectedAreaLabels).
+  - Rad 109-134: uppdatera return-objektet (ta bort selectedAreaLabels eller
+    byt mot selectedEquipageIds beroende på vad UI:t på home/page.tsx behöver
+    för rubriker/etiketter).
+
+  NB: Sök efter alla användningar av selectedAreaLabels och appliedClusterLabels
+  i web/app/home/ (t.ex. home/page.tsx och useHomeLineState.ts) och uppdatera
+  texter/etiketter därefter. Funktionellt påverkas bara visningen, inte vad som
+  hämtas.
+
+--------------------------------------------------------------------------------
+8. CACHE: web/app/home/hooks/useHomeCache.ts
+--------------------------------------------------------------------------------
+  - Höj cache-nyckeln (HOME_CACHE_KEY, t.ex. "home-lines-cache-v9" -> "...-v10")
+    så att gammal cache som bygger på kluster inte återanvänds felaktigt.
+  - Spara selectedEquipageIds i stället för appliedClusterLabels i cache-payload
+    (eller utöver, beroende på hur useHomeCacheRestore används i
+    useHomeDashboardData.ts rad 89-98).
+
+--------------------------------------------------------------------------------
+9. MIGRERING / BAKÅTKOMPATIBILITET (rekommendation)
+--------------------------------------------------------------------------------
+Eftersom kluster och ekipage är olika urvalsmodeller går det inte att
+automatiskt översätta gamla klusterval till ekipageval på ett tillförlitligt
+sätt (en användare kan ha valt ett kluster utan att känna till de enskilda
+ekipagen). Rekommendation:
+
+  - Vid första inloggningen efter ändringen är filters.equipages tom -> Home
+    visar inget förrän användaren valt ekipage i inställningarna. Lägg ev. en
+    informationsruta på Home: "Välj ekipage i Inställningar för att hämta
+    bokningar."
+  - Behåll parseAreaState/areaLineConfig.ts kvar i kodbasen tills allt är
+    verifierat, men de anropas inte längre i urvalsflödet.
+
+--------------------------------------------------------------------------------
+10. TESTPLAN (kort)
+--------------------------------------------------------------------------------
+  1. Inställningar: ekipagelistan laddas, sökning fungerar, kryss sparas
+     (kontrollera filters.equipages i Supabase).
+  2. Home: endast valda ekipage hämtas (kontrollera nätverksanrop:
+     ett /api/ilog/consignments?equipageId=... per valt ekipage).
+  3. Ekipage utan bokningar visas inte (samma beteende som idag, rad 200-203).
+  4. Ekipage utan känd linje får ändå ett kort (rubrik = ekipagenamn).
+  5. Refresh per ekipage och per linje fungerar oförändrat.
+  6. Tom selektering -> inga kort, ingen krasch.
+
+--------------------------------------------------------------------------------
+11. FILER SOM BERÖRS – SNABBÖVERSIKT
+--------------------------------------------------------------------------------
+  NY:      web/lib/equipageConfig.ts
+  ÄNDRA:   web/app/settings/page.tsx
+  ÄNDRA:   web/app/home/hooks/useHomePreferences.ts
+  ÄNDRA:   web/app/home/hooks/useHomeLoader.ts
+  ÄNDRA:   web/app/home/useHomeDashboardData.ts
+  ÄNDRA:   web/app/home/hooks/useHomeCache.ts
+  EV.:     web/app/home/page.tsx + web/app/home/hooks/useHomeLineState.ts
+           (endast etiketter/visningstext)
+  OFÖRÄNDRAT: web/app/api/ilog/consignments/route.ts
+              web/app/api/ilog/equipages/route.ts
+              web/lib/ilogClient.ts, ilogMappers.ts, ilogTypes.ts
+================================================================================
