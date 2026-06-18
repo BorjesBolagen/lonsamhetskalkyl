@@ -3,14 +3,26 @@
 import { useState, type ReactNode } from "react";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
+import PriceWithAddons from "../../components/PriceWithAddons";
 import type { ConsignmentListItem } from "../../lib/ilogTypes";
+import type { ProfitabilityAddon } from "../../lib/api";
 import { useSimulatorPlanner } from "./useSimulatorPlanner";
 
+type PriceBreakdownValue = {
+  step_used?: number | null;
+  estimated_revenue?: number | null;
+  base_revenue?: number | null;
+  addon_total?: number | null;
+  addons?: ProfitabilityAddon[] | null;
+  addon_warnings?: Array<{
+    code: string;
+    message: string;
+  }> | null;
+  detail?: string | null;
+};
+
 type RevenueFields = {
-  simulatedProfitability?: {
-    estimated_revenue?: number | null;
-    step_used?: number | null;
-  } | null;
+  simulatedProfitability?: PriceBreakdownValue | null;
   revenueMatchStep?: number | null;
   extraDistanceKm?: number | null;
   extraDrivingCost?: number | null;
@@ -451,7 +463,14 @@ export default function SimulatorPage() {
             : "-"}
         </td>
         <td className="px-2 py-2 align-top text-right font-semibold text-[var(--text-primary)]">
-          {revenue > 0 ? `${formatNumber(revenue)} kr` : "-"}
+          {revenue > 0 && data.simulatedProfitability ? (
+            <PriceWithAddons
+              value={data.simulatedProfitability}
+              className="justify-end"
+            />
+          ) : (
+            "-"
+          )}
         </td>
         <td className="px-2 py-2 align-top text-[var(--text-primary)]">
           {shouldShowCalculatedParts &&
@@ -958,9 +977,14 @@ export default function SimulatorPage() {
                                     : "-"}
                                 </td>
                                 <td className="px-2 py-2 align-top text-right font-semibold text-[var(--text-primary)]">
-                                  {revenue > 0
-                                    ? `${formatNumber(revenue)} kr`
-                                    : "-"}
+                                  {revenue > 0 && data.simulatedProfitability ? (
+                                    <PriceWithAddons
+                                      value={data.simulatedProfitability}
+                                      className="justify-end"
+                                    />
+                                  ) : (
+                                    "-"
+                                  )}
                                 </td>
                                 <td className="px-2 py-2 align-top text-[var(--text-primary)]">
                                   {shouldShowCalculatedParts &&

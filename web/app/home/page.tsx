@@ -4,6 +4,7 @@ import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import LineCard from "../../components/LineCard";
 import EquipageCard from "../../components/EquipageCard";
+import PriceWithAddons from "../../components/PriceWithAddons";
 import {
   getDisplayCustomerName,
   useHomeDashboardData,
@@ -447,12 +448,14 @@ export default function Home() {
                           <span className="inline-block animate-spin text-[var(--text-secondary)]">
                             <i className="ti ti-loader-2" aria-hidden="true" />
                           </span>
+                        ) : consignment.profitabilityValue ? (
+                          consignment.profitabilityValue.step_used === -1 ? (
+                            consignment.profitabilityValue.detail || "-"
+                          ) : (
+                            <PriceWithAddons value={consignment.profitabilityValue} />
+                          )
                         ) : (
-                          consignment.profitabilityValue
-                            ? consignment.profitabilityValue.step_used === -1
-                              ? consignment.profitabilityValue.detail || "-"
-                              : `${(consignment.profitabilityValue.estimated_revenue ?? 0).toFixed(0)} kr`
-                            : "-"
+                          "-"
                         )}
                       </td>
 

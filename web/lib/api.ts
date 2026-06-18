@@ -270,11 +270,27 @@ export const getIlogConsignment = async (
 // Profitability simulation
 // ============================================================
 export type ProfitabilityValue = {
-	step_used: number;
-	estimated_revenue: number;
-	detail?: string;
-	best_score?: number;
-	best_name?: string;
+  step_used: number;
+
+  // Pris inklusive tillägg.
+  estimated_revenue: number;
+
+  // Pris utan tillägg.
+  base_revenue?: number;
+
+  addon_total?: number;
+  addons?: ProfitabilityAddon[];
+
+  addon_warnings?: Array<{
+    code: string;
+    message: string;
+  }>;
+
+  detail?: string;
+
+  // Befintliga Jaro-fält som används i Home.
+  best_score?: number;
+  best_name?: string;
 };
 
 export type ProfitabilityResponse = {
@@ -285,6 +301,37 @@ export type ProfitabilityResponse = {
 	best_score?: number;
 	best_name?: string;
 };
+
+export type ProfitabilityAddon = {
+  id: number;
+
+  type:
+    | "orttillagg"
+    | "storstadstillagg"
+    | "balanstillagg";
+
+  direction:
+    | "from"
+    | "to";
+
+  name: string;
+  amount: number;
+  class: number | null;
+
+  region:
+    | "stockholm"
+    | "goteborg"
+    | null;
+
+  lookupSource:
+    | "taxepunkt"
+    | "postort"
+    | "none";
+
+  matchedTaxPoint: string | null;
+  matchedCity: string | null;
+};
+
 
 export const calculateProfitability = async (
     consignment: ConsignmentListItem
