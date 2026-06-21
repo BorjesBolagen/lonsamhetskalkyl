@@ -72,7 +72,11 @@ export default function Admin() {
       .then(({ data }) => setLastImport(data?.imported_at ?? null));
   }, []);
 
+  // Senaste avräkningsdatumet
   const [lastUploadDate, setLastUploadDate] = useState<string | null>(null);
+
+  // Äldsta avräkningsdatumet
+  const [oldestUploadDate, setOldestUploadDate] = useState<string | null>(null);
 
   useEffect(() => {
     getSupabaseBrowserClient()
@@ -83,6 +87,17 @@ export default function Admin() {
       .maybeSingle()
       .then(({ data }) => setLastUploadDate(data?.upload_date ?? null));
   }, []);
+
+  useEffect(() => {
+    getSupabaseBrowserClient()
+      .from("Historical_shipment")
+      .select("upload_date")
+      .order("upload_date", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setOldestUploadDate(data?.upload_date ?? null));
+  }, []);
+
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isMessagePopupOpen, setIsMessagePopupOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<TrafficLeader | null>(null);
@@ -112,6 +127,17 @@ export default function Admin() {
     handleCSVUploadClick,
     handleCSVSelected,
   } = useHistoricalImport();
+
+  // Temporary stuff for name translation matching
+  const [isNameTranslationPopupOpen, setIsNameTranslationPopupOpen] = useState(false);
+  const [translationStartDate, setTranslationStartDate] = useState("");
+  const [translationEndDate, setTranslationEndDate] = useState("");
+
+  function handleReadTranslation() {
+    if (!translationStartDate || !translationEndDate) return;
+    // call your existing logic here, passing the range
+    // e.g. fetchNameTranslations(translationStartDate, translationEndDate)
+  }
 
   const handleUpdateUser = async (user: TrafficLeader) => {
     const trimmedPassword = editPassword.trim();
@@ -363,6 +389,12 @@ export default function Admin() {
               >
                 ✉ Skicka Meddelande
               </button>
+              <button
+                onClick={() => setIsNameTranslationPopupOpen(true)}
+                className="px-4 py-2 bg-[#74ED40] hover:bg-[#60C435] text-[var-(--text-primary)] font-semibold rounded shadow transition-colors duration-300"
+              >
+                Läs in namn
+              </button>
             </div>
           </div>
 
@@ -603,7 +635,7 @@ export default function Admin() {
                 </span>
                 <br/>
                 <span>
-                  och täcker sändelser fram till <b>{lastUploadDate ? new Date(lastUploadDate).toLocaleString("sv-SE") : "Hämtar data..."}</b>.
+                  och täcker sändelser med avräkningsdatum fram till <b>{lastUploadDate ? new Date(lastUploadDate).toLocaleString("sv-SE") : "Hämtar data..."}</b>.
                 </span>
               </p>
 
@@ -903,6 +935,74 @@ export default function Admin() {
               className="mt-8 w-full border-2 border-gray-300 font-bold p-3 rounded hover:bg-[var(--secondary-element)]-100 transition-colors"
             >
               Stäng
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Namnöversättning */}
+      {isNameTranslationPopupOpen && (
+        <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
+          <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-secondary)]">
+            <button
+              onClick={() => setIsNameTranslationPopupOpen(false)}
+              className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
+            >
+              ✖
+            </button>
+            <h3 className="font-bold text-xl mb-6 border-b-2 border-green-500 pb-2">
+              Temporär namnöversättningstabellsgenerator
+            </h3>
+            <p className="mb-4">
+              KUSK-data i databasen täcker avräkningsdatumen{" "}
+              <b>
+                {oldestUploadDate ? new Date(oldestUploadDate).toLocaleString("sv-SE") : "Hämtar data..."} -{" "}
+                {lastUploadDate ? new Date(lastUploadDate).toLocaleString("sv-SE") : "Hämtar data..."}
+              </b>
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 mb-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor="translationStartDate"
+                  className="block text-sm font-medium text-[var(--text-primary)]"
+                >
+                  Från datum
+                </label>
+                <input
+                  id="translationStartDate"
+                  type="date"
+                  value={translationStartDate}
+                  max={translationEndDate || undefined}
+                  onChange={(e) => setTranslationStartDate(e.target.value)}
+                  className="w-full text-[var(--text-primary)] border-2 border-[var(--border-primary)] rounded p-2 focus:outline-none focus:ring-2 focus:ring-green-700"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor="translationEndDate"
+                  className="block text-sm font-medium text-[var(--text-primary)]"
+                >
+                  Till datum
+                </label>
+                <input
+                  id="translationEndDate"
+                  type="date"
+                  value={translationEndDate}
+                  min={translationStartDate || undefined}
+                  onChange={(e) => setTranslationEndDate(e.target.value)}
+                  className="w-full text-[var(--text-primary)] border-2 border-[var(--border-primary)] rounded p-2 focus:outline-none focus:ring-2 focus:ring-green-700"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleReadTranslation}
+              disabled={!translationStartDate || !translationEndDate}
+              className="mt-4 w-full py-2 rounded-lg bg-green-600 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Läs
             </button>
           </div>
         </div>
