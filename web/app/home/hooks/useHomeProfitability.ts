@@ -11,6 +11,7 @@ import {
 } from "./homeTypesAndUtils";
 import { getBestNameMatch, getNameTranslations } from "@/lib/api";
 import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
+import { NameSource } from "@/components/Dropdown";
 
 type UseHomeProfitabilityParams = {
   latestLoadIdRef: MutableRefObject<number>;
@@ -75,7 +76,7 @@ export function useHomeProfitability({
                         profitabilityValue: null,
                         translationOptions: translations,
                         selectedNameForProfitability: translations.length > 0 ? translations[0] : consignment.customerName,
-                        selectedNameSource: (translations.length > 0 ? "translation" : "base") as const,
+                        selectedNameSource: (translations.length > 0 ? "translation" : "base") as NameSource,
                       };
                     }
 
