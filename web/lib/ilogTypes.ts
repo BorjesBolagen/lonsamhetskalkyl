@@ -56,6 +56,8 @@ export type ConsignmentListItem = {
     waybillnumber: string;
     status: string;
     ownStatus: string;
+    invoiceStatus: string;
+    internalPrice: number;
     taxPointRelation: string;
     pickupPostalCode: string;
     destinationPostalCode: string;

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  calculateProfitability,
   getCurrentlySignedInUser,
   getIlogLines,
 } from "../api";
@@ -280,40 +281,35 @@ export function calculateConsignmentTotals(
 
 /**
  * Räknar prognos för en bokning via profitability-motorn.
- * Används av Home och Simulator.
+ * Används av Home och simulatorn.
  */
 export async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
 ): Promise<ProfitabilityValue | null> {
+  const kundnamn = consignment.customerName?.trim();
+  const taxPointRelation = consignment.taxPointRelation?.trim();
+  const weight = Number(consignment.weight);
+
+  if (!kundnamn || !taxPointRelation || !Number.isFinite(weight)) {
+    return null;
+  }
+
   try {
-    // Bygg en sträng consignment-objektet
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(consignment)) {
-      if (value !== undefined && value !== null) {
-        params.append(key, String(value));
-      }
-    }
+    // Hela bokningen skickas så att API-routen även får postnummer och postorter.
+    const response = await calculateProfitability(consignment);
 
-    // Gör en GET-request
-    const res = await fetch(`/api/profitability?${params.toString()}`, {
-      method: "GET",
-    });
-
-    if (!res.ok) {
-       console.error("API-fel i simulatorn:", res.status, res.statusText);
-       return null;
-    }
-
-    const data = await res.json();
-
-    if (!data.success) {
-      console.error("Fel i kalkyl:", data.error);
+    if (!response.success || !response.value) {
       return null;
     }
 
-    return data.value;
+    return response.value;
   } catch (error) {
-    console.error("Fel vid anrop till profitability_simulation", error);
+    console.error(
+      error instanceof Error
+        ? error.message
+        : "Okänt fel vid lönsamhetskalkyl",
+    );
+
     return null;
   }
 }
