@@ -1,0 +1,224 @@
+================================================================================
+KODANALYSRAPPORT – lonsamhetskalkyl
+Datum: 2026-06-22
+Genererad av: Claude Code (automatisk kodgranskning)
+================================================================================
+
+Föregående rapport: kodanalys_2026-06-12.txt (ligger på branchen
+claude/quirky-ptolemy-ekQSw). Denna rapport täcker därför utvecklingen sedan dess,
+dvs commits 2026-06-12 – 2026-06-18. Notera att förra rapportens öppna fynd
+H3/L1 (debugRaw-läckage i iLog-routes, batchad postort-lookup) åtgärdades i en
+ej mergad commit f5572d5 på samma branch – kontrollera att den nått main.
+
+
+================================================================================
+1. VAD HAR HÄNT SEDAN SIST (commits 2026-06-12 – 2026-06-18)
+================================================================================
+
+Översikt: ca 14 filer ändrade, ca +1641 / -652 rader. Huvudfokus har legat på
+lönsamhetsberäkningen (profitability), namnmatchning av kunder samt
+beroendeuppdateringar.
+
+NYTT / TILLAGT
+--------------
+* Nytt lönsamhetsflöde "SUNE" implementerat (c94ec2d "Implementerat SUNE,
+  postort/postnummer kollas och andra småfix").
+  - web/profitability/service.ts fick en ny FlowType-enum (PAKETBUR, STYCKEGODS,
+    FJARR, EGENFAKTURERAT, SUNE, UNKNOWN) och funktionen determineFlowType() som
+    sorterar varje sändning till rätt flöde.
+  - web/app/api/profitability/route.ts skrevs om: tar nu emot ett helt
+    consignment-objekt och slår själv upp taxepunkter mot tabellen
+    tax_point_lookup (på postnummer med fallback på postort) för både avsändare
+    och mottagare, och bygger taxPointRelation automatiskt.
+  - Ny RPC/uppslagslogik try_sune_lookup i web/profitability/trappsteg_steg.ts.
+* Nytt dokument forslag-hamtning-per-ekipage.txt (+467 rader) med förslag på hur
+  bokningar kan hämtas per ekipage (aea2dcf, mergead i fe56d3b).
+* Namnmatchning: knappar för att byta vald kund, samt stjärnmarkering av
+  rekommenderad kund (d9c4be0). Endast jaro-namn eller 6 första bokstäverna
+  används i trappstegsmodellen (e4cb971). Fetmarkering av använt namn samt
+  infobubblor (d733e7f, 2f16530).
+
+ÄNDRAT
+------
+* Beroenden uppgraderade pga sårbarheter (39aa031 "fix vulnerabilities",
+  e11b7b9, dependabot #21):
+  - next: ^16.2.4 -> ^16.2.9
+  - react / react-dom: ^19.2.5 -> ^19.2.7
+* web/profitability/service.ts byggdes ut kraftigt (+211 rader) – ny
+  routeConsignment()-funktion som dirigerar sändningen till rätt beräkningssteg.
+* web/profitability/trappsteg_steg.ts justerad (+57 rader) – steghantering och
+  prisestimering.
+* web/app/home/page.tsx (+196 rader) och home-hooks justerade för
+  namnmatchning/UI. Översiktstabeller snyggades till + darkmode (17a7d92).
+* Supabase-anrop fixade (7c49f1f).
+* Mindre fix i web/lib/api.ts, web/lib/ilogMappers.ts,
+  web/lib/backend/transportPlanningUtils.ts, web/components/InformationBubble.tsx.
+
+BORTTAGET
+---------
+* Den gamla funktionen calculateProfitability() ersattes av routeConsignment() i
+  anropskedjan (web/app/api/profitability/route.ts). Den enklare validerings-
+  och felhanteringskoden i routen togs bort till förmån för uppslagslogiken.
+
+Merge-historik: PR #19, #20, #21 (dependabot next), #22 (name-matching) samt en
+merge av txt-filen om nya filter.
+
+
+================================================================================
+2. PRIORITERAD LISTA – FÖRBÄTTRINGSFÖRSLAG
+================================================================================
+
+Prioritet anges som [HÖG] / [MEDEL] / [LÅG].
+
+--------------------------------------------------------------------------------
+HÖG PRIORITET
+--------------------------------------------------------------------------------
+
+[HÖG] H1. Saknad auktorisering på /api/users/get/user (informationsläckage)
+  Fil: web/app/api/users/get/user/route.ts
+  GET-routen tar emot ett userId som queryparameter och returnerar HELA
+  User-raden (select("*")) utan att kontrollera vem som anropar. Klienten skapas
+  med getSupabaseServerClient() (anon-nyckel + cookies), så skyddet beror helt
+  på att Row Level Security (RLS) i Supabase är korrekt konfigurerad. Om RLS
+  saknas eller är för tillåtande kan vilken inloggad (eller oinloggad) användare
+  som helst läsa andra användares data genom att gissa/iterera userId.
+  Åtgärd: Verifiera anropande användare (admin eller samma id) innan data
+  returneras, och bekräfta att RLS-policy finns för User-tabellen. Begränsa även
+  vilka kolumner som returneras (undvik select("*")).
+
+[HÖG] H2. Säkerhet i lönsamhetskedjan vilar enbart på odokumenterad RLS
+  Fil: web/app/api/profitability/route.ts
+  Den omskrivna routen gör flera databasuppslag (tax_point_lookup) och kör
+  affärskritisk prisberäkning helt utan explicit autentiseringskontroll. Som
+  ovan beror skyddet på RLS. Affärslogik och prissättningsdata bör inte vara
+  åtkomlig för oinloggade.
+  Åtgärd: Lägg till en central auth-helper (se M5) och anropa den i början av
+  routen. Dokumentera tydligt vilka tabeller som skyddas av RLS.
+
+[HÖG] H3. Division med noll i prisestimering ger NaN/Infinity i ekonomiska tal
+  Fil: web/profitability/trappsteg_steg.ts (funktionen estimeraPris, ~rad 60-65)
+    return totalKundnettofrakt / totalVikt * weight;
+  Om totalVikt = 0 (alla rader har vikt 0, eller tom datamängd som ändå når hit)
+  blir resultatet Infinity eller NaN, vilket sedan kan spridas vidare genom
+  intäkts-/lönsamhetsberäkningen och visas för användaren. Se även relaterad
+  null-hantering i try_steg_4 där Math.min() kan ta emot null/NaN.
+  Åtgärd: if (totalVikt === 0) return null; och säkerställ att efterföljande steg
+  hanterar null innan Math.min()/jämförelser.
+
+
+--------------------------------------------------------------------------------
+MEDEL PRIORITET
+--------------------------------------------------------------------------------
+
+[MEDEL] M1. Otypade Supabase-anrop med (supabase as any)
+  Fil: web/app/api/profitability/route.ts (flera ställen kring tax_point_lookup)
+  Castning till any kringgår TypeScript och döljer eventuella schema-/typfel.
+  Åtgärd: Lägg in tax_point_lookup i det genererade Supabase-schemat och ta bort
+  as any så anropen blir typade.
+
+[MEDEL] M2. N+1 / upp till 4 sekventiella DB-anrop per lönsamhetsberäkning
+  Fil: web/app/api/profitability/route.ts
+  Routen gör upp till fyra separata await-anrop mot tax_point_lookup
+  (destination postnr -> destination postort -> pickup postnr -> pickup postort),
+  helt sekventiellt. Det blir långsamt och belastar databasen, särskilt om routen
+  anropas en gång per sändning i en lista.
+  Åtgärd: Slå ihop till en RPC/batch-fråga, eller hämta alla aktuella taxepunkter
+  i ett anrop. Cacha tax_point_lookup (data ändras sällan).
+
+[MEDEL] M3. Validera taxPointRelation-format innan parsning
+  Fil: web/profitability/trappsteg_steg.ts (~rad 21)
+    const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim()
+        .split("-").map(Number) || [];
+  Vid t.ex. "123-456-789" eller tomt värde blir resultatet fel/undefined utan
+  felhantering, vilket ger felaktig taxepunktsmatchning.
+  Åtgärd: Validera att split ger exakt två delar och att båda är giltiga tal;
+  annars hoppa över steget / returnera tydligt fel.
+
+[MEDEL] M4. Bräcklig delning av data mellan steg via _isDbValidDestination
+  Filer: web/app/api/profitability/route.ts, web/profitability/service.ts
+  Routen lägger till en informell property (consignment as any)._isDbValidDestination
+  som determineFlowType()/routeConsignment() sedan läser via (consignment as any).
+  Anropas dessa funktioner från annat håll saknas flaggan och flödet kan
+  felklassificeras.
+  Åtgärd: Gör fältet till en officiell del av typen (eller skicka det som separat
+  argument) så kontraktet blir explicit och typkollat.
+
+[MEDEL] M5. Duplicerad auth-/felhanteringskod i många routes
+  Filer: web/app/api/users/route.ts, web/app/api/messages/add/route.ts m.fl.
+  Samma mönster (getCurrentUser -> 401 -> kontrollera role admin -> 403)
+  upprepas i route efter route, med små variationer. Vissa routes saknar det helt
+  (H1, H2).
+  Åtgärd: Skapa en helper, t.ex. requireUser()/requireAdmin(), och använd den
+  konsekvent. Minskar både duplicering och risken att glömma kontrollen.
+
+[MEDEL] M6. Duplicerade utility-funktioner mellan moduler
+  Filer: web/app/home/hooks/homeTypesAndUtils.ts och
+         web/lib/backend/transportPlanningUtils.ts
+  Funktioner som calculateConsignmentProfitabilityPrice, toBarPercent,
+  orientLineNameForSelectedAreas och getDisplayCustomerName finns på flera
+  ställen med likartad logik. Risk för att de divergerar över tid.
+  Åtgärd: Konsolidera till en delad modul.
+
+[MEDEL] M7. Ingen caching av externa iLog-anrop
+  Filer: web/app/api/ilog/lines/route.ts, equipages/route.ts, consignments/route.ts
+  Externa iLog-anrop görs utan caching; samma linjer/ekipage hämtas upprepade
+  gånger per session.
+  Åtgärd: Lägg på lämplig Cache-Control / revalidate för stabil data, eller cacha
+  i minne/Redis.
+
+
+--------------------------------------------------------------------------------
+LÅG PRIORITET
+--------------------------------------------------------------------------------
+
+[LÅG] L1. Död/överbliven kod efter refaktorering
+  Fil: web/app/home/page.tsx (~rad 383) – ett uttryck beräknas men används aldrig.
+  Fil: web/profitability/service.ts (~rad 49) – utkommenterad EGENFAKTURERAT-logik.
+  Åtgärd: Ta bort död kod respektive ersätt kommentaren med en TODO/issue.
+
+[LÅG] L2. Inkonsekventa svarsformat mellan API-routes
+  Olika routes returnerar { error }, { status, message } respektive
+  { success, error }. En route (web/app/api/messages/get/messages/route.ts)
+  returnerar dessutom status: false tillsammans med HTTP 200 vid lyckat svar.
+  Åtgärd: Standardisera ett svarsformat, t.ex. { status: boolean, message: string,
+  data?: T }, och rätta status-flaggan i meddelande-routen.
+
+[LÅG] L3. Använd Number.isFinite i stället för isNaN samt längdvalidera postnummer
+  Fil: web/app/api/profitability/route.ts
+  parseInt + !isNaN() är mindre robust; postnummer längdvalideras inte heller
+  (4-5 siffror).
+  Åtgärd: Number.isFinite(num) och enkel längdkontroll innan DB-uppslag.
+
+[LÅG] L4. Loggning av detaljerade Supabase-fel
+  Fil: web/app/api/auth/forgot-password/route.ts (~rad 52-57)
+  console.error loggar message/name/status/code från Supabase. Kan läcka
+  systeminformation i produktionsloggar.
+  Åtgärd: Logga sammanfattat i prod, full detalj endast i dev / säker logger.
+
+[LÅG] L5. select("*") utan paginering för användarlista
+  Fil: web/app/api/users/route.ts (~rad 23) – hämtar alla kolumner för alla
+  användare. Åtgärd: begränsa kolumner och lägg till range()/limit() vid behov.
+
+[LÅG] L6. Stor monolitisk Home-komponent utan memoization
+  Fil: web/app/home/page.tsx – stor komponent med IIFE:er per rad-rendering.
+  Åtgärd: Bryt ut sändningsraderna till en memoiserad delkomponent.
+
+[LÅG] L7. Hårdkodade iLog-credentials via process.env utan rotation
+  Filer: web/lib/ilogClient.ts, .env.example (ILOG_PASSWORD m.fl.)
+  Basic auth byggs i Base64 (ej kryptering). Acceptabelt för server-side env men
+  bör hanteras via en secret manager och roteras. Kontrollera även att inga
+  ILOG_*-variabler råkar exponeras som NEXT_PUBLIC_*.
+  Åtgärd: Secret manager + rutin för rotation; verifiera prefix.
+
+================================================================================
+SAMMANSTÄLLNING
+================================================================================
+HÖG:   3   (saknad auktorisering x2, division med noll)
+MEDEL: 7   (otypade DB-anrop, N+1, formatvalidering, bräckligt datakontrakt,
+            dupl. auth, dupl. utils, ingen iLog-cache)
+LÅG:   7   (död kod, svarsformat, isNaN/postnr, loggning, paginering,
+            komponentstorlek, secrets)
+
+Rekommenderad första åtgärd: H1–H3 (auktorisering + division med noll), följt av
+M5 (gemensam auth-helper) som även stänger H1/H2 strukturellt.
+================================================================================
