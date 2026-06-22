@@ -4,6 +4,7 @@ import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import LineCard from "../../components/LineCard";
 import EquipageCard from "../../components/EquipageCard";
+import { NameDropdown, type NameSource } from "../../components/Dropdown";
 import PriceWithAddons from "../../components/PriceWithAddons";
 import {
   getDisplayCustomerName,
@@ -75,35 +76,34 @@ export default function Home() {
   }
 
   const [loadingRows, setLoadingRows] = useState<Record<string, boolean>>({});
-  const [activeKeys, setActiveKeys] = useState<Record<string, "original" | "best">>({});
 
   /**
-   * Handles when you click the buttons on the two different customer names
+   * Handles when you select a name from the dropdown
    */
   const handleNameSelect = async (
     consignment: ConsignmentWithProfitability,
     chosenName: string,
-    key: "original" | "best"
+    source: NameSource
   ) => {
     const id = consignment.consignmentId;
-    setActiveKeys(prev => ({ ...prev, [id]: key }));
     setLoadingRows(prev => ({ ...prev, [id]: true }));
     try {
+      // Use the entire name for translation and jaro sources, but not for base
+      const useEntireName = source === "translation" || source === "jaro";
       const profitabilityValue = await calculateConsignmentProfitabilityPrice({
-        ...consignment,
-        customerName: chosenName,
-      });
+          ...consignment,
+          customerName: chosenName,
+        },
+        useEntireName
+      );
       updateEquipageInState(selectedEquipage!.id, (current) => {
         const updatedConsignments = current.consignments.map(c => {
           if (c.consignmentId !== id) return c;
           return {
             ...c,
-            activeNameOverride: key,  // store "original" or "best", not the name string
-            profitabilityValue: profitabilityValue ? {
-              ...profitabilityValue,
-              best_score: c.profitabilityValue?.best_score,
-              best_name: c.profitabilityValue?.best_name,
-            } : null,
+            profitabilityValue: profitabilityValue,
+            selectedNameForProfitability: chosenName,
+            selectedNameSource: source,
           };
         });
         const totalProfitabilityPrice = updatedConsignments.reduce(
@@ -340,18 +340,6 @@ export default function Home() {
                   <tr className="border-b-2 border-[var(--border-primary)] dark:border-gray-600">
                     <th className="text-left py-2 pr-3">Destination</th>
                     <th className="text-left py-2 pr-3">Kundnamn</th>
-                    <th className="text-left py-2 pr-3">
-                      <span className="flex items-center gap-1">
-                        Likhet
-                        <InfoTooltip text={`Hur likt kundnamnet är det matchade namnet. Om likheten är över ${DEFAULT_NAME_SIMILARITY_THRESHOLD * 100}% så är det namnet rekommenderat`} />
-                      </span>
-                    </th>
-                    <th className="text-left py-2 pr-3">
-                      <span className="flex items-center gap-1">
-                        Matchat namn
-                        <InfoTooltip text="Det kundnamn som liknar det inkommande kundnamnet mest." />
-                      </span>
-                    </th>
                     <th className="text-left py-2 pr-3">Hämtadress</th>
                     <th className="text-left py-2 pr-3">Hämtort</th>
                     <th className="text-left py-2 pr-3">Godsuppgifter</th>
@@ -376,61 +364,11 @@ export default function Home() {
                           "-"}
                       </td>
                       <td className="py-2 pr-3">
-                        {(() => {
-                          const name = getDisplayCustomerName(consignment);
-                          const score = consignment.profitabilityValue?.best_score ?? 0;
-                          const isRecommended = score < DEFAULT_NAME_SIMILARITY_THRESHOLD;
-                          const isActive = (activeKeys[consignment.consignmentId] ?? (isRecommended ? "original" : "best")) === "original";
-                            (consignment.activeNameOverride === "original" || (!consignment.activeNameOverride && isRecommended));
-                          return (
-                            <button
-                              onClick={() => handleNameSelect(consignment, name, "original")}
-                              disabled={loadingRows[consignment.consignmentId] || isActive}
-                              title={isRecommended ? "Rekommenderat namn" : undefined}
-                              className={`text-left text-xs px-2 py-1 rounded border transition-all w-full
-                                ${isActive
-                                  ? "bg-[var(--primary-button)] border-[var(--border-primary)] text-[var(--text-primary)] translate-y-[2px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)]"
-                                  : "bg-[var(--primary-button)]/20 border-[var(--border-primary)] text-[var(--text-secondary)] shadow-[0_2px_0px_rgba(0,0,0,0.25)] hover:bg-[var(--primary-button)]/40 hover:text-[var(--text-primary)] active:translate-y-[2px] active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)] cursor-pointer"
-                                }`}
-                            >
-                              <span className="flex items-center gap-1">
-                                {isRecommended && <i className="ti ti-star text-amber-400 text-xl" aria-hidden="true" />}
-                                {name}
-                              </span>
-                            </button>
-                          );
-                        })()}
-                      </td>
-                      
-                      <td className="py-2 pr-3">
-                        {consignment.profitabilityValue?.best_score != null
-                          ? (consignment.profitabilityValue.best_score * 100).toFixed(0) + "%"
-                          : "-"}
-                      </td>
-                      <td className="py-2 pr-3">
-                        {(() => {
-                          const bestName = consignment.profitabilityValue?.best_name;
-                          const score = consignment.profitabilityValue?.best_score ?? 0;
-                          const isRecommended = score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
-                          const isActive = (activeKeys[consignment.consignmentId] ?? (isRecommended ? "best" : "original")) === "best";
-                          return (
-                            <button
-                              onClick={() => handleNameSelect(consignment, bestName ?? "", "best")}
-                              disabled={loadingRows[consignment.consignmentId] || isActive}
-                              title={isRecommended ? "Rekommenderat namn" : undefined}
-                              className={`text-left text-xs px-2 py-1 rounded border transition-all w-full
-                                ${isActive
-                                  ? "bg-[var(--primary-button)] border-[var(--border-primary)] text-[var(--text-primary)] translate-y-[2px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)]"
-                                  : "bg-[var(--primary-button)]/20 border-[var(--border-primary)] text-[var(--text-secondary)] shadow-[0_2px_0px_rgba(0,0,0,0.25)] hover:bg-[var(--primary-button)]/40 hover:text-[var(--text-primary)] active:translate-y-[2px] active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)] cursor-pointer"
-                                }`}
-                            >
-                              <span className="flex items-center gap-1">
-                                {isRecommended && <i className="ti ti-star text-amber-400 text-xl" aria-hidden="true" />}
-                                {bestName ?? "-"}
-                              </span>
-                            </button>
-                          );
-                        })()}
+                        <NameDropdown
+                          consignment={consignment}
+                          onSelect={(name, source) => handleNameSelect(consignment, name, source)}
+                          loading={loadingRows[consignment.consignmentId] || false}
+                        />
                       </td>
                       <td className="py-2 pr-3">
                         {consignment.pickupLocationStreet ||

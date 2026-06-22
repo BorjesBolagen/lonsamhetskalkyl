@@ -501,13 +501,15 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
 
       const status = formatStatus(row);
 
-      const senderName =
+      const senderName = normalizeCustomerName(
         readString(row, ["sender", "senderName", "pickupName", "sendername"]) ||
-        readNestedString(row, "pickupLocation", ["name", "city"]);
+        readNestedString(row, "pickupLocation", ["name", "city"])
+      );
 
-      const receiverName =
+      const receiverName = normalizeCustomerName(
         readString(row, ["receiver", "receiverName", "destinationName", "receivername"]) ||
-        readNestedString(row, "destinationLocation", ["name", "city"]);
+        readNestedString(row, "destinationLocation", ["name", "city"])
+      );
 
       const destinationCity =
         readNestedString(row, "destinationLocation", ["city"]) ||

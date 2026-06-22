@@ -149,6 +149,7 @@ export async function GET(req: NextRequest) {
       _isDbValidDestination: boolean;
     };
 
+
     const input = {
       kundnamn: enrichedConsignment.customerName,
       taxPointRelation: finalTaxPointRelation,

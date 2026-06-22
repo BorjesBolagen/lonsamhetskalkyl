@@ -227,7 +227,8 @@ export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> 
  */
 export const getIlogConsignments = async (
 	date: string,
-	equipageId: number
+	equipageId: number,
+	signal?: AbortSignal
 ): Promise<IlogResponse<ConsignmentListItem[]>> => {
 	const params = new URLSearchParams({
 		date,
@@ -236,6 +237,7 @@ export const getIlogConsignments = async (
 
 	const response = await fetch(`/api/ilog/consignments?${params.toString()}`, {
 		method: "GET",
+		signal,
 	});
 
 	if (!response.ok) {
@@ -298,10 +300,30 @@ export type ProfitabilityResponse = {
 	value?: ProfitabilityValue;
 	error?: string;
 	detail?: string;
-	best_score?: number;
-	best_name?: string;
 };
 
+export type NameMatchResponse = {
+	best_name: string;
+	best_score: number;
+}
+
+export type NameTranslationResponse = {
+	translations: string[];
+}
+
+export const getNameTranslations = async (name: string): Promise<BasicResponse<NameTranslationResponse>> => {
+	const params = new URLSearchParams({ name });
+	const response = await fetch(`/api/profitability/name-translations?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		const error = await response.json() as { message?: string };
+		throw new Error(error.message || "Request failed");
+	}
+
+	return (await response.json()) as BasicResponse<NameTranslationResponse>;
+}
 export type ProfitabilityAddon = {
   id: number;
 
@@ -334,7 +356,7 @@ export type ProfitabilityAddon = {
 
 
 export const calculateProfitability = async (
-    consignment: ConsignmentListItem
+    consignment: ConsignmentListItem,
 ): Promise<ProfitabilityResponse> => {
 
     const params = new URLSearchParams({
@@ -372,6 +394,21 @@ export const calculateProfitability = async (
     const data = await response.json();
     return data as ProfitabilityResponse;
 };
+
+export const getBestNameMatch = async (name: string): Promise<BasicResponse<NameMatchResponse>> => {
+	
+	const params = new URLSearchParams({ name });
+	const response = await fetch(`/api/profitability/jaro-estimation?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		const error = await response.json() as { message?: string };
+		throw new Error(error.message || "Request failed");
+	}
+
+	return (await response.json()) as BasicResponse<NameMatchResponse>;
+}
 
 // ============================================================
 // Historical import
