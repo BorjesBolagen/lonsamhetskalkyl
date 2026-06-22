@@ -275,7 +275,6 @@ export async function calculateProfitability(
     // Om steg 1 gav null så fick vi ingen träff. Fortsätt med steg 2
     if (steg1Estimated !== null) {
       return await addAddonsToProfitabilityResult(input, {
-        ...result,
         step_used: 1,
         estimated_revenue: steg1Estimated
       });
@@ -296,7 +295,6 @@ export async function calculateProfitability(
     // Om steg 2 gav null så fick vi ingen träff. Fortsätt med steg 3
     if (steg2Estimated !== null) {
       return await addAddonsToProfitabilityResult(input, {
-        ...result,
         step_used: 2,
         estimated_revenue: steg2Estimated
       });
@@ -317,7 +315,6 @@ export async function calculateProfitability(
     // Om steg 3 gav null så fick vi ingen träff. Fortsätt med steg 4
     if (steg3Estimated !== null) {
       return await addAddonsToProfitabilityResult(input, {
-        ...result,
         step_used: 3,
         estimated_revenue: steg3Estimated
       });
@@ -338,7 +335,6 @@ export async function calculateProfitability(
     // Om steg 4 gav null så fick vi ingen träff. Fortsätt med steg 5
     if (steg4Estimated !== null) {
       return await addAddonsToProfitabilityResult(input, {
-        ...result,
         step_used: 4,
         estimated_revenue: steg4Estimated
       });
@@ -359,7 +355,6 @@ export async function calculateProfitability(
     // Om steg 5 gav null så fick vi ingen träff. Då har vi testat alla steg i modellen
     if (steg5Estimated !== null) {
       return await addAddonsToProfitabilityResult(input, {
-        ...result,
         step_used: 5,
         estimated_revenue: steg5Estimated
       });
