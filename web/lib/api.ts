@@ -227,7 +227,8 @@ export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> 
  */
 export const getIlogConsignments = async (
 	date: string,
-	equipageId: number
+	equipageId: number,
+	signal?: AbortSignal
 ): Promise<IlogResponse<ConsignmentListItem[]>> => {
 	const params = new URLSearchParams({
 		date,
@@ -236,6 +237,7 @@ export const getIlogConsignments = async (
 
 	const response = await fetch(`/api/ilog/consignments?${params.toString()}`, {
 		method: "GET",
+		signal,
 	});
 
 	if (!response.ok) {
@@ -287,9 +289,26 @@ export type NameMatchResponse = {
 	best_score: number;
 }
 
+export type NameTranslationResponse = {
+	translations: string[];
+}
+
+export const getNameTranslations = async (name: string): Promise<BasicResponse<NameTranslationResponse>> => {
+	const params = new URLSearchParams({ name });
+	const response = await fetch(`/api/profitability/name-translations?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		const error = await response.json() as { message?: string };
+		throw new Error(error.message || "Request failed");
+	}
+
+	return (await response.json()) as BasicResponse<NameTranslationResponse>;
+}
+
 export const calculateProfitability = async (
     consignment: ConsignmentListItem,
-	useEntireName: boolean
 ): Promise<ProfitabilityResponse> => {
 
     const params = new URLSearchParams({
@@ -307,7 +326,6 @@ export const calculateProfitability = async (
         taxPointRelation: consignment.taxPointRelation || "",
 		pickupPostalCode: consignment.pickupPostalCode || "",
     	destinationPostalCode: consignment.destinationPostalCode || "",
-        useEntireName: String(useEntireName)
     });
 
     const url = `/api/profitability?${params.toString()}`;

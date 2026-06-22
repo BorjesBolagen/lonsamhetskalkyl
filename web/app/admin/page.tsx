@@ -1,14 +1,16 @@
 "use client";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { useState, useEffect } from "react";
-import { addMessage, signUpProcedure } from "@/lib/api";
+import { useState, useEffect, useRef } from "react";
+import { addMessage, signUpProcedure, getIlogEquipages, getIlogConsignments, getCurrentlySignedInUser } from "@/lib/api";
 import { Enums, Constants, TablesUpdate } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
 import { validatePassword } from "@/lib/validation";
 import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
 import PasswordInput from "../../components/PasswordInput";
+import { ConsignmentListItem, EquipageItem } from "@/lib/ilogTypes";
+import { StorageError } from "@supabase/storage-js";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 
@@ -132,12 +134,189 @@ export default function Admin() {
   const [isNameTranslationPopupOpen, setIsNameTranslationPopupOpen] = useState(false);
   const [translationStartDate, setTranslationStartDate] = useState("");
   const [translationEndDate, setTranslationEndDate] = useState("");
+  const [loadingTranslation, setLoadingTranslation] = useState(false);
 
-  function handleReadTranslation() {
-    if (!translationStartDate || !translationEndDate) return;
-    // call your existing logic here, passing the range
-    // e.g. fetchNameTranslations(translationStartDate, translationEndDate)
+  // Mellan dessa datum har vi redan gjort namnöversättning
+  const [oldestTranslationDate, setOldestTranslationDate] = useState<string | null>(null);
+  const [newestTranslationDate, setNewestTranslationDate] = useState<string | null>(null);
+  const [totalNameTranslations, setTotalNameTranslations] = useState<number | null>(null);
+
+  useEffect(() => {
+    getSupabaseBrowserClient()
+      .from("name_translation")
+      .select("upload_date")
+      .order("upload_date", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { setNewestTranslationDate(data?.upload_date ?? null) });
+  }, []);
+
+  useEffect(() => {
+    getSupabaseBrowserClient()
+      .from("name_translation")
+      .select("upload_date")
+      .order("upload_date", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setOldestTranslationDate(data?.upload_date ?? null));
+  }, []);
+
+  useEffect(() => {
+    getSupabaseBrowserClient()
+      .from("name_translation")
+      .select("*", { count: "exact", head: true })
+      .then(({ count }) => setTotalNameTranslations(count ?? 0));
+  }, []);
+
+  // Logging translation stuff
+  type LogColor = "yellow" | "red" | "green";
+  const [logs, setLogs] = useState<{ message: string; color: LogColor }[]>([]);
+
+  function addLog(message: string, color: LogColor = "green") {
+    setLogs(prev => [...prev, { message, color }]);
   }
+
+  const colorClass: Record<LogColor, string> = {
+  yellow: "text-yellow-400",
+  red: "text-red-400",
+  green: "text-green-400"
+};
+
+  const logBottomRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    logBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  async function handleReadTranslation() {
+
+    if (!translationStartDate || !translationEndDate) {
+      addLog(`Angiva datum saknas`, "red");
+      return;
+    }
+
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+    const supabase = getSupabaseBrowserClient();
+    setLoadingTranslation(true);
+    try {
+      // 1. Fetch equipages once
+      let equipages: EquipageItem[];
+      try {
+        equipages = (await getIlogEquipages()).data ?? [];
+        addLog(`Hittade ${equipages.length} ekipage`);
+      } catch (error) {
+        addLog("!!!Kunde inte hämta iLog ekipage: " + error);
+        return;
+      }
+      const days = getDaysBetween(translationStartDate, translationEndDate);
+      addLog(`Hämtar data för ${days.length} dagar...`);
+
+      // 2. Fetch all days in batches
+      const CONCURRENCY = 5;
+      const ilogData: { date: string; consignments: ConsignmentListItem[] }[] = [];
+      const startTime = Date.now();
+      let completedDays = 0;
+
+      for (let i = 0; i < days.length; i += CONCURRENCY) {
+        const batch = days.slice(i, i + CONCURRENCY);
+        addLog(`Arbetar med dagar ${batch}`)
+        const batchResults = await Promise.all(
+          batch.map(async (day) => {
+            const equipageResults = await Promise.all(
+              equipages.map(async (equipage) => {
+                try {
+                  const res = await getIlogConsignments(day, equipage.id, signal);
+
+                  if (res.data !== undefined && res.data.length > 0) {
+                    const waybill = res.data[0].waybillnumber;
+                    const asNumber = Number(waybill);
+                    if (isNaN(asNumber)) {
+                      throw new Error(`Waybillnumber "${waybill}" är inte ett nummer`);
+                    }
+                    if (res.data[0].customerName.includes("*") || res.data[0].senderName.includes("*") || res.data[0].receiverName.includes("*")) {
+                      addLog(`${res.data[0].customerName} :: ${res.data[0].senderName} :: ${res.data[0].receiverName} `);
+                    }
+                  }
+                  return res.data ?? [];
+                } catch (error) {
+                  if ((error as Error).name === "AbortError") throw error;
+                  const msg = error instanceof Error ? error.message : String(error);
+                  addLog(`Fel för ekipage ${equipage.id} dag ${day}: ${msg}. Hoppar över.`, "red");
+                  return [];
+                }
+              })
+            );
+
+            // Flatten and filter out empty equipages
+            const consignments = equipageResults.flat().filter(c => c !== null);
+            addLog(`Hämtade alla sändelser för dag ${day}. Lägger in i databas`)
+
+            // Call RPC immediately with this day's data
+            const { data, error } = await supabase.rpc("fill_name_translation_from_consignments", {
+              in_data: consignments,
+              in_date: day,
+            });
+            if (error) throw error;
+
+            addLog(`Dag ${day} hittade ${data[0].inserted} översättningar och ignorerade ${data[0].skipped}`, "yellow");
+
+            completedDays++;
+            const elapsed = (Date.now() - startTime) / 1000;
+            const avgPerDay = elapsed / completedDays;
+            const remaining = Math.round(avgPerDay * (days.length - completedDays));
+            const remainingStr = remaining > 0 ? `~${remaining}s` : " — snart klar!";
+            addLog(`Estimerad tid kvar: ${remainingStr}`);
+
+            return { date: day, consignments };
+          })
+        );
+
+        ilogData.push(...batchResults);
+      }
+
+      // 3. Upload to Supabase Storage
+      addLog("Laddar upp iLog data till Supabase...");
+      const fileName = `ilog_${translationStartDate}_${translationEndDate}_${Date.now()}.json`;
+      const blob = new Blob([JSON.stringify(ilogData)], { type: "application/json" });
+      
+      try {
+        const { error: uploadError } = await supabase.storage
+          .from("ilog-uploads")
+          .upload(fileName, blob);
+        if (uploadError) throw uploadError;
+        addLog("Uppladdning klar");
+      } catch (error) {
+        const msg = error instanceof StorageError ? error.message : String(error);
+        addLog(`Uppladdning misslyckades: ${msg}`);
+        return;
+      }
+
+      // 4. Call RPC (later)
+
+    } catch (error) {
+      if ((error as Error).name === "AbortError") {
+        addLog("Avbruten av användaren");
+      } else { 
+        const msg = error instanceof Error ? error.message : JSON.stringify(error);
+        addLog("Okänt fel: " + msg);
+      }
+    } finally {
+      setLoadingTranslation(false);
+    }
+  }
+
+function getDaysBetween(start: string, end: string): string[] {
+  const days = [];
+  const current = new Date(start);
+  const last = new Date(end);
+  while (current <= last) {
+    days.push(current.toISOString().split("T")[0].replace(/-/g, ""));
+    current.setDate(current.getDate() + 1);
+  }
+  return days;
+}
 
   const handleUpdateUser = async (user: TrafficLeader) => {
     const trimmedPassword = editPassword.trim();
@@ -943,7 +1122,7 @@ export default function Admin() {
       {/* Namnöversättning */}
       {isNameTranslationPopupOpen && (
         <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
-          <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-md relative text-[var(--text-secondary)]">
+          <div className="bg-[var(--primary-element)] p-8 rounded-xl shadow-xl w-full max-w-3xl relative text-[var(--text-secondary)]">
             <button
               onClick={() => setIsNameTranslationPopupOpen(false)}
               className="absolute top-4 right-4 text-[var(--text-secondary)] hover:text-black text-xl"
@@ -951,14 +1130,32 @@ export default function Admin() {
               ✖
             </button>
             <h3 className="font-bold text-xl mb-6 border-b-2 border-green-500 pb-2">
-              Temporär namnöversättningstabellsgenerator
+              Uppdatera tabell för kundnamnsöversättning
             </h3>
-            <p className="mb-4">
+            <p className="mb-1">
               KUSK-data i databasen täcker avräkningsdatumen{" "}
               <b>
-                {oldestUploadDate ? new Date(oldestUploadDate).toLocaleString("sv-SE") : "Hämtar data..."} -{" "}
-                {lastUploadDate ? new Date(lastUploadDate).toLocaleString("sv-SE") : "Hämtar data..."}
+                {oldestUploadDate ? new Date(oldestUploadDate).toLocaleDateString("sv-SE") : "Hämtar data..."} </b>till{" "}
+              <b>
+                {lastUploadDate ? new Date(lastUploadDate).toLocaleDateString("sv-SE") : "Hämtar data..."}
               </b>
+            </p>
+
+            <p className="mb-1">
+              Namnöversättning har redan gjorts på datumen{" "}
+              <b>
+                {oldestTranslationDate ? new Date(oldestTranslationDate).toLocaleDateString("sv-SE") : "Hämtar data..."} </b>till{" "}
+              <b>
+                {newestTranslationDate ? new Date(newestTranslationDate).toLocaleDateString("sv-SE") : "Hämtar data..."}
+              </b>
+            </p>
+
+            <p className="mb-2">
+              Det finns totalt <b>{totalNameTranslations}</b> översättningar mellan iLog och KUSK namn
+            </p>
+
+            <p>
+              Ange datum som namnöversättningen ska ske mellan
             </p>
 
             <div className="grid grid-cols-2 gap-3 mb-2">
@@ -967,7 +1164,7 @@ export default function Admin() {
                   htmlFor="translationStartDate"
                   className="block text-sm font-medium text-[var(--text-primary)]"
                 >
-                  Från datum
+                  Från och med
                 </label>
                 <input
                   id="translationStartDate"
@@ -984,7 +1181,7 @@ export default function Admin() {
                   htmlFor="translationEndDate"
                   className="block text-sm font-medium text-[var(--text-primary)]"
                 >
-                  Till datum
+                  Till och med
                 </label>
                 <input
                   id="translationEndDate"
@@ -997,10 +1194,42 @@ export default function Admin() {
               </div>
             </div>
 
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-m text-[var(--text-secondary)]">Logg</span>
+                <div className="flex gap-2">
+                  {loadingTranslation && (
+                    <button
+                      onClick={() => abortControllerRef.current?.abort()}
+                      className="px-3 py-1 text-m text-[var(--text-secondary)] hover:text-black cursor-pointer bg-orange-400 rounded-lg"
+                    >
+                      Avbryt
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setLogs([])}
+                    className="px-3 py-1 text-m text-[var(--text-secondary)] hover:text-black cursor-pointer bg-red-400 rounded-lg"
+                  >
+                    Rensa
+                  </button>
+                </div>
+              </div>
+              <div className="w-full h-60 overflow-y-auto rounded-lg bg-gray-900 text-green-400 text-sm font-mono p-3 flex flex-col gap-1">
+                {logs.length === 0 
+                  ? <span className="text-gray-500">Väntar...</span>
+                  : logs.map((log, i) => (
+                    <span key={i} className={`whitespace-pre ${colorClass[log.color]}`}>
+                      {log.message}
+                    </span>
+                  ))
+                }
+                <div ref={logBottomRef} />
+              </div>
+            </div>
             <button
               onClick={handleReadTranslation}
-              disabled={!translationStartDate || !translationEndDate}
-              className="mt-4 w-full py-2 rounded-lg bg-green-600 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={loadingTranslation}
+              className="mt-4 w-full py-2 rounded-lg bg-green-600 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer hover:bg-green-700 disabled:hover:bg-green-600"
             >
               Läs
             </button>

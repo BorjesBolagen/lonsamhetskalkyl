@@ -179,9 +179,6 @@ function valideraInput(input: ProfitabilityInput) {
     if (isNaN(input.chargeable_weight)) {
         throw new Error("Levererad vikt måste vara ett giltigt tal.");
     }
-    if (input.use_entire_name === undefined) {
-        throw new Error("Ej specifierat om hela namnet ska användas");
-    }
 }
 
 /**
@@ -199,13 +196,12 @@ export async function calculateProfitability(
   input: ProfitabilityInput
 ): Promise<ProfitabilityResult> {
 
-  console.log("use entire name: ", input.use_entire_name, typeof input.use_entire_name);
   valideraInput(input);
   const weight_plus_one = await roundUpWeight(input.chargeable_weight);
 
   // Försök göra steg 1.
   try {
-    const steg1Estimated = await try_steg_1(input, weight_plus_one, input.use_entire_name);
+    const steg1Estimated = await try_steg_1(input, weight_plus_one);
 
     // Om steg 1 gav null så fick vi ingen träff. Fortsätt med steg 2
     if (steg1Estimated !== null) {
@@ -225,7 +221,7 @@ export async function calculateProfitability(
 
   // Försök göra steg 2
   try {
-    const steg2Estimated = await try_steg_2(input, weight_plus_one, input.use_entire_name);
+    const steg2Estimated = await try_steg_2(input, weight_plus_one);
     
     // Om steg 2 gav null så fick vi ingen träff. Fortsätt med steg 3
     if (steg2Estimated !== null) {
@@ -245,7 +241,7 @@ export async function calculateProfitability(
 
   // Försök göra steg 3
   try {
-    const steg3Estimated = await (try_steg_3(input, weight_plus_one, input.use_entire_name));
+    const steg3Estimated = await (try_steg_3(input, weight_plus_one));
 
     // Om steg 3 gav null så fick vi ingen träff. Fortsätt med steg 4
     if (steg3Estimated !== null) {

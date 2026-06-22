@@ -29,21 +29,57 @@ export type Database = {
         }
         Relationships: []
       }
-      Addon: {
+      Addons: {
         Row: {
-          addon_type: number
-          addon_value: number
-          shipment_id: number
+          carriers_share: number | null
+          Class: number | null
+          id: number
+          name: string | null
+          weight_from: number | null
+          weight_to: number | null
         }
         Insert: {
-          addon_type: number
-          addon_value: number
-          shipment_id: number
+          carriers_share?: number | null
+          Class?: number | null
+          id?: number
+          name?: string | null
+          weight_from?: number | null
+          weight_to?: number | null
         }
         Update: {
-          addon_type?: number
-          addon_value?: number
-          shipment_id?: number
+          carriers_share?: number | null
+          Class?: number | null
+          id?: number
+          name?: string | null
+          weight_from?: number | null
+          weight_to?: number | null
+        }
+        Relationships: []
+      }
+      addons_postal: {
+        Row: {
+          balanstillagg: string | null
+          id: number
+          orttillagg: string | null
+          postort: string | null
+          stor: string | null
+          taxepunkt: number
+        }
+        Insert: {
+          balanstillagg?: string | null
+          id?: number
+          orttillagg?: string | null
+          postort?: string | null
+          stor?: string | null
+          taxepunkt: number
+        }
+        Update: {
+          balanstillagg?: string | null
+          id?: number
+          orttillagg?: string | null
+          postort?: string | null
+          stor?: string | null
+          taxepunkt?: number
         }
         Relationships: []
       }
@@ -285,6 +321,48 @@ export type Database = {
           },
         ]
       }
+      name_translation: {
+        Row: {
+          ilog_name: string
+          kusk_customer_id: number | null
+          kusk_name: string
+          receiver_taxep: number
+          sender_taxep: number
+          upload_date: string | null
+        }
+        Insert: {
+          ilog_name: string
+          kusk_customer_id?: number | null
+          kusk_name: string
+          receiver_taxep: number
+          sender_taxep: number
+          upload_date?: string | null
+        }
+        Update: {
+          ilog_name?: string
+          kusk_customer_id?: number | null
+          kusk_name?: string
+          receiver_taxep?: number
+          sender_taxep?: number
+          upload_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "name_translation_receiver_taxep_fkey"
+            columns: ["receiver_taxep"]
+            isOneToOne: false
+            referencedRelation: "taxepunkter"
+            referencedColumns: ["taxepunktspostnummer"]
+          },
+          {
+            foreignKeyName: "name_translation_sender_taxep_fkey"
+            columns: ["sender_taxep"]
+            isOneToOne: false
+            referencedRelation: "taxepunkter"
+            referencedColumns: ["taxepunktspostnummer"]
+          },
+        ]
+      }
       pricing_parameter: {
         Row: {
           admin_ID: string | null
@@ -320,6 +398,39 @@ export type Database = {
           },
         ]
       }
+      sunes_pricing: {
+        Row: {
+          avs_ort: string | null
+          avsandare: string | null
+          avsandarplats: string | null
+          genomsnittspris: number | null
+          lookup: string
+          mott_ort: string | null
+          mottagare: string | null
+          mottagarplats: string | null
+        }
+        Insert: {
+          avs_ort?: string | null
+          avsandare?: string | null
+          avsandarplats?: string | null
+          genomsnittspris?: number | null
+          lookup: string
+          mott_ort?: string | null
+          mottagare?: string | null
+          mottagarplats?: string | null
+        }
+        Update: {
+          avs_ort?: string | null
+          avsandare?: string | null
+          avsandarplats?: string | null
+          genomsnittspris?: number | null
+          lookup?: string
+          mott_ort?: string | null
+          mottagare?: string | null
+          mottagarplats?: string | null
+        }
+        Relationships: []
+      }
       tax_point_lookup: {
         Row: {
           kontor: string | null
@@ -344,6 +455,29 @@ export type Database = {
           postort?: string | null
           taxepunkt?: string | null
           taxepunktspostnummer?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_tax_point_lookup_taxepunkt"
+            columns: ["taxepunktspostnummer"]
+            isOneToOne: false
+            referencedRelation: "taxepunkter"
+            referencedColumns: ["taxepunktspostnummer"]
+          },
+        ]
+      }
+      taxepunkter: {
+        Row: {
+          taxepunktsnamn: string
+          taxepunktspostnummer: number
+        }
+        Insert: {
+          taxepunktsnamn: string
+          taxepunktspostnummer?: number
+        }
+        Update: {
+          taxepunktsnamn?: string
+          taxepunktspostnummer?: number
         }
         Relationships: []
       }
@@ -421,9 +555,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_applicable_addons: {
+        Args: {
+          p_chargeable_weight: number
+          p_receiver_postort: string
+          p_receiver_taxepunkt: string
+          p_sender_postort: string
+          p_sender_taxepunkt: string
+        }
+        Returns: Json
+      }
       dedupe_historical_shipment_after_import: {
         Args: { in_source_file_name?: string }
         Returns: number
+      }
+      fill_name_translation_from_consignments: {
+        Args: { in_data: Json; in_date: string }
+        Returns: {
+          inserted: number
+          skipped: number
+        }[]
       }
       find_best_name_match: {
         Args: { input_name: string }
@@ -448,28 +599,53 @@ export type Database = {
           vkl: number
         }[]
       }
-      get_medel_forh_kundvis: {
-        Args: { in_kundnamn: string; in_use_entire_name?: boolean }
-        Returns: number
-      }
+      get_medel_forh_kundvis:
+        | { Args: { in_kundnamn: string }; Returns: number }
+        | {
+            Args: { in_kundnamn: string; in_use_entire_name?: boolean }
+            Returns: number
+          }
       get_medel_se: {
         Args: { in_kilometer: number; in_viktklass: number }
         Returns: number
       }
       get_office_for_taxep: { Args: { in_taxep: number }; Returns: string }
-      get_snitt_forh_se_radvis: {
-        Args: {
-          in_kundnamn: string
-          in_use_entire_name?: boolean
-          in_weight: number
-        }
-        Returns: number
-      }
+      get_snitt_forh_se_radvis:
+        | { Args: { in_kundnamn: string; in_weight: number }; Returns: number }
+        | {
+            Args: {
+              in_kundnamn: string
+              in_use_entire_name?: boolean
+              in_weight: number
+            }
+            Returns: number
+          }
       get_taxep: { Args: { in_postal_code: number }; Returns: number }
       get_weight_class: { Args: { input_weight: number }; Returns: number }
       is_admin: { Args: { user_id: string }; Returns: boolean }
       is_traffic_leader: { Args: { user_id: string }; Returns: boolean }
       jaro_winkler: { Args: { s1: string; s2: string }; Returns: number }
+      names_match: {
+        Args: { name_a: string; name_b: string }
+        Returns: boolean
+      }
+      normalize_addon_postort: { Args: { p_value: string }; Returns: string }
+      normalize_addon_taxepunkt: { Args: { p_value: string }; Returns: string }
+      resolve_addon_location: {
+        Args: { p_postort: string; p_taxepunkt: string }
+        Returns: {
+          balance_ambiguous: boolean
+          has_balance_addon: boolean
+          match_source: string
+          matched_postort: string
+          matched_rows: number
+          matched_taxepunkt: string
+          orttillagg_ambiguous: boolean
+          orttillagg_class: number
+          stor: string
+          stor_ambiguous: boolean
+        }[]
+      }
       round_up_weight: { Args: { input_weight: number }; Returns: number }
       run_test_steg_1: {
         Args: {
@@ -541,7 +717,6 @@ export type Database = {
           in_name: string
           in_taxep_receiver: number
           in_taxep_sender: number
-          in_use_entire_name?: boolean
         }
         Returns: {
           kundnettofrakt: number
@@ -554,7 +729,6 @@ export type Database = {
           in_name: string
           in_taxep_receiver: number
           in_taxep_sender: number
-          in_use_entire_name: boolean
         }
         Returns: Database["public"]["CompositeTypes"]["steg_2_result"]
         SetofOptions: {
@@ -564,38 +738,21 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      steg_3:
-        | {
-            Args: {
-              in_kundnamn: string
-              in_taxep_receiver: number
-              in_taxep_sender: number
-              in_weight: number
-            }
-            Returns: Database["public"]["CompositeTypes"]["steg_3_result"]
-            SetofOptions: {
-              from: "*"
-              to: "steg_3_result"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
-        | {
-            Args: {
-              in_kundnamn: string
-              in_taxep_receiver: number
-              in_taxep_sender: number
-              in_use_entire_name: boolean
-              in_weight: number
-            }
-            Returns: Database["public"]["CompositeTypes"]["steg_3_result"]
-            SetofOptions: {
-              from: "*"
-              to: "steg_3_result"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
+      steg_3: {
+        Args: {
+          in_kundnamn: string
+          in_taxep_receiver: number
+          in_taxep_sender: number
+          in_weight: number
+        }
+        Returns: Database["public"]["CompositeTypes"]["steg_3_result"]
+        SetofOptions: {
+          from: "*"
+          to: "steg_3_result"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       steg_4: {
         Args: {
           in_receiver_taxep: number

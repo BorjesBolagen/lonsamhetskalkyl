@@ -18,7 +18,6 @@ export type ProfitabilityInput = {
   kundnamn: string;
   taxPointRelation: string;
   chargeable_weight: number;
-  use_entire_name: boolean;
 };
 
 export type ProfitabilityResult = {

@@ -13,9 +13,11 @@ export type ProfitabilityStatus = "idle" | "loading" | "done" | "error";
 
 export type ConsignmentWithProfitability = ConsignmentListItem & {
   profitabilityValue?: ProfitabilityValue | null;
-  activeNameOverride?: "original" | "best";
   best_name?: string;
   best_score?: number;
+  translationOptions?: string[];
+  selectedNameForProfitability?: string;
+  selectedNameSource?: "translation" | "jaro" | "base";
 };
 
 export type EquipageWithConsignments = {
@@ -273,7 +275,7 @@ export async function calculateConsignmentProfitabilityPrice(
   useEntireName: boolean,
 ): Promise<ProfitabilityValue | null> {
   try {
-    const data = await calculateProfitability(consignment, useEntireName);
+    const data = await calculateProfitability(consignment);
 
     if (!data || !data.success || !data.value) {
       console.error("Fel i kalkyl:", data?.error);
