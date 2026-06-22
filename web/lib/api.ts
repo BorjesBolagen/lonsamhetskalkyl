@@ -227,7 +227,8 @@ export const getIlogEquipages = async (): Promise<IlogResponse<EquipageItem[]>> 
  */
 export const getIlogConsignments = async (
 	date: string,
-	equipageId: number
+	equipageId: number,
+	signal?: AbortSignal
 ): Promise<IlogResponse<ConsignmentListItem[]>> => {
 	const params = new URLSearchParams({
 		date,
@@ -236,6 +237,7 @@ export const getIlogConsignments = async (
 
 	const response = await fetch(`/api/ilog/consignments?${params.toString()}`, {
 		method: "GET",
+		signal,
 	});
 
 	if (!response.ok) {
@@ -270,11 +272,27 @@ export const getIlogConsignment = async (
 // Profitability simulation
 // ============================================================
 export type ProfitabilityValue = {
-	step_used: number;
-	estimated_revenue: number;
-	detail?: string;
-	best_score?: number;
-	best_name?: string;
+  step_used: number;
+
+  // Pris inklusive tillägg.
+  estimated_revenue: number;
+
+  // Pris utan tillägg.
+  base_revenue?: number;
+
+  addon_total?: number;
+  addons?: ProfitabilityAddon[];
+
+  addon_warnings?: Array<{
+    code: string;
+    message: string;
+  }>;
+
+  detail?: string;
+
+  // Befintliga Jaro-fält som används i Home.
+  best_score?: number;
+  best_name?: string;
 };
 
 export type ProfitabilityResponse = {
@@ -282,12 +300,63 @@ export type ProfitabilityResponse = {
 	value?: ProfitabilityValue;
 	error?: string;
 	detail?: string;
-	best_score?: number;
-	best_name?: string;
 };
 
+export type NameMatchResponse = {
+	best_name: string;
+	best_score: number;
+}
+
+export type NameTranslationResponse = {
+	translations: string[];
+}
+
+export const getNameTranslations = async (name: string): Promise<BasicResponse<NameTranslationResponse>> => {
+	const params = new URLSearchParams({ name });
+	const response = await fetch(`/api/profitability/name-translations?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		const error = await response.json() as { message?: string };
+		throw new Error(error.message || "Request failed");
+	}
+
+	return (await response.json()) as BasicResponse<NameTranslationResponse>;
+}
+export type ProfitabilityAddon = {
+  id: number;
+
+  type:
+    | "orttillagg"
+    | "storstadstillagg"
+    | "balanstillagg";
+
+  direction:
+    | "from"
+    | "to";
+
+  name: string;
+  amount: number;
+  class: number | null;
+
+  region:
+    | "stockholm"
+    | "goteborg"
+    | null;
+
+  lookupSource:
+    | "taxepunkt"
+    | "postort"
+    | "none";
+
+  matchedTaxPoint: string | null;
+  matchedCity: string | null;
+};
+
+
 export const calculateProfitability = async (
-    consignment: ConsignmentListItem
+    consignment: ConsignmentListItem,
 ): Promise<ProfitabilityResponse> => {
 
     const params = new URLSearchParams({
@@ -305,6 +374,8 @@ export const calculateProfitability = async (
         taxPointRelation: consignment.taxPointRelation || "",
 		pickupPostalCode: consignment.pickupPostalCode || "",
     	destinationPostalCode: consignment.destinationPostalCode || "",
+		invoiceStatus: consignment.invoiceStatus || "",
+        internalPrice: String(consignment.internalPrice || 0),
     });
 
     const url = `/api/profitability?${params.toString()}`;
@@ -323,6 +394,21 @@ export const calculateProfitability = async (
     const data = await response.json();
     return data as ProfitabilityResponse;
 };
+
+export const getBestNameMatch = async (name: string): Promise<BasicResponse<NameMatchResponse>> => {
+	
+	const params = new URLSearchParams({ name });
+	const response = await fetch(`/api/profitability/jaro-estimation?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) {
+		const error = await response.json() as { message?: string };
+		throw new Error(error.message || "Request failed");
+	}
+
+	return (await response.json()) as BasicResponse<NameMatchResponse>;
+}
 
 // ============================================================
 // Historical import

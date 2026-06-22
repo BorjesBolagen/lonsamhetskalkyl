@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ProfitabilityInput, ProfitabilityResult } from "./types";
 import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
+import { calculateApplicableAddons } from "./addonEngine";
 import { roundUpWeight } from "@/lib/backend/utils";
 import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
@@ -46,7 +47,14 @@ export function determineFlowType(consignment: ConsignmentListItem): FlowType {
   // =========================================================
   // 2. EGENFAKTURERAT
   // =========================================================
-  // if (...) return FlowType.EGENFAKTURERAT;
+  if (
+    consignment.invoiceStatus && 
+    consignment.invoiceStatus.trim() !== "" && 
+    consignment.internalPrice && 
+    consignment.internalPrice > 0
+  ) {
+    return FlowType.EGENFAKTURERAT;
+  }
 
   // =========================================================
   // 3. PAKETBUR
@@ -127,7 +135,11 @@ export async function routeConsignment(
       return { step_used: -1, estimated_revenue: 0, detail: "Styckegods: Beräkningsmodell saknas ännu" };
 
     case FlowType.EGENFAKTURERAT:
-      return { step_used: -1, estimated_revenue: 0, detail: "Egenfakturerat: Hanteras med angivet belopp" };
+      return { 
+        step_used: 0,
+        estimated_revenue: consignment.internalPrice || 0, 
+        detail: `Egenfakturerat: ${consignment.invoiceStatus}`
+      };
 
     case FlowType.SUNE:
       try {
@@ -143,7 +155,7 @@ export async function routeConsignment(
           }
           
           // Hittades inte, kör trappstegsmodellen
-          console.log("Sune-uppslag misslyckades (finns ej i prislistan), skickar till Fjärr...");
+          console.warn("Sune-uppslag misslyckades (finns ej i prislistan), skickar till Fjärr...");
           
           if (!input.taxPointRelation || input.taxPointRelation.trim() === "") {
             return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar taxepunktsrelation" };
@@ -181,6 +193,63 @@ function valideraInput(input: ProfitabilityInput) {
     }
 }
 
+
+/**
+ * Avrundar ett pris till två decimaler.
+ */
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Lägger tillägg på ett färdigt grundpris från trappstegsmodellen.
+ *
+ * Om tilläggsberäkningen misslyckas behålls grundpriset så att
+ * den befintliga lönsamhetsberäkningen fortfarande fungerar.
+ */
+async function addAddonsToProfitabilityResult(
+  input: ProfitabilityInput,
+  baseResult: ProfitabilityResult,
+): Promise<ProfitabilityResult> {
+  const baseRevenue = roundMoney(baseResult.estimated_revenue);
+
+  try {
+    const addonResult = await calculateApplicableAddons(input);
+    const addonTotal = roundMoney(addonResult.addonTotal);
+
+    return {
+      ...baseResult,
+      base_revenue: baseRevenue,
+      addon_total: addonTotal,
+      estimated_revenue: roundMoney(baseRevenue + addonTotal),
+      addons: addonResult.addons,
+      addon_warnings: addonResult.warnings,
+    };
+  } catch (error) {
+    console.error(
+      "Tilläggen kunde inte beräknas. Grundpriset används:",
+      error instanceof Error ? error.message : error,
+    );
+
+    return {
+      ...baseResult,
+      base_revenue: baseRevenue,
+      addon_total: 0,
+      estimated_revenue: baseRevenue,
+      addons: [],
+      addon_warnings: [
+        {
+          code: "ADDON_CALCULATION_FAILED",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Tilläggen kunde inte beräknas.",
+        },
+      ],
+    };
+  }
+}
+
 /**
  * Kör hela trappstegsmodellen basically.
  * Om step_used är -1 ( => estimated_revenue = 0) så har ett fel inträffat.
@@ -196,49 +265,20 @@ export async function calculateProfitability(
   input: ProfitabilityInput
 ): Promise<ProfitabilityResult> {
 
-  const supabase = await getSupabaseServerClient();
-  const jaro = await supabase.rpc("find_best_name_match", {
-    input_name: input.kundnamn
-  });
-
-  if (jaro.error || !jaro.data) {
-    console.error("Fel vid jaroberäkning");
-    return {
-      step_used: -1,
-      estimated_revenue: 0,
-      detail: "Fel vid Jaro"
-    }
-  }
-
-  const jaroMatch = jaro.data[0].best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD;
-
-  // Bygg upp bas-resultat. Ändra sedan step_used och estimated_revenue baserat på steg och resultat från trappstegsmodellen
-  let result = {
-    step_used: 0,
-    estimated_revenue: 0,
-    best_score: jaro.data[0].best_score,
-    best_name: jaro.data[0].best_name,
-  };
-
-  if (jaroMatch) {
-    input.kundnamn = jaro.data[0].best_name;
-  }
-
-
   valideraInput(input);
   const weight_plus_one = await roundUpWeight(input.chargeable_weight);
 
   // Försök göra steg 1.
   try {
-    const steg1Estimated = await try_steg_1(input, weight_plus_one, jaroMatch);
+    const steg1Estimated = await try_steg_1(input, weight_plus_one);
 
     // Om steg 1 gav null så fick vi ingen träff. Fortsätt med steg 2
     if (steg1Estimated !== null) {
-      return {
+      return await addAddonsToProfitabilityResult(input, {
         ...result,
         step_used: 1,
         estimated_revenue: steg1Estimated
-      }
+      });
     }
   } catch (error) {
     console.error("Fel i steg 1, fortsätter till steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
@@ -251,15 +291,15 @@ export async function calculateProfitability(
 
   // Försök göra steg 2
   try {
-    const steg2Estimated = await try_steg_2(input, weight_plus_one, jaroMatch);
+    const steg2Estimated = await try_steg_2(input, weight_plus_one);
     
     // Om steg 2 gav null så fick vi ingen träff. Fortsätt med steg 3
     if (steg2Estimated !== null) {
-      return {
+      return await addAddonsToProfitabilityResult(input, {
         ...result,
         step_used: 2,
         estimated_revenue: steg2Estimated
-      }
+      });
     }
   } catch (error) {
     console.error("Fel i steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
@@ -272,15 +312,15 @@ export async function calculateProfitability(
 
   // Försök göra steg 3
   try {
-    const steg3Estimated = await (try_steg_3(input, weight_plus_one, jaroMatch));
+    const steg3Estimated = await (try_steg_3(input, weight_plus_one));
 
     // Om steg 3 gav null så fick vi ingen träff. Fortsätt med steg 4
     if (steg3Estimated !== null) {
-      return {
+      return await addAddonsToProfitabilityResult(input, {
         ...result,
         step_used: 3,
         estimated_revenue: steg3Estimated
-      }
+      });
     }
   } catch (error) {
     console.error("Fel i steg 3. Felmeddelande:", error instanceof Error ? error.message : error);
@@ -297,11 +337,11 @@ export async function calculateProfitability(
 
     // Om steg 4 gav null så fick vi ingen träff. Fortsätt med steg 5
     if (steg4Estimated !== null) {
-      return {
+      return await addAddonsToProfitabilityResult(input, {
         ...result,
         step_used: 4,
         estimated_revenue: steg4Estimated
-      }
+      });
     }
   } catch (error) {
     console.error("Fel i steg 4. Felmeddelande:", error instanceof Error ? error.message : error);
@@ -318,11 +358,11 @@ export async function calculateProfitability(
 
     // Om steg 5 gav null så fick vi ingen träff. Då har vi testat alla steg i modellen
     if (steg5Estimated !== null) {
-      return {
+      return await addAddonsToProfitabilityResult(input, {
         ...result,
         step_used: 5,
         estimated_revenue: steg5Estimated
-      }
+      });
     }
   } catch (error) {
     console.error("Fel i steg 5. Felmeddelande:", error instanceof Error ? error.message : error);

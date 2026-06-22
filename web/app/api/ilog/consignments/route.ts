@@ -72,6 +72,7 @@ export async function GET(request: Request) {
     const rawConsignments = await ilogGet<unknown>("/ilog-api-web/equipage/consignments", {
       date,
       equipageId,
+      minified: "false", // Gör så iLog skickar med fakturastatus och pris
     });
 
     if (debugRaw) {

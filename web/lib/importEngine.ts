@@ -174,7 +174,8 @@ export function normalizeNumber(value: string | undefined): number | null {
         .replace(/−/g, '-')            // Unicode minus sign → ASCII minus
         .replace(/–/g, '-')            // En-dash → ASCII minus
         .replace(/—/g, '-')            // Em-dash → ASCII minus
-        .replace(',', '.');            // Swedish comma decimal → period
+        .replace(',', '.')            // Swedish comma decimal → period
+        .replace(/×10\^([+-]?\d+)/i, 'e$1');   // 7.07138×10^+16 → 7.07138e+16
 
     const parsed = Number(normalized);
 
