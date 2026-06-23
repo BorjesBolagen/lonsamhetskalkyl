@@ -1,7 +1,7 @@
 import {
-  calculateProfitability,
   getIlogConsignments,
   ProfitabilityValue,
+  calculateProfitability,
 } from "../../../lib/api";
 import type { ConsignmentListItem, LineItem } from "../../../lib/ilogTypes";
 import { normalizeText } from "../../../lib/areaLineConfig";
@@ -13,6 +13,11 @@ export type ProfitabilityStatus = "idle" | "loading" | "done" | "error";
 
 export type ConsignmentWithProfitability = ConsignmentListItem & {
   profitabilityValue?: ProfitabilityValue | null;
+  best_name?: string;
+  best_score?: number;
+  translationOptions?: string[];
+  selectedNameForProfitability?: string;
+  selectedNameSource?: "translation" | "jaro" | "base";
 };
 
 export type EquipageWithConsignments = {
@@ -267,31 +272,21 @@ export function getConsignmentFlm(consignment: ConsignmentListItem): number {
  */
 export async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
+  useEntireName: boolean,
 ): Promise<ProfitabilityValue | null> {
-  const kundnamn = consignment.customerName?.trim();
-  const taxPointRelation = consignment.taxPointRelation?.trim();
-  const weight = Number(consignment.weight);
-
-  if (!kundnamn || !taxPointRelation || !Number.isFinite(weight)) {
-    return null;
-  }
-
-  let response;
   try {
-    response = await calculateProfitability(
-      kundnamn,
-      taxPointRelation,
-      weight,
-    );
+    const data = await calculateProfitability(consignment);
+
+    if (!data || !data.success || !data.value) {
+      console.error("Fel i kalkyl:", data?.error);
+      return null;
+    }
+
+    return data.value;
   } catch (error) {
-    console.error(error instanceof Error ? error.message : "Okänt fel vid lönsamhetskalkyl");
-  }
-  
-  if (!response!.success || !response!.value) {
+    console.error("Fel vid anrop till profitability", error);
     return null;
   }
-
-  return response!.value as ProfitabilityValue;
 }
 
 /**

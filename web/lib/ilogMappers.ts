@@ -501,13 +501,15 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
 
       const status = formatStatus(row);
 
-      const senderName =
+      const senderName = normalizeCustomerName(
         readString(row, ["sender", "senderName", "pickupName", "sendername"]) ||
-        readNestedString(row, "pickupLocation", ["name", "city"]);
+        readNestedString(row, "pickupLocation", ["name", "city"])
+      );
 
-      const receiverName =
+      const receiverName = normalizeCustomerName(
         readString(row, ["receiver", "receiverName", "destinationName", "receivername"]) ||
-        readNestedString(row, "destinationLocation", ["name", "city"]);
+        readNestedString(row, "destinationLocation", ["name", "city"])
+      );
 
       const destinationCity =
         readNestedString(row, "destinationLocation", ["city"]) ||
@@ -561,11 +563,11 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
       const destinationLocation = asRecord(row.destinationLocation);
 
       const pickupPostalCode =
-        readPostalCodePart(pickupLocation, ["zip", "postalCode", "postCode", "postnummer"]) ||
+        readPostalCodePart(pickupLocation, ["areaCode", "zip", "postalCode", "postCode", "postnummer"]) ||
         readPostalCodePart(row, ["pickupZip", "pickupPostalCode", "senderZip"]);
 
       const destinationPostalCode =
-        readPostalCodePart(destinationLocation, ["zip", "postalCode", "postCode", "postnummer"]) ||
+        readPostalCodePart(destinationLocation, ["areaCode", "zip", "postalCode", "postCode", "postnummer"]) ||
         readPostalCodePart(row, [
           "destinationZip",
           "destinationPostalCode",
@@ -592,6 +594,14 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
       const ownStatus =
         readNestedString(row, "consignment", ["ownStatus", "own_status"]) ||
         readString(row, ["ownStatus", "own_status"]);
+
+      const invoiceStatus =
+        readNestedString(row, "consignment", ["invoiceStatus", "invoice_status"]) ||
+        readString(row, ["invoiceStatus", "invoice_status"]);
+
+      const internalPrice =
+        readNestedNumber(row, "consignment", ["internalPrice", "internal_price"]) ??
+        readNumber(row, ["internalPrice", "internal_price"]);
 
       const goodsDescription = estimatedProperties || comment;
 
@@ -623,6 +633,8 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
         transporterType,
         ilogStatus,
         ownStatus,
+        invoiceStatus,
+        internalPrice: internalPrice !== null ? internalPrice : 0,
         prognosis: "",
         comment,
       };

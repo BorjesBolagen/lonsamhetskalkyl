@@ -281,7 +281,7 @@ export function calculateConsignmentTotals(
 
 /**
  * Räknar prognos för en bokning via profitability-motorn.
- * Används av Home.
+ * Används av Home och simulatorn.
  */
 export async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
@@ -294,22 +294,24 @@ export async function calculateConsignmentProfitabilityPrice(
     return null;
   }
 
-  let response;
   try {
-    response = await calculateProfitability(
-      kundnamn,
-      taxPointRelation,
-      weight,
-    );
+    // Hela bokningen skickas så att API-routen även får postnummer och postorter.
+    const response = await calculateProfitability(consignment);
+
+    if (!response.success || !response.value) {
+      return null;
+    }
+
+    return response.value;
   } catch (error) {
-    console.error(error instanceof Error ? error.message : "Okänt fel vid lönsamhetskalkyl");
-  }
-  
-  if (!response!.success || !response!.value) {
+    console.error(
+      error instanceof Error
+        ? error.message
+        : "Okänt fel vid lönsamhetskalkyl",
+    );
+
     return null;
   }
-
-  return response!.value as ProfitabilityValue;
 }
 
 /**
