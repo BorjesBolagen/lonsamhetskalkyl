@@ -48,7 +48,7 @@ function isUnassignedConsignment(consignment: ConsignmentListItem): boolean {
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const debugRaw = searchParams.get("debugRaw") === "true";
+  const debugRaw = process.env.NODE_ENV !== "production" && searchParams.get("debugRaw") === "true";
 
   const date = searchParams.get("date");
   const lineId = searchParams.get("lineId");

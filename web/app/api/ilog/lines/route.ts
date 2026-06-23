@@ -7,7 +7,7 @@ import { mapLines } from "@/lib/ilogMappers";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const debugRaw = searchParams.get("debugRaw") === "true";
+    const debugRaw = process.env.NODE_ENV !== "production" && searchParams.get("debugRaw") === "true";
 
     // Externt iLog-anrop: hämta alla linjer for aktuell grupp.
     const rawLines = await ilogGet<unknown[]>("/ilog-api-web/lines");
