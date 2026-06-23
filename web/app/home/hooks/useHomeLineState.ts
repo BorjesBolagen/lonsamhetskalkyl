@@ -7,11 +7,16 @@ import {
   ensureEquipageTotals,
   EquipageWithConsignments,
   LineWithEquipages,
+  VehicleSelectorMode,
 } from "./homeTypesAndUtils";
 
 type UseHomeLineStateParams = {
   selectedDate: string;
-  appliedClusterLabels: string[];
+  vehicleSelectorMode: VehicleSelectorMode;
+  selectedEquipageIds: number[];
+  selectedLineIds: number[];
+  selectedAreaLabels: string[];
+  appliedFilterLabels: string[];
 };
 
 /**
@@ -19,7 +24,11 @@ type UseHomeLineStateParams = {
  */
 export function useHomeLineState({
   selectedDate,
-  appliedClusterLabels,
+  vehicleSelectorMode,
+  selectedEquipageIds,
+  selectedLineIds,
+  selectedAreaLabels,
+  appliedFilterLabels,
 }: UseHomeLineStateParams) {
   const [lineCards, setLineCards] = useState<LineWithEquipages[]>([]);
   const [candidateEquipageCount, setCandidateEquipageCount] = useState(0);
@@ -40,7 +49,11 @@ export function useHomeLineState({
       lineCards: nextLineCards,
       candidateEquipageCount,
       visibleEquipageCount: nextVisibleEquipageCount,
-      appliedClusterLabels,
+      vehicleSelectorMode,
+      selectedEquipageIds,
+      selectedLineIds,
+      selectedAreaLabels,
+      appliedFilterLabels,
     });
   }
 

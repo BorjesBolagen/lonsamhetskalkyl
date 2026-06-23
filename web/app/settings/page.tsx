@@ -4,17 +4,18 @@ import Footer from "../../components/Footer";
 import PasswordInput from "../../components/PasswordInput";
 import {
   getCurrentlySignedInUser,
+  getIlogEquipages,
+  getIlogLines,
   setFilters,
   setPassword,
 } from "../../lib/api";
 import {
-  AREA_KEYS,
-  AREA_OPTIONS,
-  AreaKey,
-  AreaState,
-  DEFAULT_AREAS,
-  parseAreaState,
-} from "../../lib/areaLineConfig";
+  parseSelectedEquipageIds,
+  parseSelectedLineIds,
+  parseVehicleSelectorMode,
+  VehicleSelectorMode,
+} from "../../vehicleSelectionConfig";
+import type { EquipageItem, LineItem } from "../../lib/ilogTypes";
 import { Json } from "../../lib/supabaseServerSchema";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -141,8 +142,21 @@ export default function Settings() {
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // States för områden
-  const [districts, setDistricts] = useState<AreaState>(DEFAULT_AREAS);
+  // States för val av lastbilar/linjer
+  const [equipages, setEquipages] = useState<EquipageItem[]>([]);
+  const [lines, setLines] = useState<LineItem[]>([]);
+  const [isLoadingTransportOptions, setIsLoadingTransportOptions] =
+    useState(true);
+  const [vehicleSelectorMode, setVehicleSelectorMode] =
+    useState<VehicleSelectorMode>("equipages");
+  const [selectedEquipageIds, setSelectedEquipageIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [selectedLineIds, setSelectedLineIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [equipageSearch, setEquipageSearch] = useState("");
+  const [lineSearch, setLineSearch] = useState("");
   // What is currently active in the app
   const [appliedTheme, setAppliedTheme] =
     useState<ThemeMode>(resolveInitialTheme);
@@ -153,54 +167,86 @@ export default function Settings() {
   const [mileCostReferenceValue, setMileCostReferenceValue] =
     useState<number>(DEFAULT_MILE_COST);
 
-  const clusterGroups = useMemo(() => {
-    const sortedKeys = [...AREA_KEYS].sort((a, b) =>
-      AREA_OPTIONS[a].localeCompare(AREA_OPTIONS[b], "sv"),
-    );
-
-    return {
-      sml: sortedKeys.filter((key) =>
-        AREA_OPTIONS[key].toUpperCase().startsWith("SML-"),
-      ),
-      ahl: sortedKeys.filter((key) =>
-        AREA_OPTIONS[key].toUpperCase().startsWith("AHL-"),
-      ),
-      other: sortedKeys.filter((key) => {
-        const value = AREA_OPTIONS[key].toUpperCase();
-        return !value.startsWith("SML-") && !value.startsWith("AHL-");
-      }),
-    };
-  }, []);
-
-  const renderClusterToggle = (distKey: AreaKey) => {
-    return (
-      <label
-        key={distKey}
-        className="flex items-center justify-between cursor-pointer py-1.5 w-full hover:bg-[var(--text-hover)] transition-colors px-2 rounded"
-      >
-        <span className="font-bold text-base">{AREA_OPTIONS[distKey]}</span>
-        <div className="relative flex items-center">
-          <input
-            type="checkbox"
-            checked={districts[distKey]}
-            onChange={() => {
-              setDistricts({
-                ...districts,
-                [distKey]: !districts[distKey],
-              });
-              setHasUnsavedChanges(true);
-            }}
-            className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
-          />
-          {districts[distKey] && (
-            <span className="absolute inset-0 flex items-center justify-center text-[var(--text-primary)] pointer-events-none pb-1 font-bold text-lg">
-              x
-            </span>
-          )}
-        </div>
-      </label>
-    );
+  const toggleEquipage = (id: number) => {
+    setSelectedEquipageIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    setHasUnsavedChanges(true);
   };
+
+  const toggleLine = (id: number) => {
+    setSelectedLineIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  const hasActiveTransportSelection =
+    vehicleSelectorMode === "equipages"
+      ? selectedEquipageIds.size > 0
+      : selectedLineIds.size > 0;
+
+  const clearActiveTransportSelection = () => {
+    if (vehicleSelectorMode === "equipages") {
+      if (selectedEquipageIds.size === 0) {
+        return;
+      }
+
+      setSelectedEquipageIds(new Set());
+    } else {
+      if (selectedLineIds.size === 0) {
+        return;
+      }
+
+      setSelectedLineIds(new Set());
+    }
+
+    setHasUnsavedChanges(true);
+  };
+
+  const visibleEquipages = useMemo(() => {
+    const query = equipageSearch.trim().toLowerCase();
+    const sorted = [...equipages].sort((a, b) =>
+      a.name.localeCompare(b.name, "sv"),
+    );
+
+    if (!query) return sorted;
+
+    return sorted.filter((equipage) => {
+      const haystack = [equipage.name, ...(equipage.linkedLineNames ?? [])]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [equipages, equipageSearch]);
+
+  const visibleLines = useMemo(() => {
+    const query = lineSearch.trim().toLowerCase();
+    const sorted = [...lines].sort((a, b) =>
+      a.name.localeCompare(b.name, "sv"),
+    );
+
+    if (!query) return sorted;
+
+    return sorted.filter((line) =>
+      [line.name, line.type, String(line.id), String(line.publicId ?? "")]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [lines, lineSearch]);
 
   useEffect(() => {
     // For dark/lightmode
@@ -238,7 +284,9 @@ export default function Settings() {
           setStoredFilters({});
         }
 
-        setDistricts(parseAreaState(user.filters));
+        setSelectedEquipageIds(new Set(parseSelectedEquipageIds(user.filters)));
+        setSelectedLineIds(new Set(parseSelectedLineIds(user.filters)));
+        setVehicleSelectorMode(parseVehicleSelectorMode(user.filters));
 
         const dbTheme = parseTheme(user.filters);
         setAppliedTheme(dbTheme);
@@ -260,6 +308,30 @@ export default function Settings() {
     }
 
     loadCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    async function loadTransportOptions() {
+      try {
+        setIsLoadingTransportOptions(true);
+        const [equipagesResponse, linesResponse] = await Promise.all([
+          getIlogEquipages(),
+          getIlogLines(),
+        ]);
+
+        setEquipages((equipagesResponse.data ?? []) as EquipageItem[]);
+        setLines((linesResponse.data ?? []) as LineItem[]);
+      } catch {
+        setFiltersStatus({
+          type: "error",
+          message: "Kunde inte hämta lastbilar och linjer från iLog.",
+        });
+      } finally {
+        setIsLoadingTransportOptions(false);
+      }
+    }
+
+    void loadTransportOptions();
   }, []);
 
   // Warn user if refreshing after changed settings
@@ -294,10 +366,12 @@ export default function Settings() {
           ? 0
           : profitabilityReferenceValue;
 
-      // Keep other filter fields and only overwrite areas + theme from this form.
+      // Keep other filter fields and overwrite transport selection + theme from this form.
       const nextFilters: Record<string, unknown> = {
         ...storedFilters,
-        areas: districts,
+        equipages: Array.from(selectedEquipageIds),
+        lines: Array.from(selectedLineIds),
+        vehicleSelectorMode,
         theme: draftTheme,
         profitabilityReferenceValue: validReferenceValue,
         mileCostReferenceValue,
@@ -588,52 +662,161 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  {/* DEL 2: Områden (Interaktiv) */}
+                  {/* DEL 2: Lastbilar eller linjer */}
                   <div>
                     <h3 className="font-bold text-xl mb-4 border-b-2 border-[var(--primary-color)] pb-2">
-                      Filtrera dina kluster
+                      Välj underlag för Home
                     </h3>
-                    {isLoadingProfile && (
+                    {(isLoadingProfile || isLoadingTransportOptions) && (
                       <p className="text-sm text-gray-600 mb-3">
-                        Laddar sparade inställningar...
+                        Laddar sparade val och tillgängliga lastbilar/linjer...
                       </p>
                     )}
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
-                          <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
-                            SML kluster
-                          </h4>
-                          <div className="space-y-2">
-                            {clusterGroups.sml.map((distKey) =>
-                              renderClusterToggle(distKey),
-                            )}
-                          </div>
-                        </div>
 
-                        <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-3">
-                          <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
-                            AHL kluster
-                          </h4>
-                          <div className="space-y-2">
-                            {clusterGroups.ahl.map((distKey) =>
-                              renderClusterToggle(distKey),
-                            )}
-                          </div>
-
-                          <div className="pt-2">
-                            <h4 className="font-bold text-lg text-[var(--text-primary)] border-b-2 border-[var(--primary-color)] pb-2">
-                              Övriga kluster
-                            </h4>
-                            <div className="space-y-2 pt-1">
-                              {clusterGroups.other.map((distKey) =>
-                                renderClusterToggle(distKey),
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVehicleSelectorMode("equipages");
+                          setHasUnsavedChanges(true);
+                        }}
+                        className={`px-4 py-2 rounded-lg border font-bold transition ${
+                          vehicleSelectorMode === "equipages"
+                            ? "bg-[var(--button-submit)] text-white border-[var(--button-submit)]"
+                            : "bg-[var(--secondary-element)] text-[var(--text-primary)] border-[var(--border-primary)] hover:bg-[var(--text-hover)]"
+                        }`}
+                      >
+                        Välj lastbilar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVehicleSelectorMode("lines");
+                          setHasUnsavedChanges(true);
+                        }}
+                        className={`px-4 py-2 rounded-lg border font-bold transition ${
+                          vehicleSelectorMode === "lines"
+                            ? "bg-[var(--button-submit)] text-white border-[var(--button-submit)]"
+                            : "bg-[var(--secondary-element)] text-[var(--text-primary)] border-[var(--border-primary)] hover:bg-[var(--text-hover)]"
+                        }`}
+                      >
+                        Välj linjer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearActiveTransportSelection}
+                        disabled={!hasActiveTransportSelection}
+                        className="px-4 py-2 rounded-lg border font-bold transition bg-[var(--secondary-element)] text-[var(--text-primary)] border-[var(--border-primary)] hover:bg-[var(--text-hover)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[var(--secondary-element)]"
+                      >
+                        Rensa val
+                      </button>
                     </div>
+
+                    {vehicleSelectorMode === "equipages" ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-[var(--text-secondary)]">
+                          Home hämtar bokningar för de valda lastbilarna och visar lastbilarna som huvudkort.
+                        </p>
+                        <input
+                          type="text"
+                          value={equipageSearch}
+                          onChange={(e) => setEquipageSearch(e.target.value)}
+                          placeholder="Sök lastbil eller linje..."
+                          className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        />
+                        <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2 max-h-[480px] overflow-y-auto">
+                          {visibleEquipages.map((equipage) => (
+                            <label
+                              key={equipage.id}
+                              className="flex items-center justify-between cursor-pointer py-1.5 w-full hover:bg-[var(--text-hover)] transition-colors px-2 rounded"
+                            >
+                              <span className="flex flex-col">
+                                <span className="font-bold text-base">
+                                  {equipage.name}
+                                </span>
+                                {(equipage.linkedLineNames ?? []).length > 0 && (
+                                  <span className="text-xs text-[var(--text-secondary)]">
+                                    {(equipage.linkedLineNames ?? []).join(", ")}
+                                  </span>
+                                )}
+                              </span>
+                              <div className="relative flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedEquipageIds.has(equipage.id)}
+                                  onChange={() => toggleEquipage(equipage.id)}
+                                  className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
+                                />
+                                {selectedEquipageIds.has(equipage.id) && (
+                                  <span className="absolute inset-0 flex items-center justify-center text-[var(--text-primary)] pointer-events-none pb-1 font-bold text-lg">
+                                    x
+                                  </span>
+                                )}
+                              </div>
+                            </label>
+                          ))}
+                          {!isLoadingTransportOptions && visibleEquipages.length === 0 && (
+                            <p className="text-sm text-gray-600">
+                              Inga lastbilar matchar sökningen.
+                            </p>
+                          )}
+                        </div>
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          {selectedEquipageIds.size} valda lastbilar.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-sm text-[var(--text-secondary)]">
+                          Home hämtar bokningar för lastbilar kopplade till de valda linjerna och visar linjer som huvudkort.
+                        </p>
+                        <input
+                          type="text"
+                          value={lineSearch}
+                          onChange={(e) => setLineSearch(e.target.value)}
+                          placeholder="Sök linje..."
+                          className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                        />
+                        <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2 max-h-[480px] overflow-y-auto">
+                          {visibleLines.map((line) => (
+                            <label
+                              key={line.id}
+                              className="flex items-center justify-between cursor-pointer py-1.5 w-full hover:bg-[var(--text-hover)] transition-colors px-2 rounded"
+                            >
+                              <span className="flex flex-col">
+                                <span className="font-bold text-base">
+                                  {line.name}
+                                </span>
+                                <span className="text-xs text-[var(--text-secondary)]">
+                                  {line.type} · id {line.id}
+                                </span>
+                              </span>
+                              <div className="relative flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedLineIds.has(line.id)}
+                                  onChange={() => toggleLine(line.id)}
+                                  className="w-6 h-6 appearance-none border-2 border-[var(--secondary-element)] bg-[var(--primary-element)] checked:bg-[var(--primary-element)] rounded-sm cursor-pointer"
+                                />
+                                {selectedLineIds.has(line.id) && (
+                                  <span className="absolute inset-0 flex items-center justify-center text-[var(--text-primary)] pointer-events-none pb-1 font-bold text-lg">
+                                    x
+                                  </span>
+                                )}
+                              </div>
+                            </label>
+                          ))}
+                          {!isLoadingTransportOptions && visibleLines.length === 0 && (
+                            <p className="text-sm text-gray-600">
+                              Inga linjer matchar sökningen.
+                            </p>
+                          )}
+                        </div>
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          {selectedLineIds.size} valda linjer.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
