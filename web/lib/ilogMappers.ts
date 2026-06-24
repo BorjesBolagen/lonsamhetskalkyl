@@ -163,6 +163,19 @@ const parseFlmFromEstimatedProperties = (
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const parsePplFromEstimatedProperties = (
+  value: string
+): number | null => {
+  const match = value.match(/(\d+(?:[.,]\d+)?)\s*ppl/i);
+  if (!match) {
+    return null;
+  }
+  const normalized = match[1].replace(",", ".");
+  const parsed = Number(normalized);
+  
+  return Number.isFinite(parsed) ? parsed : null; 
+};
+
 const normalizeCustomerName = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed.includes("*")) {
@@ -528,6 +541,8 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
 
       const flm = parseFlmFromEstimatedProperties(estimatedProperties);
 
+      const paketburar = parsePplFromEstimatedProperties(estimatedProperties) || readNumber(row, ["kolli"]);
+
       const customerName = normalizeCustomerName(
         readNestedString(row, "customer", ["name"]) ||
           readString(row, ["customerName", "customer"]),
@@ -635,6 +650,7 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
         ownStatus,
         invoiceStatus,
         internalPrice: internalPrice !== null ? internalPrice : 0,
+        paketburar: paketburar !== null ? paketburar : 0,
         prognosis: "",
         comment,
       };

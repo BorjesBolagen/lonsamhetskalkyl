@@ -95,6 +95,7 @@ export async function GET(req: NextRequest) {
       destinationPostalCode: searchParams.get("destinationPostalCode") || "",
       invoiceStatus: searchParams.get("invoiceStatus") || "",
       internalPrice: Number(searchParams.get("internalPrice")) || 0,
+      paketburar: Number(searchParams.get("paketburar")) || 0,
     } as ConsignmentListItem;
 
     const supabase = await getSupabaseServerClient();
