@@ -17,12 +17,15 @@ export { getDisplayCustomerName } from "./hooks/homeTypesAndUtils";
  * Composes Home-specific hooks into one stable API for the Home page.
  */
 export function useHomeDashboardData() {
-  // Keeps the active cluster labels that were used in the latest successful fetch.
-  const [appliedClusterLabels, setAppliedClusterLabels] = useState<string[]>([]);
+  // Keeps the labels that were used in the latest successful fetch.
+  const [appliedFilterLabels, setAppliedFilterLabels] = useState<string[]>([]);
   // Guards async updates so stale loads cannot overwrite newer state.
   const latestLoadIdRef = useRef(0);
 
   const {
+    vehicleSelectorMode,
+    selectedEquipageIds,
+    selectedLineIds,
     selectedAreaLabels,
     selectedDate,
     setSelectedDate,
@@ -46,7 +49,11 @@ export function useHomeDashboardData() {
     mergeLineBatchIntoState,
   } = useHomeLineState({
     selectedDate,
-    appliedClusterLabels,
+    vehicleSelectorMode,
+    selectedEquipageIds,
+    selectedLineIds,
+    selectedAreaLabels,
+    appliedFilterLabels,
   });
 
   const {
@@ -72,6 +79,9 @@ export function useHomeDashboardData() {
     refreshLineConsignments,
   } = useHomeLoader({
     selectedDate,
+    vehicleSelectorMode,
+    selectedEquipageIds,
+    selectedLineIds,
     selectedAreaLabels,
     lineCards,
     setLineCards,
@@ -83,17 +93,21 @@ export function useHomeDashboardData() {
     mergeLineBatchIntoState,
     updateEquipageInState,
     hydrateProfitabilityForEquipages,
-    setAppliedClusterLabels,
+    setAppliedFilterLabels,
   });
 
   useHomeCacheRestore({
     areasLoaded,
+    vehicleSelectorMode,
+    selectedEquipageIds,
+    selectedLineIds,
+    selectedAreaLabels,
     setSelectedDate,
     setLineCards,
     setHasLoadedLines,
     setCandidateEquipageCount,
     setVisibleEquipageCount,
-    setAppliedClusterLabels,
+    setAppliedFilterLabels,
     setLoadingProfitabilityCount,
   });
 
@@ -107,6 +121,7 @@ export function useHomeDashboardData() {
   const closePopup = () => setIsPopupOpen(false);
 
   return {
+    vehicleSelectorMode,
     selectedDate,
     setSelectedDate,
     profitabilityReferenceValue,
@@ -117,7 +132,9 @@ export function useHomeDashboardData() {
     hasLoadedLines,
     candidateEquipageCount,
     visibleEquipageCount,
-    appliedClusterLabels,
+    appliedFilterLabels,
+    selectedEquipageIds,
+    selectedLineIds,
     selectedAreaLabels,
     selectedEquipage,
     isPopupOpen,

@@ -363,6 +363,7 @@ export const calculateProfitability = async (
     	destinationPostalCode: consignment.destinationPostalCode || "",
 		invoiceStatus: consignment.invoiceStatus || "",
         internalPrice: String(consignment.internalPrice || 0),
+		paketburar: String(consignment.paketburar || 0),
     });
 
     const url = `/api/profitability?${params.toString()}`;

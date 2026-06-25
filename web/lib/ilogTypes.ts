@@ -83,6 +83,7 @@ export type ConsignmentListItem = {
     ilogStatus: string;
     prognosis: string;
     comment: string;
+    paketburar: number;
 };
 
 /**
