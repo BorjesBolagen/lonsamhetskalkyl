@@ -3,6 +3,8 @@ import { routeConsignment } from "@/profitability/service";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { requireUser } from "@/lib/authHelpers";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { Database } from "@/lib/supabaseServerSchema";
 
 function cleanTaxPoint(value: string | null | undefined): string {
   return (value ?? "").replace(/[^0-9]/g, "");
@@ -36,7 +38,7 @@ function splitTaxPointRelation(
  * används postort som fallback.
  */
 async function resolveTaxPoint(
-  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  supabase: SupabaseClient<Database>,
   postalCode: string,
   city: string,
 ): Promise<string> {
@@ -47,7 +49,7 @@ async function resolveTaxPoint(
     const zipNumber = parseInt(zipClean, 10);
 
     if (!Number.isNaN(zipNumber)) {
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("tax_point_lookup")
         .select("taxepunktspostnummer")
         .eq("postnummer", zipNumber)
@@ -60,7 +62,7 @@ async function resolveTaxPoint(
   }
 
   if (normalizedCity) {
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from("tax_point_lookup")
       .select("taxepunktspostnummer")
       .ilike("postort", normalizedCity)
