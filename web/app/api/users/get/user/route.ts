@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/authHelpers";
 
 /**
  * Gets a user with the gived id and returns it.
@@ -11,6 +12,9 @@ import { getSupabaseServerClient } from "@/lib/supabaseServer";
  * }
  */
 export async function GET(request: Request) {
+
+    const { error: userError } = await requireUser();
+    if (userError) return userError;
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
@@ -33,7 +37,7 @@ export async function GET(request: Request) {
 
         // Admins and self get full profile, any authenticated user gets public fields only
         const selectColumns = (isAdmin || isSelf)
-            ? "id, email, first_name, last_name, role, created_at"
+            ? "id, email, first_name, last_name, role"
             : "id, first_name, last_name";
 
         const { data, error } = await supabase

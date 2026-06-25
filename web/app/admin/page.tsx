@@ -807,6 +807,7 @@ function getDaysBetween(start: string, end: string): string[] {
               <p className="text-sm text-[var(--text-secondary)]">
                 Välj en .csv-fil med historiska kusk-rader. Importen kör en full
                 kontroll, och eventuella fel visas i rutan nedan.
+                Kom ihåg att spara filen med UTF-8 formattering!
               </p>
               <p className="text-sm text-[var(--text-secondary)]">
                 <span>

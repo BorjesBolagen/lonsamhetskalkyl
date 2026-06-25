@@ -32,12 +32,17 @@ import { NextResponse } from "next/server";
 import { ilogGet, IlogHttpError } from "@/lib/ilogClient";
 import { mapConsignments } from "@/lib/ilogMappers";
 import { enrichTaxPointRelationFromSupabase } from "@/lib/taxPointLookup";
+import { requireUser } from "@/lib/authHelpers";
 
 // yyyyMMdd format
 const DATE_REGEX = /^\d{8}$/;
 
 // GET /api/ilog/consignments?date=yyyyMMdd&equipageId=123
 export async function GET(request: Request) {
+
+  const { error } = await requireUser();
+  if (error) return error;
+
   // Plockar query-parametrar från URL.
   const { searchParams } = new URL(request.url);
   const debugRaw = process.env.NODE_ENV !== "production" && searchParams.get("debugRaw") === "true";

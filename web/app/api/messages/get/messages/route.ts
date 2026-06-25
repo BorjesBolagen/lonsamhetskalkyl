@@ -3,8 +3,12 @@ import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { User } from "@/lib/databaseTypes";
 import { getCurrentUser } from "@/lib/backend/utils";
 import { MAX_NUMBER_OF_MESSAGES_PER_PAGE } from "@/lib/backend/constants";
+import { requireUser } from "@/lib/authHelpers";
 
 export async function GET(request: Request) {
+
+    const { error: userError } = await requireUser();
+    if (userError) throw userError;
     
     const { searchParams } = new URL(request.url);
     const inputPage = searchParams.get("page");

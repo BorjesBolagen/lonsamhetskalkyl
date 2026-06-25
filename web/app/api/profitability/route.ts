@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { routeConsignment } from "@/profitability/service";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/authHelpers";
 
 function cleanTaxPoint(value: string | null | undefined): string {
   return (value ?? "").replace(/[^0-9]/g, "");
@@ -74,6 +75,10 @@ async function resolveTaxPoint(
 }
 
 export async function GET(req: NextRequest) {
+
+  const { error: userError } = await requireUser();
+  if (userError) return userError;
+
   try {
     const { searchParams } = new URL(req.url);
 

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/authHelpers";
 
 /**
  * API route that gets the best match name in the database for a given name.
  */
 export async function GET(req: NextRequest) {
+
+    const { error: userError } = await requireUser();
+    if (userError) return userError;
 
     const { searchParams } = new URL(req.url);
     const name = searchParams.get("name") || "";
