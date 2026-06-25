@@ -29,6 +29,27 @@ export type Database = {
         }
         Relationships: []
       }
+      addon_tid: {
+        Row: {
+          carriers_share: number | null
+          id: number
+          linjerel: string
+          name: string
+        }
+        Insert: {
+          carriers_share?: number | null
+          id?: number
+          linjerel: string
+          name: string
+        }
+        Update: {
+          carriers_share?: number | null
+          id?: number
+          linjerel?: string
+          name?: string
+        }
+        Relationships: []
+      }
       Addons: {
         Row: {
           carriers_share: number | null
@@ -363,6 +384,24 @@ export type Database = {
           },
         ]
       }
+      paketbur_prices: {
+        Row: {
+          antal_burar: number | null
+          pris: number | null
+          relation: string | null
+        }
+        Insert: {
+          antal_burar?: number | null
+          pris?: number | null
+          relation?: string | null
+        }
+        Update: {
+          antal_burar?: number | null
+          pris?: number | null
+          relation?: string | null
+        }
+        Relationships: []
+      }
       pricing_parameter: {
         Row: {
           admin_ID: string | null
@@ -397,6 +436,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      styckegods_avstand: {
+        Row: {
+          id: number
+          km: number
+          pris_per_ton: number
+        }
+        Insert: {
+          id?: number
+          km: number
+          pris_per_ton: number
+        }
+        Update: {
+          id?: number
+          km?: number
+          pris_per_ton?: number
+        }
+        Relationships: []
+      }
+      styckegods_linjer: {
+        Row: {
+          id: number
+          pris_per_ton: number
+          relation: string
+        }
+        Insert: {
+          id?: number
+          pris_per_ton: number
+          relation: string
+        }
+        Update: {
+          id?: number
+          pris_per_ton?: number
+          relation?: string
+        }
+        Relationships: []
       }
       sunes_pricing: {
         Row: {
@@ -599,27 +674,16 @@ export type Database = {
           vkl: number
         }[]
       }
-      get_medel_forh_kundvis:
-        | { Args: { in_kundnamn: string }; Returns: number }
-        | {
-            Args: { in_kundnamn: string; in_use_entire_name?: boolean }
-            Returns: number
-          }
+      get_medel_forh_kundvis: { Args: { in_kundnamn: string }; Returns: number }
       get_medel_se: {
         Args: { in_kilometer: number; in_viktklass: number }
         Returns: number
       }
       get_office_for_taxep: { Args: { in_taxep: number }; Returns: string }
-      get_snitt_forh_se_radvis:
-        | { Args: { in_kundnamn: string; in_weight: number }; Returns: number }
-        | {
-            Args: {
-              in_kundnamn: string
-              in_use_entire_name?: boolean
-              in_weight: number
-            }
-            Returns: number
-          }
+      get_snitt_forh_se_radvis: {
+        Args: { in_kundnamn: string; in_weight: number }
+        Returns: number
+      }
       get_taxep: { Args: { in_postal_code: number }; Returns: number }
       get_weight_class: { Args: { input_weight: number }; Returns: number }
       is_admin: { Args: { user_id: string }; Returns: boolean }

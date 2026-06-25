@@ -209,7 +209,15 @@ export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: num
 export async function try_steg_4(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
 
     // Hämta variabler
-    const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
+    const parts = input.taxPointRelation?.trim().split("-") ?? [];
+    if (parts.length !== 2) {
+        throw new Error(`Ogiltigt taxPointRelation-format: "${input.taxPointRelation}". Förväntat: "123-456".`);
+    }
+
+    const [sender_taxep, receiver_taxep] = parts.map(Number);
+    if (Number.isNaN(sender_taxep) || Number.isNaN(receiver_taxep)) {
+        throw new Error(`taxPointRelation innehåller icke-numeriska värden: "${input.taxPointRelation}".`)
+    }
     const weight = Number(input.chargeable_weight);
 
     // Kolla om supabase har match på bara taxepunkter och viktklass
@@ -316,7 +324,7 @@ export async function try_sune_lookup(consignment: ConsignmentListItem): Promise
     // Skapa och sök med lookup
     const fuzzy4Part = `%${sender}%${pickupCity}%${receiver}%${destCity}%`;
 
-    let { data, error } = await (supabase as any).from("sunes_pricing")
+    let { data, error } = await supabase.from("sunes_pricing")
         .select("genomsnittspris")
         .ilike("lookup", fuzzy4Part) 
         .limit(1)
