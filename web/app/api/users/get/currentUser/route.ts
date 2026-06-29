@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { getCurrentUser } from "@/lib/backend/utils";
+import { requireUser } from "@/lib/authHelpers";
 
 /**
  * Gets and returns the currently signed in user
@@ -12,7 +13,10 @@ import { getCurrentUser } from "@/lib/backend/utils";
  *   data: User | null
  * }
  */
-export async function GET(request: Request) {
+export async function GET() {
+
+    const { error: userError } = await requireUser();
+    if (userError) return userError;
 
     try {
         const supabase = await getSupabaseServerClient();

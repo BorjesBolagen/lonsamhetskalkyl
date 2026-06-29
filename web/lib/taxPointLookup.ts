@@ -80,11 +80,16 @@ const fetchTaxPointRows = async (
     rows.push(...(response.data ?? []));
   }
 
-  for (const postort of postorts) {
+  for (const postortChunk of chunk(postorts, 500)) {
+    if (postortChunk.length === 0) {
+      continue;
+    }
+
+    const orFilter = postortChunk.map((p) => `postort.ilike.${p}`).join(",");
     const response = await supabase
       .from("tax_point_lookup")
       .select("postnummer, postort, kontor, kontorsforkortning, taxepunktspostnummer, taxepunkt")
-      .ilike("postort", postort);
+      .or(orFilter);
 
     if (response.error) {
       throw new Error(`Kunde inte läsa taxepunkter (postort): ${response.error.message}`);

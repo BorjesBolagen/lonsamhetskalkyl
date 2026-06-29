@@ -3,6 +3,7 @@ import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabaseS
 import { getCurrentUser } from "@/lib/backend/utils";
 import { TablesUpdate } from "@/lib/supabaseServerSchema";
 import { validatePassword } from "@/lib/validation";
+import { requireAdmin } from "@/lib/authHelpers";
 
 
 /**
@@ -17,6 +18,10 @@ import { validatePassword } from "@/lib/validation";
  * )
  */
 export async function GET() {
+
+    const { error: adminError } = await requireAdmin();
+    if (adminError) return adminError;
+
     try {
         const supabase = await getSupabaseServerClient();
 

@@ -230,10 +230,35 @@ export default function ResetPasswordPage() {
           Skriv in ditt nya lösenord två gånger för att uppdatera.
         </p>
 
-        {isLoadingSession ? (
+      {isLoadingSession ? (
           <p className="text-center text-sm text-gray-600">
             Kontrollerar återställningslänk...
           </p>
+        ) : !hasRecoverySession ? (
+          <div className="space-y-4">
+            <p className="text-center text-sm text-red-600 font-medium">
+              Återställningslänken är inte längre giltig eller har gått ut.
+            </p>
+            <p className="text-center text-xs text-gray-600 mb-6">
+              Här är några möjligheter:
+            </p>
+            <ul className="text-xs text-gray-600 space-y-2 mb-6">
+              <li className="flex items-start">
+                <span className="mr-2">•</span>
+                <span>Om du redan är inloggad kan du byta lösenord i inställningar</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">•</span>
+                <span>Annars kan du begära en ny återställningslänk från inloggningssidan</span>
+              </li>
+            </ul>
+            <a
+              href="/login"
+              className="w-full inline-block text-center bg-[#7ec58a] hover:bg-[#6db579] text-white font-bold py-3 px-4 rounded-full shadow-md transition-all transform active:scale-95 uppercase tracking-widest text-sm"
+            >
+              Gå till inloggning
+            </a>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="flex items-center border-b border-gray-400 py-2 focus-within:border-[#76a57d] relative">

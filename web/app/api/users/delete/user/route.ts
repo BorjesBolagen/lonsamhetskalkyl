@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabaseServer";
 import { getCurrentUser } from "@/lib/backend/utils";
+import { requireAdmin } from "@/lib/authHelpers";
 
 type DeleteUserPayload = {
     userId?: string;
 }
 
 export async function DELETE(request: Request) {
+
+    const { error: adminError } = await requireAdmin();
+    if (adminError) return adminError;
 
     let payload: DeleteUserPayload = {};
 
@@ -29,10 +33,6 @@ export async function DELETE(request: Request) {
         
         if (!currentUser.status || !currentUser.data) {
             return NextResponse.json({ status: false, message: "Kunde inte verifiera användare" }, { status: 401 });
-        }
-
-        if (currentUser.data.role !== "admin") {
-            return NextResponse.json({ status: false, message: "Du har inte behörighet att göra detta" }, { status: 403 });
         }
 
         if (currentUser.data.id === userId) {

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { routeConsignment } from "@/profitability/service";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/authHelpers";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { Database } from "@/lib/supabaseServerSchema";
 
 function cleanTaxPoint(value: string | null | undefined): string {
   return (value ?? "").replace(/[^0-9]/g, "");
@@ -34,46 +37,54 @@ function splitTaxPointRelation(
  * Först testas postnummer. Om postnummer saknas eller inte ger träff
  * används postort som fallback.
  */
-async function resolveTaxPoint(
-  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
-  postalCode: string,
-  city: string,
-): Promise<string> {
-  const zipClean = postalCode.replace(/[\s-]/g, "");
-  const normalizedCity = normalizeCity(city);
+async function resolveTaxPoints(
+  supabase: SupabaseClient<Database>,
+  lookups: { postalCode: string; city: string }[],
+): Promise<string[]> {
+  const zipNumbers = lookups
+    .map((l) => parseInt(l.postalCode.replace(/[\s-]/g, ""), 10))
+    .filter((n) => !Number.isNaN(n));
 
-  if (zipClean) {
-    const zipNumber = parseInt(zipClean, 10);
+  const cities = lookups
+    .map((l) => normalizeCity(l.city))
+    .filter(Boolean);
 
+  // Single query fetching all relevant rows
+  const { data } = await supabase
+    .from("tax_point_lookup")
+    .select("postnummer, postort, taxepunktspostnummer")
+    .or(
+      [
+        zipNumbers.length ? `postnummer.in.(${zipNumbers.join(",")})` : null,
+        cities.length ? cities.map(c => `postort.ilike.${c}`).join(",") : null,
+      ].filter(Boolean).join(",")
+    );
+
+  const rows = data ?? [];
+
+  return lookups.map(({ postalCode, city }) => {
+    const zipNumber = parseInt(postalCode.replace(/[\s-]/g, ""), 10);
+    const normalizedCity = normalizeCity(city);
+
+    // Prefer postal code match
     if (!Number.isNaN(zipNumber)) {
-      const { data } = await (supabase as any)
-        .from("tax_point_lookup")
-        .select("taxepunktspostnummer")
-        .eq("postnummer", zipNumber)
-        .maybeSingle();
-
-      if (data?.taxepunktspostnummer) {
-        return data.taxepunktspostnummer.toString();
-      }
+      const match = rows.find((r) => r.postnummer === zipNumber);
+      if (match?.taxepunktspostnummer) return match.taxepunktspostnummer.toString();
     }
-  }
 
-  if (normalizedCity) {
-    const { data } = await (supabase as any)
-      .from("tax_point_lookup")
-      .select("taxepunktspostnummer")
-      .ilike("postort", normalizedCity)
-      .limit(1);
-
-    if (data?.[0]?.taxepunktspostnummer) {
-      return data[0].taxepunktspostnummer.toString();
-    }
-  }
-
-  return "";
+    // Fallback to city match
+    const cityMatch = rows.find(
+      (r) => r.postort?.toUpperCase() === normalizedCity,
+    );
+    return cityMatch?.taxepunktspostnummer?.toString() ?? "";
+  });
 }
 
 export async function GET(req: NextRequest) {
+
+  const { error: userError } = await requireUser();
+  if (userError) return userError;
+
   try {
     const { searchParams } = new URL(req.url);
 
@@ -100,46 +111,39 @@ export async function GET(req: NextRequest) {
 
     const supabase = await getSupabaseServerClient();
 
-    // 1. Kolla upp mottagarens taxepunkt.
-    const destinationTaxPoint = await resolveTaxPoint(
+    const [destinationTaxPoint, resolvedSenderTaxPoint] = await resolveTaxPoints(
       supabase,
-      consignment.destinationPostalCode || "",
-      consignment.destinationCity || "",
+      [
+        {
+          postalCode: consignment.destinationPostalCode || "",
+          city: consignment.destinationCity || "",
+        },
+        {
+          postalCode: consignment.pickupPostalCode || "",
+          city: consignment.pickupLocationCity || "",
+        },
+      ],
     );
 
     const isValidDest = Boolean(destinationTaxPoint);
 
-    // 2. Bygg taxPointRelation om den saknas.
     let finalTaxPointRelation = consignment.taxPointRelation || "";
-
     let senderTaxPoint: string | null = null;
     let receiverTaxPoint: string | null = null;
 
     if (finalTaxPointRelation) {
       const splitResult = splitTaxPointRelation(finalTaxPointRelation);
-
       senderTaxPoint = splitResult.senderTaxPoint;
       receiverTaxPoint = splitResult.receiverTaxPoint;
     }
 
-    // Om relationen saknas eller är ofullständig hämtas taxepunkter
-    // via postnummer, med postort som fallback.
-    if (!senderTaxPoint) {
-      senderTaxPoint =
-        (await resolveTaxPoint(
-          supabase,
-          consignment.pickupPostalCode || "",
-          consignment.pickupLocationCity || "",
-        )) || null;
-    }
-
-    if (!receiverTaxPoint) {
-      receiverTaxPoint = destinationTaxPoint || null;
-    }
+    if (!senderTaxPoint) senderTaxPoint = resolvedSenderTaxPoint || null;
+    if (!receiverTaxPoint) receiverTaxPoint = destinationTaxPoint || null;
 
     if (!finalTaxPointRelation && senderTaxPoint && receiverTaxPoint) {
       finalTaxPointRelation = `${senderTaxPoint}-${receiverTaxPoint}`;
     }
+
 
     // 3. Skicka vidare.
     const enrichedConsignment = {

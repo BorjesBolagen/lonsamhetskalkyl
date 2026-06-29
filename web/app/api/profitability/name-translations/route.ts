@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/authHelpers";
 
 /**
  * API route that gets all name translations for a given ilog_name.
  * Returns all kusk_name values where ilog_name matches the provided name.
  */
 export async function GET(req: NextRequest) {
+
+    const { error: userError } = await requireUser();
+    if (userError) return userError;
+
     const { searchParams } = new URL(req.url);
     const name = searchParams.get("name") || "";
 

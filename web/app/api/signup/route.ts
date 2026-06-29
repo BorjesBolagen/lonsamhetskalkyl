@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { getCurrentUser } from "@/lib/backend/utils";
 import { validateEmail } from "@/lib/validation";
+import { requireAdmin } from "@/lib/authHelpers";
 
 /* QUeries the database with an email. Returns the user data if the user exists
     Returns on this format
@@ -12,6 +12,10 @@ import { validateEmail } from "@/lib/validation";
     }
 */
 export async function GET(request: Request) {
+
+  const { error: adminError } = await requireAdmin();
+  if (adminError) return adminError;
+
   const { searchParams } = new URL(request.url);
   const email = searchParams.get("email");
 
@@ -25,17 +29,6 @@ export async function GET(request: Request) {
 
   try {
     const supabase = await getSupabaseServerClient();
-    
-    const currentUser = await getCurrentUser(supabase);
-
-    if (!currentUser.status || !currentUser.data) {
-      return NextResponse.json({ status: false, message: "Kunde inte verifiera användare" }, { status: 401 });
-    }
-
-    if (currentUser.data.role !== "admin") {
-      return NextResponse.json({ status: false, message: "Du har inte behörighet att göra detta" }, { status: 403 });
-    }
-
     const { data, error } = await supabase.from("User").select("*").eq("email", email).maybeSingle();
 
     if (error) {

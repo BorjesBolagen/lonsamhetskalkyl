@@ -59,7 +59,10 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
     const estimeraPris = (rows: Array<{ kundnettofrakt: number; vikt: number }>) => {
         const totalKundnettofrakt = rows.reduce((sum, row) => sum + row.kundnettofrakt, 0);
         const totalVikt = rows.reduce((sum, row) => sum + row.vikt, 0);
-        return totalKundnettofrakt / totalVikt * weight;
+
+        // Avoid div by 0 error
+        if (totalVikt === 0) return null;
+        return totalKundnettofrakt / totalVikt * weight; //
     };
 
     // Lista med estimerade priser
@@ -68,13 +71,13 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
     // Om vi hittade för orginalparametrar, beräkna estimerat pris
     if (hittatOrginalData) {
         const estOrginal = estimeraPris(data_orginal);
-        estimates.push(estOrginal);
+        if (estOrginal) estimates.push(estOrginal);
     }
 
     // Om vi hittade för vikt+1, beräkna estimerat pris
     if (hittatPlusEttData) {
         const estPlusEtt = estimeraPris(data_plus_ett);
-        estimates.push(estPlusEtt);
+        if (estPlusEtt) estimates.push(estPlusEtt);
     }
 
 
@@ -206,7 +209,15 @@ export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: num
 export async function try_steg_4(input: ProfitabilityInput, weight_plus_one: number): Promise<number | null> {
 
     // Hämta variabler
-    const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
+    const parts = input.taxPointRelation?.trim().split("-") ?? [];
+    if (parts.length !== 2) {
+        throw new Error(`Ogiltigt taxPointRelation-format: "${input.taxPointRelation}". Förväntat: "123-456".`);
+    }
+
+    const [sender_taxep, receiver_taxep] = parts.map(Number);
+    if (Number.isNaN(sender_taxep) || Number.isNaN(receiver_taxep)) {
+        throw new Error(`taxPointRelation innehåller icke-numeriska värden: "${input.taxPointRelation}".`)
+    }
     const weight = Number(input.chargeable_weight);
 
     // Kolla om supabase har match på bara taxepunkter och viktklass
@@ -237,6 +248,7 @@ export async function try_steg_4(input: ProfitabilityInput, weight_plus_one: num
         if (!d || d.sum_kundnetto === null || d.sum_vikt === null) return null;
 
         // Räkna ut pris som sum_kundnetto / sum_vikt * vikt
+        if (d.sum_vikt === 0) return null;
         return (d.sum_kundnetto / d.sum_vikt) * weight;
     };
 
@@ -312,7 +324,7 @@ export async function try_sune_lookup(consignment: ConsignmentListItem): Promise
     // Skapa och sök med lookup
     const fuzzy4Part = `%${sender}%${pickupCity}%${receiver}%${destCity}%`;
 
-    let { data, error } = await (supabase as any).from("sunes_pricing")
+    let { data, error } = await supabase.from("sunes_pricing")
         .select("genomsnittspris")
         .ilike("lookup", fuzzy4Part) 
         .limit(1)

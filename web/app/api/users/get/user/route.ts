@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/authHelpers";
 
 /**
  * Gets a user with the gived id and returns it.
@@ -12,6 +13,9 @@ import { getSupabaseServerClient } from "@/lib/supabaseServer";
  */
 export async function GET(request: Request) {
 
+    const { error: userError } = await requireUser();
+    if (userError) return userError;
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
@@ -22,12 +26,29 @@ export async function GET(request: Request) {
     try {
         const supabase = await getSupabaseServerClient();
 
-        const { data, error } = await supabase.from("User").select("*").eq("id", userId).maybeSingle();
+        // Verify caller is authenticated
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+            return NextResponse.json({ status: false, message: "Ej autentiserad" }, { status: 401 });
+        }
+
+        const isAdmin = false; // replace with your admin check if needed
+        const isSelf = user.id === userId;
+
+        // Admins and self get full profile, any authenticated user gets public fields only
+        const selectColumns = (isAdmin || isSelf)
+            ? "id, email, first_name, last_name, role"
+            : "id, first_name, last_name";
+
+        const { data, error } = await supabase
+            .from("User")
+            .select(selectColumns)
+            .eq("id", userId)
+            .maybeSingle();
 
         if (error) {
             return NextResponse.json({ status: false, message: "Fel vid hämtning av användare: " + error.message }, { status: 500 });
         }
-
         if (!data) {
             return NextResponse.json({ status: false, message: "Användare hittades inte" }, { status: 404 });
         }
