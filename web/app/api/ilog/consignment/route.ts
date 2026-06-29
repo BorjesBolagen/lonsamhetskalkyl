@@ -25,6 +25,7 @@
 import { NextResponse } from "next/server";
 import { ilogGet, IlogHttpError } from "@/lib/ilogClient";
 import { mapConsignmentDetail } from "@/lib/ilogMappers";
+import { requireUser } from "@/lib/authHelpers";
 
 // Hjälpfunktion för boolean query-parametrar.
 const parseBoolean = (value: string | null, defaultValue: boolean): boolean => {
@@ -39,9 +40,13 @@ const parseBoolean = (value: string | null, defaultValue: boolean): boolean => {
 // GET /api/ilog/consignment?consignmentId=123
 // Optional: includeHistory=true|false, includeEvents=true|false, debugRaw=true
 export async function GET(request: Request) {
+
+  const { error } = await requireUser();
+  if (error) return error;
+
   // Plockar query-parametrar från URL.
   const { searchParams } = new URL(request.url);
-  const debugRaw = searchParams.get("debugRaw") === "true";
+  const debugRaw = process.env.NODE_ENV !== "production" && searchParams.get("debugRaw") === "true";
 
   const consignmentId = searchParams.get("consignmentId");
 

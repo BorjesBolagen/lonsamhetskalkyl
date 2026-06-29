@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { User } from "@/lib/databaseTypes";
 import { getCurrentUser } from "@/lib/backend/utils";
+import { requireUser } from "@/lib/authHelpers";
 
 export async function GET() {
+
+    const { error: userError } = await requireUser();
+    if (userError) throw userError;
+
     let currentUser: User;
     const supabase = await getSupabaseServerClient();
     try {

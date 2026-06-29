@@ -8,6 +8,8 @@ import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { try_sune_lookup } from "./trappsteg_steg";
+import { try_paketbur_lookup } from "./paketbur";
+import { try_styckegods_lookup } from "./styckegods";
 
 // ============================================================================
 // STEG 1 - SORTERA FLÖDEN
@@ -109,92 +111,6 @@ export function determineFlowType(consignment: ConsignmentListItem): FlowType {
   return FlowType.FJARR;
 }
 
-async function try_paketbur_lookup(
-  consignment: ConsignmentListItem
-): Promise<number | null> {
-  
-  if (!consignment.paketburar || consignment.paketburar <= 0) {
-    return null; 
-  }
-
-  const supabase = await getSupabaseServerClient();
-
-  // AVSÄNDARE
-  let fromAbbr = "";
-  const pickupZipClean = (consignment.pickupPostalCode || "").replace(/[\s-]/g, "");
-  
-  // Postnummer
-  if (pickupZipClean) {
-      const { data } = await (supabase as any).from("tax_point_lookup")
-          .select("kontorsforkortning") 
-          .eq("postnummer", parseInt(pickupZipClean, 10))
-          .maybeSingle();
-      if (data?.kontorsforkortning) fromAbbr = data.kontorsforkortning;
-  }
-  
-  // Sök på stad om postnummer saknas
-  if (!fromAbbr && consignment.pickupLocationCity) {
-      const { data } = await (supabase as any).from("tax_point_lookup")
-          .select("kontorsforkortning") 
-          .ilike("postort", consignment.pickupLocationCity.trim())
-          .limit(1)
-          .maybeSingle();
-      if (data?.kontorsforkortning) fromAbbr = data.kontorsforkortning;
-  }
-
-  // MOTTAGARE
-  let toAbbr = "";
-  const destZipClean = (consignment.destinationPostalCode || "").replace(/[\s-]/g, "");
-  
-  // Postnummer
-  if (destZipClean) {
-      const { data } = await (supabase as any).from("tax_point_lookup")
-          .select("kontorsforkortning") 
-          .eq("postnummer", parseInt(destZipClean, 10))
-          .maybeSingle();
-      if (data?.kontorsforkortning) toAbbr = data.kontorsforkortning;
-  }
-
-  // Sök på stad om postnummer saknas
-  if (!toAbbr && consignment.destinationCity) {
-      const { data } = await (supabase as any).from("tax_point_lookup")
-          .select("kontorsforkortning") 
-          .ilike("postort", consignment.destinationCity.trim())
-          .limit(1)
-          .maybeSingle();
-      if (data?.kontorsforkortning) toAbbr = data.kontorsforkortning;
-  }
-
-  if (!fromAbbr || !toAbbr) {
-      return null; 
-  }
-
-  const relation = `${fromAbbr}-${toAbbr}`.toUpperCase();
-
-  // Leta efter priset
-  const { data: priceDataArray, error } = await (supabase as any).from("paketbur_prices")
-      .select("*")
-      .ilike("relation", `%${relation.trim()}%`); 
-
-  if (error || !priceDataArray || priceDataArray.length === 0) {
-      return null; 
-  }
-
-  const actualBurar = Number(consignment.paketburar);
-
-  // Avrunda uppåt
-  const tierBurar = Math.ceil(actualBurar);
-
-  const correctRow = priceDataArray.find((row: any) => Number(row.antal_burar) === tierBurar);
-
-  if (!correctRow) {
-      return null;
-  }
-
-  const finalPrice = correctRow.pris * actualBurar;
-  return Math.round((finalPrice + Number.EPSILON) * 100) / 100;
-}
-
 export async function routeConsignment(
   consignment: ConsignmentListItem,
   input: ProfitabilityInput
@@ -207,6 +123,18 @@ export async function routeConsignment(
       input.linjerel
       ?? consignment.zoneName
       ?? null,
+  };
+
+  // Hjälpfunktion: Om ett specialflöde misslyckas, skicka till Trappstegsmodellen
+  const fallbackToTrappsteg = async (reason: string) => {
+    console.warn(`${reason}-uppslag misslyckades, skickar till Fjärr (Trappstegsmodellen)...`);
+    if (!input.taxPointRelation || input.taxPointRelation.trim() === "") {
+      return { step_used: -1, estimated_revenue: 0, detail: `Fjärr: Saknar taxepunktsrelation (Fallback från ${reason})` };
+    }
+    if (!input.kundnamn || input.kundnamn.trim() === "") {
+      return { step_used: -1, estimated_revenue: 0, detail: `Fjärr: Saknar kundnamn (Fallback från ${reason})` };
+    }
+    return await calculateProfitability(inputWithLineRelation);
   };
 
   switch (flowType) {
@@ -234,19 +162,33 @@ export async function routeConsignment(
               };
           }
           
-          return { 
-              step_used: -1, 
-              estimated_revenue: 0, 
-              detail: "Paketbur: Inget pris hittades" 
-          };
+          // Hittades inte, kör trappstegsmodellen
+          return await fallbackToTrappsteg("Paketbur");
 
       } catch (error) {
           console.error("Krasch i Paketburs-flödet:", error);
-          return { step_used: -1, estimated_revenue: 0, detail: "Paketbur: Databasfel vid uppslag" };
+          return await fallbackToTrappsteg("Paketbur (Databasfel)");
       }
 
     case FlowType.STYCKEGODS:
-      return { step_used: -1, estimated_revenue: 0, detail: "Styckegods: Beräkningsmodell saknas ännu" };
+      try {
+          const styckeResult = await try_styckegods_lookup(consignment);
+
+          if (styckeResult !== null) {
+              return {
+                  step_used: 0, 
+                  estimated_revenue: styckeResult.price,
+                  detail: styckeResult.method,
+              };
+          }
+
+          // Hittades inte, kör trappstegsmodellen
+          return await fallbackToTrappsteg("Styckegods");
+
+      } catch (error) {
+          console.error("Krasch i Styckegods-flödet:", error);
+          return await fallbackToTrappsteg("Styckegods (Databasfel)");
+      }
 
     case FlowType.EGENFAKTURERAT:
       return { 
@@ -270,19 +212,11 @@ export async function routeConsignment(
           
           // Hittades inte, kör trappstegsmodellen
           console.warn("Sune-uppslag misslyckades (finns ej i prislistan), skickar till Fjärr...");
-          
-          if (!input.taxPointRelation || input.taxPointRelation.trim() === "") {
-            return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar taxepunktsrelation" };
-          }
-          if (!input.kundnamn || input.kundnamn.trim() === "") {
-            return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar kundnamn" };
-          }
-          
-          return await calculateProfitability(inputWithLineRelation);
+          return await fallbackToTrappsteg("Sune");
 
       } catch (error) {
           console.error("Krasch i Sune-flödet:", error);
-          return { step_used: -1, estimated_revenue: 0, detail: "Sunes: Databasfel vid uppslag" };
+          return await fallbackToTrappsteg("Sune (Databasfel)");
       }
 
     default:

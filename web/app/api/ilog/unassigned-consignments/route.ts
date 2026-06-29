@@ -3,6 +3,7 @@ import { ilogGet, IlogHttpError } from "@/lib/ilogClient";
 import { mapConsignments } from "@/lib/ilogMappers";
 import { enrichTaxPointRelationFromSupabase } from "@/lib/taxPointLookup";
 import type { ConsignmentListItem } from "@/lib/ilogTypes";
+import { requireUser } from "@/lib/authHelpers";
 
 const DATE_REGEX = /^\d{8}$/;
 const LINE_TYPES = new Set(["ZONE", "ZONEFILTER", "ZONEGROUP"]);
@@ -47,8 +48,12 @@ function isUnassignedConsignment(consignment: ConsignmentListItem): boolean {
  * Hämtar bokningar på vald linje, filtrerar oplacerade och enrichar taxPointRelation.
  */
 export async function GET(request: Request) {
+
+  const { error } = await requireUser();
+  if (error) return error;
+
   const { searchParams } = new URL(request.url);
-  const debugRaw = searchParams.get("debugRaw") === "true";
+  const debugRaw = process.env.NODE_ENV !== "production" && searchParams.get("debugRaw") === "true";
 
   const date = searchParams.get("date");
   const lineId = searchParams.get("lineId");

@@ -3,12 +3,17 @@ import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { getCurrentUser } from "@/lib/backend/utils";
 import { User } from "@/lib/databaseTypes";
 import { MAX_NUMBER_OF_CHARACTERS_PER_MESSAGE } from "@/lib/backend/constants";
+import { requireAdmin } from "@/lib/authHelpers";
 
 type AddMessagePayload = {
     body: string
 }
 
 export async function POST(request: Request) {
+
+    const { error: adminError } = await requireAdmin();
+    if (adminError) return adminError;
+
     let payload: AddMessagePayload | null = null;
         
     try {
@@ -36,14 +41,6 @@ export async function POST(request: Request) {
         return NextResponse.json(
             { status: false, message: e instanceof Error ? e.message : "Kunde inte verifiera inloggad användare. Försök logga in på nytt." },
             { status: 401 }
-        );
-    }
-
-    // Make sure they are admin
-    if (currentUser.role !== "admin") {
-        return NextResponse.json(
-            { status: false, message: "Du har inte behörighet att göra detta" },
-            { status: 403 }
         );
     }
 

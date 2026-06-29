@@ -26,19 +26,6 @@ type HistoricalImportResponse = {
 // ============================================================
 
 /**
- * Validerar om inloggningssession/token fortfarande är giltig.
- */
-export const tokenCheck = async (): Promise<TokenResponse> => {
-	const response = await fetch("/api/token");
-
-	if (!response.ok) {
-		throw new Error("Request failed: " + (await response.text()));
-	}
-
-	return (await response.json()) as TokenResponse;
-};
-
-/**
  * Sign up funktion för supabase
  */
 export const signUpProcedure = async (email: string): Promise<BasicResponse<null>> => {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabaseServer';
-import { getCurrentUser } from '@/lib/backend/utils';
+import { getSupabaseAdminClient } from '@/lib/supabaseServer';
 import { ImportHttpError, processHistoricalCSV } from '@/lib/importEngine';
+import { requireAdmin } from '@/lib/authHelpers';
 
 // create-upload-session: skapar import_job + signerad URL
 // start-import: läser fil från Storage och importerar till DB
@@ -17,20 +17,7 @@ type StartImportRequest = {
 
 type HistoricalImportRequest = CreateUploadSessionRequest | StartImportRequest;
 
-async function requireAdminUser() {
-  const supabase = await getSupabaseServerClient();
-  const currentUser = await getCurrentUser(supabase);
 
-  if (!currentUser.status || !currentUser.data) {
-    throw new ImportHttpError(401, 'Kunde inte verifiera användare.');
-  }
-
-  if (currentUser.data.role !== 'admin') {
-    throw new ImportHttpError(403, 'Endast admin kan importera historisk data.');
-  }
-
-  return currentUser.data;
-}
 
 async function handleCreateUploadSession(adminId: string, filename: string) {
   if (!filename) {
@@ -181,16 +168,21 @@ async function handleStartImport(adminId: string, jobId: string) {
 
 export async function POST(request: Request) {
   try {
-    const adminUser = await requireAdminUser();
+    const { error } = await requireAdmin()
+    if (error) return error;
+
+    const { data: { user } } = await (await import('@/lib/supabaseServer')).getSupabaseServerClient()
+      .then(c => c.auth.getUser());
+
     const body = (await request.json()) as HistoricalImportRequest;
 
     if (body.action === 'create-upload-session') {
-      const session = await handleCreateUploadSession(adminUser.id, body.filename);
+      const session = await handleCreateUploadSession(user!.id, body.filename);
       return NextResponse.json(session);
     }
 
     if (body.action === 'start-import') {
-      const result = await handleStartImport(adminUser.id, body.jobId);
+      const result = await handleStartImport(user!.id, body.jobId);
       return NextResponse.json(result);
     }
 
@@ -199,7 +191,6 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   } catch (error) {
-    // Alla kontrollerade ImportHttpError returneras med rätt statuskod.
     const statusCode = error instanceof ImportHttpError ? error.statusCode : 500;
     const message =
       error instanceof ImportHttpError
