@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { getCurrentUser } from "@/lib/backend/utils";
 import { Json, TablesUpdate } from "@/lib/supabaseServerSchema";
+import { requireUser } from "@/lib/authHelpers";
 
 type FiltersPayload = {
     userId?: string;
@@ -9,6 +10,10 @@ type FiltersPayload = {
 }
 
 export async function POST(request: Request) {
+
+    const { error: userError } = await requireUser();
+    if (userError) return userError;
+    
     let payload: FiltersPayload = {};
     
     try {
@@ -33,8 +38,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ status: false, message: "Kunde inte verifiera användare" }, { status: 401 });
         }
 
-        if (currentUser.data.role !== "admin" && currentUser.data.id !== userId) {
-            return NextResponse.json({ status: false, message: "Du har inte behörighet att göra detta" }, { status: 403 });
+        if (currentUser.data.id !== userId) {
+            return NextResponse.json({ status: false, message: "Du har inte behörighet att göra detta" }, { status: 401 });
         }
 
         const update: TablesUpdate<"User"> = { filters };

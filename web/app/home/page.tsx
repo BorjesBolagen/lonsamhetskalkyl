@@ -6,16 +6,111 @@ import LineCard from "../../components/LineCard";
 import EquipageCard from "../../components/EquipageCard";
 import { NameDropdown, type NameSource } from "../../components/Dropdown";
 import PriceWithAddons from "../../components/PriceWithAddons";
-import {
-  getDisplayCustomerName,
-  useHomeDashboardData,
-} from "./useHomeDashboardData";
+import { useHomeDashboardData } from "./useHomeDashboardData";
 import { InfoTooltip } from "@/components/InformationBubble";
-import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
-import { useState } from "react";
-import { calculateConsignmentProfitabilityPrice, ConsignmentWithProfitability, toBarPercent } from "./hooks/homeTypesAndUtils";
+import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  calculateConsignmentProfitabilityPrice,
+  ConsignmentWithProfitability,
+  EquipageWithConsignments,
+  toBarPercent,
+} from "./hooks/homeTypesAndUtils";
 
 const STANDARD_FLM = 19.2;
+
+type TruckLineTooltipProps = {
+  text: string;
+};
+
+function TruckLineTooltip({ text }: TruckLineTooltipProps) {
+  const iconRef = useRef<HTMLSpanElement | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    placement: "top" | "bottom";
+  } | null>(null);
+
+  const showTooltip = () => {
+    const icon = iconRef.current;
+    if (!icon) return;
+
+    const rect = icon.getBoundingClientRect();
+    const margin = 8;
+    const preferredWidth = 280;
+    const width = Math.min(preferredWidth, window.innerWidth - margin * 2);
+    const estimatedHeight = 72;
+
+    let left = rect.left + rect.width / 2 - width / 2;
+    left = Math.max(margin, left);
+    left = Math.min(window.innerWidth - width - margin, left);
+
+    const spaceAbove = rect.top - margin;
+    const spaceBelow = window.innerHeight - rect.bottom - margin;
+    const placement: "top" | "bottom" =
+      spaceBelow >= estimatedHeight || spaceBelow >= spaceAbove
+        ? "bottom"
+        : "top";
+
+    const top =
+      placement === "bottom"
+        ? Math.min(rect.bottom + 10, window.innerHeight - estimatedHeight - margin)
+        : Math.max(margin, rect.top - estimatedHeight - 10);
+
+    setTooltipPosition({
+      top,
+      left,
+      width,
+      placement,
+    });
+  };
+
+  const hideTooltip = () => {
+    setTooltipPosition(null);
+  };
+
+  return (
+    <>
+      <span
+        ref={iconRef}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
+        onFocus={showTooltip}
+        onBlur={hideTooltip}
+        tabIndex={0}
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[var(--text-primary)] text-[10px] font-bold leading-none cursor-help outline-none focus:ring-2 focus:ring-black/30"
+        aria-label={text}
+      >
+        i
+      </span>
+
+      {tooltipPosition &&
+        createPortal(
+          <div
+            className="fixed pointer-events-none rounded-md border border-black bg-white px-3 py-2 text-xs font-normal leading-snug text-black shadow-lg max-h-[40vh] overflow-auto"
+            style={{
+              top: tooltipPosition.top,
+              left: tooltipPosition.left,
+              width: tooltipPosition.width,
+              zIndex: 2147483647,
+            }}
+          >
+            {text}
+            <span
+              className={
+                tooltipPosition.placement === "bottom"
+                  ? "absolute left-1/2 bottom-full h-2 w-2 -translate-x-1/2 translate-y-1/2 rotate-45 border-l border-t border-black bg-white"
+                  : "absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-black bg-white"
+              }
+            />
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 
 export default function Home() {
   /**
@@ -31,7 +126,8 @@ export default function Home() {
     lineError,
     hasLoadedLines,
     visibleEquipageCount,
-    appliedClusterLabels,
+    appliedFilterLabels,
+    vehicleSelectorMode,
     selectedEquipage,
     isPopupOpen,
     areasLoaded,
@@ -76,6 +172,14 @@ export default function Home() {
   }
 
   const [loadingRows, setLoadingRows] = useState<Record<string, boolean>>({});
+
+  const equipageCards = useMemo(
+    () =>
+      lineCards
+        .flatMap((line) => line.equipages)
+        .sort((a, b) => a.name.localeCompare(b.name, "sv")),
+    [lineCards],
+  );
 
   /**
    * Handles when you select a name from the dropdown
@@ -122,18 +226,66 @@ export default function Home() {
       setLoadingRows(prev => ({ ...prev, [id]: false }));
     }
   };
+
+  const renderEquipageCard = (
+    equipage: EquipageWithConsignments,
+    keyPrefix: string,
+  ) => {
+    const isProfitabilityLoading =
+      equipage.profitabilityStatus === "idle" ||
+      equipage.profitabilityStatus === "loading";
+
+    return (
+      <EquipageCard
+        key={`${keyPrefix}-${equipage.id}`}
+        title={equipage.name}
+        titleAddon={
+          vehicleSelectorMode === "equipages" ? (
+            <TruckLineTooltip text={`Linje: ${equipage.lineName || "-"}`} />
+          ) : undefined
+        }
+        capacity={convertFlmToBarProgress(equipage.totalFlm)}
+        price={convertProfitToBarProgress(equipage.totalProfitabilityPrice)}
+        priceLoading={isProfitabilityLoading}
+        onRefresh={() => refreshEquipageConsignments(equipage.id)}
+        isRefreshing={refreshingEquipages.has(equipage.id)}
+      >
+        <button
+          type="button"
+          className="w-full text-sm"
+          onClick={() => openPopup(equipage)}
+        >
+          Info
+        </button>
+      </EquipageCard>
+    );
+  };
+
+  const modeLabel = vehicleSelectorMode === "equipages" ? "lastbilar" : "linjer";
+  const lineLabel = lineCards.length === 1 ? "linje" : "linjer";
+  const equipageLabel = visibleEquipageCount === 1 ? "ekipage" : "ekipage";
+  const truckLabel = visibleEquipageCount === 1 ? "lastbil" : "lastbilar";
+  
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
       <Navigation currentPage="home" />
 
       <main className="flex-grow p-6 flex gap-6">
         <div className="w-full flex-grow max-w-[90rem]"> 
-          {/* Left column: grouped lines with equipage cards. */}
-          {!lineError && lineCards.length > 0 && (
+          {/* Left column: selected truck cards or original line grouping depending on saved mode. */}
+          {!lineError && lineCards.length > 0 && vehicleSelectorMode === "equipages" && (
+            <div className="flex flex-wrap gap-4 items-start w-full">
+              {equipageCards.map((equipage) =>
+                renderEquipageCard(equipage, `equipage-${equipage.lineId}`),
+              )}
+            </div>
+          )}
+
+          {!lineError && lineCards.length > 0 && vehicleSelectorMode === "lines" && (
             <div className="columns-1 2xl:columns-2 gap-6">
               {lineCards.map((line) => (
-                <div 
-                  key={`${line.id}-${line.name}`} 
+                <div
+                  key={`${line.id}-${line.name}`}
                   className="break-inside-avoid mb-6 inline-block w-full"
                 >
                   <LineCard
@@ -142,35 +294,9 @@ export default function Home() {
                     isRefreshing={refreshingLines.has(line.id)}
                   >
                     <div className="flex flex-wrap gap-4 items-start w-full">
-                      {line.equipages.map((equipage) => {
-                        const isProfitabilityLoading =
-                          equipage.profitabilityStatus === "idle" ||
-                          equipage.profitabilityStatus === "loading";
-
-                        return (
-                          <EquipageCard
-                            key={`${line.id}-${equipage.id}`}
-                            title={equipage.name}
-                            capacity={convertFlmToBarProgress(equipage.totalFlm)}
-                            price={convertProfitToBarProgress(
-                              equipage.totalProfitabilityPrice,
-                            )}
-                            priceLoading={isProfitabilityLoading}
-                            onRefresh={() =>
-                              refreshEquipageConsignments(equipage.id)
-                            }
-                            isRefreshing={refreshingEquipages.has(equipage.id)}
-                          >
-                            <button
-                              type="button"
-                              className="w-full text-sm"
-                              onClick={() => openPopup(equipage)}
-                            >
-                              Info
-                            </button>
-                          </EquipageCard>
-                        );
-                      })}
+                      {line.equipages.map((equipage) =>
+                        renderEquipageCard(equipage, `line-${line.id}`),
+                      )}
                     </div>
                   </LineCard>
                 </div>
@@ -184,11 +310,11 @@ export default function Home() {
           <div className="bg-[var(--primary-element)] rounded-xl shadow-md p-6 w-full max-w-none space-y-4">
             <div className="text-center">
               <p className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
-                Aktuella linjer
+                Aktuella {modeLabel}
               </p>
               {!areasLoaded && (
                 <p className="text-sm text-[var(--text-primary)] mt-1">
-                  Laddar dina sparade områden...
+                  Laddar dina sparade val...
                 </p>
               )}
             </div>
@@ -223,8 +349,8 @@ export default function Home() {
                 )}
                 <span>
                   {loadingLines
-                    ? "Hämtar linjer, ekipage och bokningar..."
-                    : "Hämta filtrerade linjer"}
+                    ? "Hämtar valda bokningar..."
+                    : `Hämta valda ${modeLabel}`}
                 </span>
               </button>
             </div>
@@ -238,37 +364,31 @@ export default function Home() {
                 <p className="text-[var(--error)]">{lineError}</p>
               ) : !hasLoadedLines ? (
                 <p className="text-[var(--text-primary)]">
-                  Klicka på knappen för att ladda linjerna.
+                  Klicka på knappen för att ladda valda bokningar.
                 </p>
               ) : lineCards.length > 0 ? (
                 <div className="text-[var(--text-primary)] space-y-1 leading-6">
                   <p>
-                    Från val
-                    {appliedClusterLabels.length === 1
-                      ? "t kluster "
-                      : "da kluster "}
-                    {appliedClusterLabels.length > 0
-                      ? appliedClusterLabels.join(", ")
-                      : " inga valda kluster"}{" "}
-                    hittades {lineCards.length} linjer med totalt{" "}
-                    {visibleEquipageCount} ekipage
-                    {selectedDate ? ` för ${selectedDate}.` : "."}
+                    Hittade{" "}
+                    {vehicleSelectorMode === "equipages"
+                      ? `${visibleEquipageCount} ${truckLabel}`
+                      : `${lineCards.length} ${lineLabel} med totalt ${visibleEquipageCount} ${equipageLabel}`}
+                    .
                   </p>
                   {loadingProfitabilityCount > 0 && (
                     <p>
                       Pris beräknas fortfarande för {loadingProfitabilityCount}{" "}
                       ekipage.
                     </p>
-                  )}
+                  )}  
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <p>Inga linjer matchade dina valda kluster.</p>
+                  <p>Inga bokningar hittades för dina val.</p>
                   <p>
-                    Kluster:{" "}
-                    {appliedClusterLabels.length > 0
-                      ? appliedClusterLabels.join(", ")
-                      : "Inga kluster valda"}
+                    Val: {appliedFilterLabels.length > 0
+                      ? appliedFilterLabels.join(", ")
+                      : `Inga ${modeLabel} valda`}
                   </p>
                   <p>Datum: {selectedDate || "Ej valt"}</p>
                 </div>
@@ -309,8 +429,9 @@ export default function Home() {
             </div>
 
             <div className="p-6 overflow-auto max-h-[calc(90vh-74px)]">
-              <div className="mb-4 grid grid-cols-4 gap-3">
+              <div className="mb-4 grid grid-cols-5 gap-3">
                 {[
+                  { icon: "ti-route", label: "Linje", value: selectedEquipage.lineName || "-", color: "bg-blue-500/10 text-blue-500" },
                   { icon: "ti-package", label: "Antal bokningar", value: `${selectedEquipage.consignments.length}`, color: "bg-blue-500/10 text-blue-500" },
                   { icon: "ti-weight", label: "Total vikt", value: `${selectedEquipage.totalWeightKg.toFixed(0)} kg`, color: "bg-amber-500/10 text-amber-500" },
                   { icon: "ti-truck", label: "Total FLM", value: `${(selectedEquipage.totalFlm ?? 0).toFixed(1)} flm`, color: "bg-green-500/10 text-green-500" },
@@ -405,10 +526,12 @@ export default function Home() {
                         ) : (
                           consignment.profitabilityValue
                             ? consignment.profitabilityValue.step_used === 0 
-                              // Om step är 0 kollar vi om det var Sune eller Egenfakturerat
+                              // Om step är 0 kollar vi om vilken tabell som används
                               ? consignment.profitabilityValue.detail?.includes("Sune")
                                 ? "Sune"
-                                : "Egen" 
+                                : consignment.profitabilityValue.detail?.includes("Paketbur")
+                                  ? "Paketbur"
+                                  : "Egen"
                               : consignment.profitabilityValue.step_used === -1
                                 ? "-"
                                 : `${consignment.profitabilityValue.step_used}`

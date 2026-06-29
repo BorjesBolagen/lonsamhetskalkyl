@@ -70,13 +70,21 @@ export function useHomeProfitability({
 
                     if (!bestNameResponse.status || !bestNameResponse.data) {
                       console.warn(bestNameResponse.message);
-                      const translations = translationsResponse.status && translationsResponse.data ? translationsResponse.data.translations : [];
+                      const translations =
+                        translationsResponse.status && translationsResponse.data
+                          ? translationsResponse.data.translations
+                          : [];
+
+                      const selectedNameSource: "translation" | "base" =
+                        translations.length > 0 ? "translation" : "base";
+
                       return {
                         ...consignment,
                         profitabilityValue: null,
                         translationOptions: translations,
-                        selectedNameForProfitability: translations.length > 0 ? translations[0] : consignment.customerName,
-                        selectedNameSource: (translations.length > 0 ? "translation" : "base") as NameSource,
+                        selectedNameForProfitability:
+                          translations.length > 0 ? translations[0] : consignment.customerName,
+                        selectedNameSource,
                       };
                     }
 

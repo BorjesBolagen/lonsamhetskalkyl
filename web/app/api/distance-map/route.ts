@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/authHelpers";
 
 /**
  * Delar upp taxPointRelation från formatet sender-receiver.
  */
 function parseTaxPointRelation(taxPointRelation: string | null) {
+
   if (!taxPointRelation) {
     return null;
   }
@@ -34,6 +36,10 @@ function parseTaxPointRelation(taxPointRelation: string | null) {
  * Hämtar km från distance_map genom sender och receiver.
  */
 export async function GET(request: Request) {
+  
+  const { error } = await requireUser();
+  if (error) return error;
+
   const { searchParams } = new URL(request.url);
   const taxPointRelation = searchParams.get("taxPointRelation");
 

@@ -1,0 +1,198 @@
+================================================================================
+KODANALYSRAPPORT – lonsamhetskalkyl
+Datum: 2026-06-12
+================================================================================
+
+1. VAD HAR HÄNT SEDAN SIST
+--------------------------------------------------------------------------------
+Ingen tidigare kodanalysrapport (kodanalys_*.txt) hittades i repot, så denna
+rapport täcker commits från de senaste 7 dagarna (sedan 2026-06-05).
+
+Aktiviteten har varit låg och bestått av test-commits kring migreringen till
+nytt git-repo, alla av Jakob den 2026-06-08:
+
+  98f5018  Merge branch 'dev'
+  54c036f  Tog bort test-meddelande      (web/app/api/profitability/route.ts, -1 rad)
+  15f64de  Test merge till main
+  c8b221b  Testar pusha till nya git     (web/app/api/profitability/route.ts, +1 rad)
+
+Netto: en testrad lades till och togs bort i profitability-routen. Inga
+funktionella ändringar har gjorts den senaste veckan på main. Senaste riktiga
+funktionsändringarna (simulator-UI, snabbare prisestimering med POST→GET,
+admin-fixar) ligger längre tillbaka, via PR #17 från dev.
+
+OBS: På branchen claude/quirky-ptolemy-ekQSw ligger två commits som INTE är
+mergade till main:
+
+  f5572d5 (2026-05-25) Security and performance fixes across API layer
+          - debugRaw gate:ad till icke-produktion i alla 5 iLog-routes
+          - rå iLog-svar läcker inte längre till klienten
+          - debug-console.log borttagna, batchad postort-lookup
+  b4a0e52 (2026-06-05) Add system documentation Excel file
+          (lonsamhetskalkyl_systemdokumentation.xlsx)
+
+REKOMMENDATION: Merga f5572d5 till main – fixarna åtgärdar fynd H3 och L1
+nedan, som fortfarande är öppna på main.
+
+2. SAMMANFATTNING AV KODANALYSEN
+--------------------------------------------------------------------------------
+Kodbasen (~16 000 rader TS/TSX/JS) är överlag välskriven: inga `: any`-typer
+hittades, getCurrentUser-mönstret används konsekvent i känsliga endpoints,
+admin-operationer (radera användare, historisk import) har korrekt rollkontroll
+på serversidan, och service role-nyckeln används bara på servern via
+getSupabaseAdminClient.
+
+Det största problemet är att proxy.ts (middleware) endast skyddar SIDOR
+(/home, /settings, /admin m.fl.) – inte /api/*. Flera API-routes saknar därför
+helt autentiseringskontroll och förlitar sig enbart på Supabase RLS, vilket
+inte hjälper för data som hämtas från externa system (iLog) eller beräknas i
+servern (profitability). Därutöver finns ett antal prestanda- och
+kvalitetsproblem, främst i de mycket stora simulator-filerna.
+
+3. PRIORITERADE FÖRBÄTTRINGSFÖRSLAG
+--------------------------------------------------------------------------------
+
+=== HÖG PRIORITET ===
+
+[H1] SÄKERHET: iLog-endpoints saknar autentisering
+     Filer: web/app/api/ilog/{equipages,lines,consignments,consignment,
+            unassigned-consignments}/route.ts
+     Ingen getCurrentUser-kontroll. Endpoints hämtar affärskänslig
+     transportdata från iLog och kan anropas oautentiserat (proxy.ts skyddar
+     inte /api/*, och RLS gäller inte data som proxas från iLog).
+     Åtgärd: Lägg till auth-kontroll i varje route (eller gemensam wrapper):
+       const currentUser = await getCurrentUser(await getSupabaseServerClient());
+       if (!currentUser.status) return 401.
+
+[H2] SÄKERHET: GET /api/users och GET /api/users/get/user saknar auth och
+     returnerar select("*")
+     Filer: web/app/api/users/route.ts:19-36,
+            web/app/api/users/get/user/route.ts:13-39
+     Ingen kontroll av vem som frågar; vilken klient som helst kan slå upp
+     godtycklig användares fulla rad (e-post, roll, filter) via ?userId=.
+     RLS kan mildra detta men endpoints bör inte förlita sig på det ensamt.
+     Åtgärd: Kräv inloggning; för /get/user kräv admin ELLER att userId ==
+     inloggad användare. Begränsa select() till nödvändiga fält.
+
+[H3] SÄKERHET: debugRaw-parameter exponerar rå iLog-data i produktion (PÅ MAIN)
+     Filer: alla fem ilog-routes (t.ex. equipages/route.ts:38-44)
+     ?debugRaw=true returnerar omappad rådata från iLog utan kontroll.
+     Åtgärd: REDAN FIXAT i commit f5572d5 på denna branch – merga till main.
+
+[H4] SÄKERHET: /api/token returnerar hela sessionsobjektet
+     Fil: web/app/api/token/route.ts:12
+     `token: session` exponerar access_token/refresh_token i JSON-svaret
+     trots att tokens redan hanteras via httpOnly-cookies. Kommentaren i
+     filen säger att den bara ska svara om token är giltig.
+     Åtgärd: Returnera endast { status: true } utan sessionsobjektet.
+
+[H5] SÄKERHET: 25 kända sårbarheter i beroenden (Dependabot)
+     GitHub rapporterar 11 höga, 12 medelhöga och 2 låga sårbarheter i
+     projektets beroenden på default-branchen.
+     Åtgärd: Gå igenom https://github.com/BorjesBolagen/lonsamhetskalkyl/
+     security/dependabot och uppdatera paketen (npm audit fix / bumpa
+     versioner i web/package.json).
+
+[H6] BUGG: Delade mutabla variabler i simulatorns körning (race condition)
+     Fil: web/app/simulator/useSimulatorPlanner.ts:~705-989
+     runSimulation() muterar currentRouteStops/currentRouteDistanceKm under
+     pågående körning; startas två simuleringar parallellt korrumperas
+     tillståndet.
+     Åtgärd: Gör variablerna lokala per körning eller blockera ny körning
+     med en isSimulating-guard/AbortController.
+
+=== MEDEL PRIORITET ===
+
+[M1] SÄKERHET: /api/profitability och /api/distance-map saknar autentisering
+     Filer: web/app/api/profitability/route.ts, web/app/api/distance-map/route.ts
+     Vem som helst kan beräkna lönsamhet för valfri kund respektive hämta
+     distansdata. Åtgärd: samma auth-kontroll som i H1.
+
+[M2] PRESTANDA: N+1-anrop när bokningar hämtas per ekipage i simulatorn
+     Fil: web/app/simulator/useSimulatorPlanner.ts:~1343-1348
+     Ett getIlogConsignments-anrop görs per ekipage. Med många ekipage blir
+     det många HTTP-rundresor.
+     Åtgärd: Inför batch-endpoint (t.ex. ?equipageIds=1,2,3) som hämtar allt
+     i ett anrop.
+
+[M3] PRESTANDA: Maps/filtreringar byggs om på varje render i simulator-UI:t
+     Fil: web/app/simulator/page.tsx:~120-196
+     selectedPickupMarkers/selectedDeliveryMarkers samt fyra separata
+     filter+map över simulatedAddedItems körs vid varje render.
+     Åtgärd: Wrappa i useMemo med [simulatedAddedItems] och slå ihop de fyra
+     filtreringarna till en iteration.
+
+[M4] PRESTANDA: Sortering/filtrering av användarlistan i admin sker i render
+     Fil: web/app/admin/page.tsx:~272-300
+     filteredUsers filtreras, sorteras och slicas om vid varje render.
+     Åtgärd: useMemo kring filtrering+sortering.
+
+[M5] KODKVALITET: Gigantiska filer bör delas upp
+     web/app/simulator/page.tsx (1 544 rader) och useSimulatorPlanner.ts
+     (1 509 rader) blandar UI, planeringslogik, cache och nätverksanrop.
+     En useEffect i plannern har 10+ dependencies (rad ~1106-1117).
+     Åtgärd: Bryt ut kartmarkörer, bokningslista och simuleringsmotor i egna
+     moduler/komponenter; överväg useReducer för relaterat state.
+
+[M6] KODKVALITET: Duplicerade parse-funktioner
+     Filer: web/app/settings/page.tsx:~78-89 och
+            web/lib/backend/transportPlanningUtils.ts:~99-118
+     parseProfitabilityReferenceValue/parseMileCostReferenceValue finns i två
+     exemplar. Åtgärd: exportera från ett ställe och importera.
+
+[M7] BUGG: Non-null assertions på potentiellt undefined response
+     Fil: web/lib/backend/transportPlanningUtils.ts:~308
+     `if (!response!.success || !response!.value)` kastar TypeError i stället
+     för att ge ett hanterbart fel om response är undefined.
+     Åtgärd: explicit null-check före åtkomst.
+
+[M8] KODKVALITET: Svaghet i felhantering i api.ts
+     Fil: web/lib/api.ts (bl.a. addMessage ~rad 418-432)
+     JSON-parse av felsvar antas alltid lyckas; .message kan bli undefined.
+     Åtgärd: kontrollera response.ok och content-type före parse, enhetlig
+     felhantering i hela api-lagret.
+
+[M9] SÄKERHET/DRIFT: Saknade security headers och rate limiting
+     Inga X-Frame-Options, CSP, HSTS eller nosniff-headers sätts, och inga
+     endpoints (inkl. login/forgot-password) har rate limiting.
+     Åtgärd: Lägg till headers i next.config.ts; inför rate limiting på
+     auth-endpoints (t.ex. Upstash Ratelimit).
+
+=== LÅG PRIORITET ===
+
+[L1] Debug-loggar i produktionskod (PÅ MAIN)
+     web/lib/api.ts:~306 ("API response: " + JSON.stringify(data)) m.fl.
+     loggar potentiellt känsliga svar.
+     Åtgärd: REDAN FIXAT i commit f5572d5 på denna branch – merga till main.
+
+[L2] Skräpfiler i repot
+     web/lonsamhetskalkyl.lnk (Windows-genväg) samt Cypress exempel-specar
+     (cypress/e2e/1-getting-started/, 2-advanced-examples/) bör raderas.
+     Lägg *.lnk i .gitignore.
+
+[L3] ml-backend saknar storleksgräns på request-body
+     ml-backend/server.js:5-25 läser body utan maxstorlek (DoS-risk).
+     Endpointen returnerar dessutom alltid 501 – är den död bör den tas bort,
+     annars dokumenteras. Lägg till maxgräns (~1-10 MB).
+
+[L4] Magiska konstanter
+     T.ex. SIMULATOR_CACHE_KEY = "simulator-cache-v9" i
+     useSimulatorPlanner.ts:37. Samla cachenycklar/versioner i constants.ts.
+
+[L5] Blandad svenska/engelska i namngivning
+     T.ex. kundnamn/trappsteg_steg blandas med equipage/consignment.
+     Bestäm en konvention (förslagsvis engelska i kod, svenska i UI-texter).
+
+4. POSITIVA OBSERVATIONER
+--------------------------------------------------------------------------------
+- Inga `: any`-typer i hela web/ – starkt typad kodbas.
+- Admin-endpoints (radera användare, import-historical) har korrekt
+  serversidig rollkontroll innan service role-klienten används.
+- Service role-nyckeln används endast på servern; cypress.env.json är
+  gitignorerad och exempel-filen innehåller bara platshållare.
+- httpOnly-cookies för session, lösenordsvalidering och defensiv
+  forgot-password-hantering finns på plats.
+
+================================================================================
+Slut på rapport. Nästa analys bör jämföra mot commits efter 98f5018.
+================================================================================

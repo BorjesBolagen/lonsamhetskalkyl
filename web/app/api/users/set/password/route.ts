@@ -3,8 +3,13 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/backend/utils";
 import { validatePassword } from "@/lib/validation";
+import { requireUser } from "@/lib/authHelpers";
 
 export async function POST(request: Request) {
+
+	const { error: userError } = await requireUser();
+	if (userError) return userError;
+
 	const { currentPassword, newPassword } = await request.json();
 
 	if (!currentPassword || !newPassword) {

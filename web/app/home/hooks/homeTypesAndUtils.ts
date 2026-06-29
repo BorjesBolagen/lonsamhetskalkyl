@@ -7,7 +7,7 @@ import type { ConsignmentListItem, LineItem } from "../../../lib/ilogTypes";
 import { normalizeText } from "../../../lib/areaLineConfig";
 
 export const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
-export const HOME_CACHE_KEY = "home-lines-cache-v9";
+export const HOME_CACHE_KEY = "home-lines-cache-v11";
 
 export type ProfitabilityStatus = "idle" | "loading" | "done" | "error";
 
@@ -38,12 +38,18 @@ export type LineWithEquipages = LineItem & {
   equipages: EquipageWithConsignments[];
 };
 
+export type VehicleSelectorMode = "equipages" | "lines";
+
 export type HomeCachePayload = {
   selectedDate: string;
   lineCards: LineWithEquipages[];
   candidateEquipageCount: number;
   visibleEquipageCount: number;
-  appliedClusterLabels: string[];
+  vehicleSelectorMode: VehicleSelectorMode;
+  selectedEquipageIds: number[];
+  selectedLineIds: number[];
+  selectedAreaLabels: string[];
+  appliedFilterLabels: string[];
 };
 
 /**
