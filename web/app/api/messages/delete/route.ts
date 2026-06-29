@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { User } from "@/lib/databaseTypes";
 import { getCurrentUser } from "@/lib/backend/utils";
+import { requireAdmin } from "@/lib/authHelpers";
 
 export async function DELETE(request: Request) {
+
+    const { error: adminError } = await requireAdmin();
+    if (adminError) return adminError
 
     const { searchParams } = new URL(request.url);
     const inputMessageId = searchParams.get("messageId");
@@ -23,30 +27,7 @@ export async function DELETE(request: Request) {
     }
 
     const messageId = Number(inputMessageId);
-
-    // Make sure user is signed in
-    
-    let currentUser: User;
     const supabase = await getSupabaseServerClient();
-
-    try {
-        const response = await getCurrentUser(supabase);
-        currentUser = response.data!;
-    } catch (e) {
-        return NextResponse.json(
-            { status: false, message: e instanceof Error ? e.message : "Kunde inte verifiera inloggad användare. Försök logga in på nytt." },
-            { status: 401 }
-        );
-    }
-
-    // Make sure this user is an admin
-
-    if (currentUser.role !== "admin") {
-        return NextResponse.json(
-            { status: false, message: "Du har inte behörighet att göra detta" },
-            { status: 403 }
-        );
-    }
 
     // Delete this messageId
     const { data, error } = await supabase

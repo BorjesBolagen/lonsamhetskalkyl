@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { MAX_NUMBER_OF_MESSAGES_PER_PAGE } from "@/lib/backend/constants";
 import { getCurrentUser } from "@/lib/backend/utils";
+import { requireUser } from "@/lib/authHelpers";
 
 export async function GET(request: Request) {
+
+    const { error: userError } = await requireUser();
+    if (userError) return userError;
 
     const { searchParams } = new URL(request.url);
     const inputPageSize = searchParams.get("pageSize");
@@ -34,15 +38,6 @@ export async function GET(request: Request) {
     // Make sure user is signed in
 
     const supabase = await getSupabaseServerClient();
-
-    try {
-        await getCurrentUser(supabase);
-    } catch (e) {
-        return NextResponse.json(
-            { status: false, message: e instanceof Error ? e.message : "Kunde inte verifiera inloggad användare. Försök logga in på nytt." },
-            { status: 401 }
-        );
-    }
 
     const { count, error } = await supabase
         .from("messages")
