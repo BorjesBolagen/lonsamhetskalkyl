@@ -1,0 +1,252 @@
+================================================================================
+KODANALYSRAPPORT – lonsamhetskalkyl
+Datum: 2026-06-29
+Genererad av: Claude Code (automatisk kodgranskning)
+================================================================================
+
+Föregående rapport: kodanalys_2026-06-22.txt. Denna rapport täcker utvecklingen
+sedan dess, dvs commits 2026-06-22 – 2026-06-23 (intervallet 62fc268..HEAD på
+branchen claude/quirky-ptolemy-ekQSw). Fokus i perioden har legat på att färdig-
+ställa namnmatchningen/kundöversättningen samt en säkerhets-/beroende-merge.
+
+OBS om de öppna fynden i förra rapporten: H1, H2 (saknad auktorisering på
+/api/users/get/user och /api/profitability) samt M1 (otypade DB-anrop) kvarstår –
+de berörda routerna saknar fortfarande explicit auth och använder (supabase as any).
+Se nedan (S1, S2) – flera nya routes ärver samma problem.
+
+
+================================================================================
+1. VAD HAR HÄNT SEDAN SIST (commits 2026-06-22 – 2026-06-23)
+================================================================================
+
+Översikt: Huvudleveransen är namnmatchnings-/kundöversättningsfunktionen som nu
+mergats hela vägen (PR #25, #26, #27), två efterföljande buggfixar samt en
+säkerhets-/dokumentationsmerge (PR #28 "fix-vulnerabilities"). Cirka 15 filer
+berörda, dominerat av commit 604c1c8.
+
+NYTT / TILLAGT
+--------------
+* Kundöversättning ("name translation") fullt inkopplad i hemvyn
+  (604c1c8 "Mycket jobb på namnmatching"):
+  - Ny API-route web/app/api/profitability/name-translations/route.ts – slår upp
+    alla kusk_name för ett givet ilog_name i tabellen name_translation och
+    returnerar en deduplicerad lista.
+  - Ny klientfunktion getNameTranslations() i web/lib/api.ts.
+  - web/app/home/hooks/useHomeProfitability.ts hämtar nu både bästa jaro-träff
+    och översättningar parallellt per sändning och väljer namn enligt prioritet:
+    1) översättning, 2) jaro över tröskel, 3) originalnamn.
+  - Ny komponent web/components/Dropdown.tsx (+123 rader) med typen NameSource
+    ("translation" | "jaro" | "base") och ikon/färg/tooltip per källa, så att
+    trafikledaren kan byta vilket kundnamn som används för beräkningen.
+  - Admin-panelen (web/app/admin/page.tsx, +259 rader) fick ett verktyg för att
+    bygga upp name_translation över ett datumintervall: hämtar iLog-sändningar
+    per ekipage i batchar (CONCURRENCY 5), anropar RPC
+    fill_name_translation_from_consignments per dag, visar färgad logg med
+    tidsestimat och laddar upp rådata till Supabase Storage (ilog-uploads).
+* web/lib/supabaseServerSchema.ts utökat kraftigt (+269 rader): nya tabeller
+  (name_translation, sunes_pricing m.fl.) och nya RPC-signaturer
+  (find_best_name_match, fill_name_translation_from_consignments, names_match,
+  jaro_winkler, get_medel_forh_kundvis/get_snitt_forh_se_radvis med overload
+  som tar in_use_entire_name).
+* System­dokumentation lonsamhetskalkyl_systemdokumentation.xlsx tillagd, samt
+  de tidigare rapporterna kodanalys_2026-06-12.txt / -06-22.txt mergades in via
+  PR #28.
+
+ÄNDRAT / FIXAT
+--------------
+* Buggfix (8bea7ae "Löste liten bugg"): i web/profitability/service.ts togs ett
+  felaktigt "...result"-spread bort i alla fem stegen i calculateProfitability().
+  Variabeln result fanns inte i scope vid den punkten, så koden hade kunnat
+  spridda fel/odefinierat innehåll in i resultatet. Korrekt åtgärdat.
+* Byggfix (10b3444 "Trying to fix build issue"): selectedNameSource-castet i
+  useHomeProfitability.ts ändrades från "as const" till "as NameSource" för att
+  matcha den nya typen och få bygget att gå igenom.
+* PR #28 fix-vulnerabilities: mindre justeringar i flera ilog-routes
+  (consignment, consignments, equipages, lines, unassigned-consignments),
+  web/lib/ilogClient.ts, web/lib/importEngine.ts och web/lib/taxPointLookup.ts.
+
+BORTTAGET
+---------
+* En oanvänd rad togs bort i web/profitability/types.ts respektive
+  web/app/api/profitability/route.ts (del av 604c1c8).
+* "...result"-spreaden (se ovan) i service.ts.
+
+Merge-historik: PR #25 (name-matching), #26 (dev), #27 (dev), #28
+(fix-vulnerabilities).
+
+
+================================================================================
+2. PRIORITERAD LISTA – FÖRBÄTTRINGSFÖRSLAG
+================================================================================
+
+Prioritet anges som [HÖG] / [MEDEL] / [LÅG]. Fynd märkta (NYTT) rör kod som
+tillkommit sedan förra rapporten; (KVAR) är öppna sedan tidigare.
+
+--------------------------------------------------------------------------------
+HÖG PRIORITET
+--------------------------------------------------------------------------------
+
+[HÖG] H1. (NYTT) "useEntireName" beräknas men används aldrig – död affärslogik
+  Filer: web/app/home/hooks/useHomeProfitability.ts (~rad 88-111),
+         web/app/home/hooks/homeTypesAndUtils.ts (~rad 273-290),
+         web/lib/api.ts (calculateProfitability)
+  I useHomeProfitability räknas flaggan useEntireName ut (true vid översättning
+  eller jaro över tröskel) och skickas in i
+  calculateConsignmentProfitabilityPrice(resolvedConsignment, useEntireName).
+  MEN funktionen calculateConsignmentProfitabilityPrice ignorerar den andra
+  parametern helt – den anropar bara calculateProfitability(consignment), som i
+  sin tur inte har någon useEntireName-parameter och inte skickar något sådant
+  till backend. RPC-funktionerna get_medel_forh_kundvis / get_snitt_forh_se_radvis
+  har visserligen en overload med in_use_entire_name i schemat, men den når
+  aldrig fram. Resultat: hela "använd hela namnet vs. de 6 första bokstäverna"-
+  logiken som namnmatchningen bygger på är frånkopplad och påverkar inte priset.
+  Det valda namnet (selectedNameForProfitability) skickas dock med via
+  resolvedConsignment.customerName, så namnbytet i sig fungerar – men inte
+  helnamns-/delnamnsbeslutet.
+  Åtgärd: Antingen koppla in useEntireName hela vägen ned till
+  calculateProfitability -> API-route -> RPC (in_use_entire_name), eller ta bort
+  flaggan om beteendet inte längre önskas. Idag ger den falsk trygghet.
+
+[HÖG] H2. (KVAR/utökad) Affärskritiska API-routes saknar explicit auktorisering
+  Filer: web/app/api/profitability/route.ts,
+         web/app/api/profitability/jaro-estimation/route.ts (NYTT),
+         web/app/api/profitability/name-translations/route.ts (NYTT),
+         web/app/api/users/get/user/route.ts
+  Proxyn (web/proxy.ts) skyddar endast sid-routerna i PROTECTED_ROUTES
+  (/home, /settings, /admin, /notifications, /simulator) – INTE /api/*.
+  De nya routerna jaro-estimation och name-translations kör RPC/uppslag
+  (find_best_name_match, name_translation) helt utan auth-kontroll; skyddet
+  vilar uteslutande på att Supabase-RLS är korrekt satt för anon-nyckeln.
+  Pris- och kunddata bör inte vara åtkomligt för oinloggade.
+  Åtgärd: Inför en central auth-helper (requireUser/requireAdmin) och anropa den
+  först i varje skyddad /api-route. Verifiera och dokumentera RLS för
+  name_translation, taxepunkter, tax_point_lookup, sunes_pricing.
+
+[HÖG] H3. (KVAR) Division med noll i prisestimering ger NaN/Infinity
+  Fil: web/profitability/trappsteg_steg.ts (estimeraPris, ~rad 59-63)
+    return totalKundnettofrakt / totalVikt * weight;
+  Om totalVikt = 0 blir resultatet Infinity/NaN och sprids vidare i
+  intäktssumman (reduce i useHomeProfitability ~rad 138). Kvarstår sedan förra
+  rapporten.
+  Åtgärd: if (totalVikt === 0) return null; och säkerställ att Math.min() inte
+  får in NaN i något steg.
+
+
+--------------------------------------------------------------------------------
+MEDEL PRIORITET
+--------------------------------------------------------------------------------
+
+[MEDEL] M1. (NYTT) Tre nätverksanrop per sändning + ingen dedup på kundnamn
+  Fil: web/app/home/hooks/useHomeProfitability.ts (~rad 60-111)
+  Per sändning görs nu getBestNameMatch + getNameTranslations (parallellt) och
+  därefter calculateProfitability – tre round trips som var och en träffar en
+  Next-route som i sin tur slår mot Supabase. Sändningar med samma customerName
+  (mycket vanligt inom ett ekipage) gör om exakt samma jaro-/översättnings-
+  uppslag varje gång. Med batchstorlek 4 ekipage blir detta många anrop.
+  Åtgärd: Memoisera jaro-/översättningssvar per normaliserat kundnamn i en
+  Map under hela laddningen, eller slå ihop de tre anropen till ett samlat
+  API-anrop. Överväg server-side caching av name_translation/find_best_name_match.
+
+[MEDEL] M2. (NYTT) Tom array hanteras inte i jaro-estimation – kan ge 500
+  Fil: web/app/api/profitability/jaro-estimation/route.ts (~rad 22-36)
+  Routen kontrollerar if (!data) men en tom array [] är truthy. Vid tom träff
+  läses data[0].best_name / data[0].best_score, vilket kastar och ger ett 500
+  i stället för ett tydligt "ingen träff". Klienten (getBestNameMatch) kastar då
+  också Error i stället för att kunna falla tillbaka på originalnamnet.
+  Åtgärd: if (!data || data.length === 0) return 404/tomt svar; läs först
+  efter längdkontroll.
+
+[MEDEL] M3. (KVAR) Otypade Supabase-anrop med (supabase as any)
+  Filer: web/app/api/profitability/route.ts (kring tax_point_lookup),
+         web/profitability/trappsteg_steg.ts (try_sune_lookup, sunes_pricing)
+  Castning till any kringgår TypeScript trots att tabellerna nu finns i det
+  genererade schemat (supabaseServerSchema.ts). Döljer schema-/typfel.
+  Åtgärd: Ta bort as any nu när tax_point_lookup och sunes_pricing är typade.
+
+[MEDEL] M4. (KVAR) N+1 / upp till fyra sekventiella DB-anrop per beräkning
+  Fil: web/app/api/profitability/route.ts (resolveTaxPoint anropas 2-4 ggr)
+  Oförändrat sedan förra rapporten; resolveTaxPoint kör postnummer- och
+  postort-uppslag sekventiellt för både avsändare och mottagare.
+  Åtgärd: Slå ihop till en RPC/batch och cacha tax_point_lookup (ändras sällan).
+
+[MEDEL] M5. (KVAR) Bräcklig validering av taxPointRelation-format
+  Fil: web/profitability/trappsteg_steg.ts (~rad 21, upprepat i steg 1-5)
+    const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim()
+        .split("-").map(Number) || [];
+  Vid "123-456-789", tomt eller icke-numeriskt värde skickas NaN in i RPC utan
+  felhantering. Samma parsning är dessutom kopierad i alla fem stegfunktionerna
+  (duplicering).
+  Åtgärd: Bryt ut en delad parseTaxPointRelation() som validerar exakt två
+  giltiga tal och returnerar fel/null annars.
+
+[MEDEL] M6. (NYTT) Stor minnesintensiv batch i admin-översättningsverktyget
+  Fil: web/app/admin/page.tsx (handleReadTranslation)
+  Hela ilogData (alla sändningar för hela datumintervallet) ackumuleras i
+  webbläsarens minne och laddas sedan upp som en enda JSON-blob. För långa
+  intervall kan detta bli mycket stort. Dessutom är
+  equipageResults.flat().filter(c => c !== null) verkningslös – elementen är
+  arrayer (aldrig null), så filtret tar inte bort tomma resultat som avsett.
+  Åtgärd: Strömma/ladda upp per dag i stället för att hålla allt i minnet, och
+  rätta filtreringen (t.ex. filter(arr => arr.length > 0) eller filtrera efter
+  flat()).
+
+
+--------------------------------------------------------------------------------
+LÅG PRIORITET
+--------------------------------------------------------------------------------
+
+[LÅG] L1. (NYTT) Tom källfil incheckad
+  Fil: web/app/admin/nameTranslation.ts (0 rader, tillagd i 84d8dc0 "Sync").
+  Åtgärd: Ta bort filen eller implementera den avsedda logiken; tomma filer
+  skapar förvirring.
+
+[LÅG] L2. (NYTT) let som borde vara const (prefer-const)
+  Fil: web/profitability/trappsteg_steg.ts (~rad 315, try_sune_lookup)
+    let { data, error } = await (supabase as any).from("sunes_pricing")...
+  Varken data eller error tilldelas om (fallback använder nya variabler).
+  Åtgärd: Ändra till const – fångas annars av ESLint prefer-const.
+
+[LÅG] L3. (NYTT) Dubblerad NameSource-typ
+  Filer: web/components/Dropdown.tsx (export type NameSource) och
+         web/app/home/hooks/homeTypesAndUtils.ts (selectedNameSource som inline
+         union "translation" | "jaro" | "base").
+  Två definitioner av samma sträng-union riskerar att divergera.
+  Åtgärd: Importera och återanvänd NameSource från Dropdown (eller flytta typen
+  till en delad types-modul) i homeTypesAndUtils.
+
+[LÅG] L4. (NYTT) Kvarvarande "2am"-kommentar och odefinierat beteende
+  Fil: web/lib/api.ts (getCurrentlySignedInUser, ~rad 84-95)
+  Kommentaren "pallar inte detta just nu klockan är 2am" och noterat odefinierat
+  beteende vid utloggad användare bör hanteras innan produktion.
+  Åtgärd: Returnera ett tydligt fel/null vid saknad session och städa kommentaren.
+
+[LÅG] L5. (KVAR) Inkonsekventa svarsformat mellan API-routes
+  De nya routerna name-translations (status/message/data) och jaro-estimation
+  (status/message/data) följer ett format medan profitability/route.ts använder
+  { success, value, error }. name-translations returnerar dessutom status:true
+  med HTTP 200 även vid "No name provided".
+  Åtgärd: Standardisera ett svarskontrakt över alla routes.
+
+[LÅG] L6. (KVAR) Övriga öppna punkter från förra rapporten
+  L4 (detaljerad Supabase-felloggning), L5 (select("*") utan paginering),
+  L6 (monolitisk Home-komponent), L7 (iLog-credentials/rotation) samt M7
+  (ingen caching av iLog-anrop) kvarstår i allt väsentligt – se
+  kodanalys_2026-06-22.txt för detaljer.
+
+
+================================================================================
+SAMMANSTÄLLNING
+================================================================================
+HÖG:   3   (frånkopplad useEntireName-logik [NYTT], saknad auth på API [KVAR],
+            division med noll [KVAR])
+MEDEL: 6   (3 nätverksanrop/dedup [NYTT], tom array i jaro-route [NYTT],
+            otypade DB-anrop [KVAR], N+1 taxepunkt [KVAR],
+            taxPointRelation-validering [KVAR], minnesintensiv admin-batch [NYTT])
+LÅG:   6   (tom fil [NYTT], prefer-const [NYTT], dubblerad NameSource [NYTT],
+            2am/odef. beteende [NYTT], svarsformat [KVAR], samlade kvarvarande)
+
+Rekommenderad första åtgärd: H1 (koppla in eller ta bort useEntireName – annars
+ger namnmatchningen ett missvisande resultat) följt av H2 (auth-helper för de nya
+/api/profitability-routerna) och H3 (division med noll). M2 är en snabb och
+billig robusthetsfix.
+================================================================================
