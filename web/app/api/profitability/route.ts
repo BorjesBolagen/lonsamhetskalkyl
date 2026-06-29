@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { routeConsignment } from "@/profitability/service";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import type { ProfitabilityInput } from "@/profitability/types";
+
+function parseBooleanParam(value: string | null): boolean {
+  return value === "true" || value === "1";
+}
 
 function cleanTaxPoint(value: string | null | undefined): string {
   return (value ?? "").replace(/[^0-9]/g, "");
@@ -77,6 +82,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
 
+    const useEntireName = parseBooleanParam(searchParams.get("useEntireName"));
+
     const consignment = {
       consignmentId: Number(searchParams.get("consignmentId")) || 0,
       customerName: searchParams.get("customerName") || "",
@@ -151,10 +158,11 @@ export async function GET(req: NextRequest) {
     };
 
 
-    const input = {
+    const input: ProfitabilityInput = {
       kundnamn: enrichedConsignment.customerName,
       taxPointRelation: finalTaxPointRelation,
       chargeable_weight: enrichedConsignment.weight ?? 0,
+      useEntireName,
 
       // Tilläggslogiken använder enskilda taxepunkter.
       senderTaxPoint,

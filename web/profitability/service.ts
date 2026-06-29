@@ -201,6 +201,14 @@ export async function routeConsignment(
 ): Promise<ProfitabilityResult> {
   const flowType = determineFlowType(consignment);
 
+  const inputWithLineRelation: ProfitabilityInput = {
+    ...input,
+    linjerel:
+      input.linjerel
+      ?? consignment.zoneName
+      ?? null,
+  };
+
   switch (flowType) {
     case FlowType.FJARR:
       // Om Fjärr saknar Taxepunkter, returnera ett fel istället för att krascha
@@ -212,7 +220,7 @@ export async function routeConsignment(
       }
       
       // Skicka in till trappstegsmodellen
-      return await calculateProfitability(input);
+      return await calculateProfitability(inputWithLineRelation);
 
     case FlowType.PAKETBUR:
       try {
@@ -270,7 +278,7 @@ export async function routeConsignment(
             return { step_used: -1, estimated_revenue: 0, detail: "Fjärr: Saknar kundnamn" };
           }
           
-          return await calculateProfitability(input);
+          return await calculateProfitability(inputWithLineRelation);
 
       } catch (error) {
           console.error("Krasch i Sune-flödet:", error);

@@ -175,39 +175,47 @@ export async function calculateApplicableAddons(
   const supabase =
     await getSupabaseServerClient();
 
-  // De genererade Supabase-typerna känner inte till nya SQL-funktioner
-  // förrän databastyperna har regenererats. Därför görs just detta RPC-anrop otypat.
   const rpc =
     supabase.rpc.bind(
       supabase,
     ) as unknown as UntypedSupabaseRpc;
 
   const {
-    data,
-    error,
-  } = await rpc(
-    "calculate_applicable_addons",
-    {
-      p_sender_taxepunkt:
-        senderTaxPoint,
+  data,
+  error,
+} = await rpc(
+  "calculate_applicable_addons",
+  {
+    p_sender_taxepunkt:
+      senderTaxPoint,
 
-      p_sender_postort:
-        normalizeOptionalText(
-          input.pickupCity,
-        ),
+    p_sender_postort:
+      normalizeOptionalText(
+        input.pickupCity,
+      ),
 
-      p_receiver_taxepunkt:
-        receiverTaxPoint,
+    p_receiver_taxepunkt:
+      receiverTaxPoint,
 
-      p_receiver_postort:
-        normalizeOptionalText(
-          input.destinationCity,
-        ),
+    p_receiver_postort:
+      normalizeOptionalText(
+        input.destinationCity,
+      ),
 
-      p_chargeable_weight:
-        weight,
-    },
-  );
+    p_chargeable_weight:
+      weight,
+
+    p_customer_name:
+      normalizeOptionalText(
+        input.kundnamn,
+      ),
+
+    p_linjerel:
+      normalizeOptionalText(
+        input.linjerel,
+      ),
+  },
+);
 
   if (error) {
     throw new Error(

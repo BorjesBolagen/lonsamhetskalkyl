@@ -356,7 +356,8 @@ export type ProfitabilityAddon = {
 
 
 export const calculateProfitability = async (
-    consignment: ConsignmentListItem,
+  consignment: ConsignmentListItem,
+  useEntireName = false,
 ): Promise<ProfitabilityResponse> => {
 
     const params = new URLSearchParams({
@@ -377,6 +378,7 @@ export const calculateProfitability = async (
 		invoiceStatus: consignment.invoiceStatus || "",
         internalPrice: String(consignment.internalPrice || 0),
 		paketburar: String(consignment.paketburar || 0),
+		useEntireName: String(useEntireName),
     });
 
     const url = `/api/profitability?${params.toString()}`;

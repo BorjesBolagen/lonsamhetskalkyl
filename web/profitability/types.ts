@@ -19,11 +19,13 @@ export type AddonDirection = "from" | "to";
 export type AddonType =
   | "orttillagg"
   | "storstadstillagg"
-  | "balanstillagg";
+  | "balanstillagg"
+  | "tidtillagg";
 
 export type AddonLookupSource =
   | "taxepunkt"
   | "postort"
+  | "name_linjerel"
   | "none";
 
 export type CalculatedAddon = {
@@ -77,6 +79,7 @@ export type ProfitabilityInput = {
   kundnamn: string;
   taxPointRelation: string;
   chargeable_weight: number;
+  useEntireName?: boolean;
 
   // Taxepunkt används först för tillägg.
   // Postort används som fallback om taxepunkten saknas eller inte hittas i addons_postal.
@@ -85,7 +88,7 @@ export type ProfitabilityInput = {
   pickupCity?: string | null;
   destinationCity?: string | null;
 
-  // Behålls för annan logik, men används inte längre som primär nyckel i addons_postal.
+  linjerel?: string | null;
   pickupPostalCode?: string | null;
   destinationPostalCode?: string | null;
 };
