@@ -526,12 +526,14 @@ export default function Home() {
                         ) : (
                           consignment.profitabilityValue
                             ? consignment.profitabilityValue.step_used === 0 
-                              // Om step är 0 kollar vi om vilken tabell som används
+                              // Om step är 0 kollar vi vilken tabell som används
                               ? consignment.profitabilityValue.detail?.includes("Sune")
                                 ? "Sune"
                                 : consignment.profitabilityValue.detail?.includes("Paketbur")
                                   ? "Paketbur"
-                                  : "Egen"
+                                  : consignment.profitabilityValue.detail?.includes("Styckegods")
+                                    ? "Styckegods"
+                                    : "Egenfakturerat"
                               : consignment.profitabilityValue.step_used === -1
                                 ? "-"
                                 : `${consignment.profitabilityValue.step_used}`
