@@ -313,6 +313,24 @@ export type Database = {
         }
         Relationships: []
       }
+      kontor_coefficient: {
+        Row: {
+          coefficient: number | null
+          from_kontor: string
+          to_kontor: string
+        }
+        Insert: {
+          coefficient?: number | null
+          from_kontor: string
+          to_kontor: string
+        }
+        Update: {
+          coefficient?: number | null
+          from_kontor?: string
+          to_kontor?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           body: string
@@ -383,6 +401,96 @@ export type Database = {
             referencedColumns: ["taxepunktspostnummer"]
           },
         ]
+      }
+      nav_ank_terminal_direktlastat_frs: {
+        Row: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Insert: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Update: {
+          kg_from?: number
+          km_from?: number
+          value?: number
+        }
+        Relationships: []
+      }
+      nav_ank_terminal_direktlastat_ton: {
+        Row: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Insert: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Update: {
+          kg_from?: number
+          km_from?: number
+          value?: number
+        }
+        Relationships: []
+      }
+      nav_avg_terminal_direktlastat_frs: {
+        Row: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Insert: {
+          kg_from: number
+          km_from?: number
+          value: number
+        }
+        Update: {
+          kg_from?: number
+          km_from?: number
+          value?: number
+        }
+        Relationships: []
+      }
+      nav_avg_terminal_direktlastat_ton: {
+        Row: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Insert: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Update: {
+          kg_from?: number
+          km_from?: number
+          value?: number
+        }
+        Relationships: []
+      }
+      nav_taxa_fjarr_direktgods: {
+        Row: {
+          km_till_och_med: number
+          value: number
+          weight_class: number
+        }
+        Insert: {
+          km_till_och_med: number
+          value: number
+          weight_class: number
+        }
+        Update: {
+          km_till_och_med?: number
+          value?: number
+          weight_class?: number
+        }
+        Relationships: []
       }
       paketbur_prices: {
         Row: {
@@ -633,6 +741,8 @@ export type Database = {
       calculate_applicable_addons: {
         Args: {
           p_chargeable_weight: number
+          p_customer_name?: string
+          p_linjerel?: string
           p_receiver_postort: string
           p_receiver_taxepunkt: string
           p_sender_postort: string
@@ -662,6 +772,10 @@ export type Database = {
         Args: { user_id: string }
         Returns: number
       }
+      get_coefficient: {
+        Args: { p_from_taxepunkt: number; p_to_taxepunkt: number }
+        Returns: number
+      }
       get_distance: {
         Args: { in_receiver_taxep: number; in_sender_taxep: number }
         Returns: number
@@ -674,14 +788,31 @@ export type Database = {
           vkl: number
         }[]
       }
-      get_medel_forh_kundvis: { Args: { in_kundnamn: string }; Returns: number }
+      get_medel_forh_kundvis: {
+        Args: { in_kundnamn: string; in_use_entire_name: boolean }
+        Returns: number
+      }
       get_medel_se: {
         Args: { in_kilometer: number; in_viktklass: number }
         Returns: number
       }
+      get_nav_values: {
+        Args: { p_kg: number; p_km: number }
+        Returns: {
+          nav_ank_terminal_direktlastat_frs: number
+          nav_ank_terminal_direktlastat_ton: number
+          nav_avg_terminal_direktlastat_frs: number
+          nav_avg_terminal_direktlastat_ton: number
+          nav_taxa_fjarr_direktgods: number
+        }[]
+      }
       get_office_for_taxep: { Args: { in_taxep: number }; Returns: string }
       get_snitt_forh_se_radvis: {
-        Args: { in_kundnamn: string; in_weight: number }
+        Args: {
+          in_input_weight: number
+          in_name: string
+          in_use_entire_name: boolean
+        }
         Returns: number
       }
       get_taxep: { Args: { in_postal_code: number }; Returns: number }
@@ -781,6 +912,7 @@ export type Database = {
           in_name: string
           in_taxep_receiver: number
           in_taxep_sender: number
+          in_use_entire_name?: boolean
         }
         Returns: {
           kundnettofrakt: number
@@ -793,6 +925,7 @@ export type Database = {
           in_name: string
           in_taxep_receiver: number
           in_taxep_sender: number
+          in_use_entire_name?: boolean
         }
         Returns: Database["public"]["CompositeTypes"]["steg_2_result"]
         SetofOptions: {
@@ -807,6 +940,7 @@ export type Database = {
           in_kundnamn: string
           in_taxep_receiver: number
           in_taxep_sender: number
+          in_use_entire_name?: boolean
           in_weight: number
         }
         Returns: Database["public"]["CompositeTypes"]["steg_3_result"]

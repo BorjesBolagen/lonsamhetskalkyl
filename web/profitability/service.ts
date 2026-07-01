@@ -4,7 +4,6 @@ import type { ProfitabilityInput, ProfitabilityResult } from "./types";
 import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
 import { calculateApplicableAddons } from "./addonEngine";
 import { roundUpWeight } from "@/lib/backend/utils";
-import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { try_sune_lookup } from "./trappsteg_steg";
@@ -313,7 +312,7 @@ function roundMoney(value: number): number {
  * Om tilläggsberäkningen misslyckas behålls grundpriset så att
  * den befintliga lönsamhetsberäkningen fortfarande fungerar.
  */
-async function addAddonsToProfitabilityResult(
+async function applyAddons(
   input: ProfitabilityInput,
   baseResult: ProfitabilityResult,
 ): Promise<ProfitabilityResult> {
@@ -356,129 +355,195 @@ async function addAddonsToProfitabilityResult(
   }
 }
 
+async function applyNavAdjustments(
+  input: ProfitabilityInput,
+  currentResult: ProfitabilityResult,
+): Promise<ProfitabilityResult> {
+  
+  const supabase = await getSupabaseServerClient();
+
+  // Ta fram relevanta parametrar
+  const [sender_taxep, receiver_taxep] = input.taxPointRelation.trim().split("-").map(Number) || [];
+  const weight = input.chargeable_weight;   // Vikt i kilogram
+  const { data: distance, error: distance_error } = await supabase.rpc("get_distance", {
+    in_sender_taxep: sender_taxep,
+    in_receiver_taxep: receiver_taxep
+  });   // Distans i km
+
+  if (distance_error) {
+    console.error("Fel vid distansberäkning för NAV: " + distance_error.message);
+    return {
+      ...currentResult,
+      nav_error: distance_error.message,
+      nav_ers_exklusive_tillägg: undefined
+    }
+  }
+
+  // Få från tabeller:
+    // Värden för avg term: NAV taxa kr/snd (1a) och NAV taxa kr/ton (1b)
+    // Värden för ank term: NAV taxa kr/snd (2a) och NAV taxa kr/ton (2b)
+    // Värden för fjärr: Min(viktklass, viktklass+1) i tabell (10) (Denna min() görs i supabase)
+  const { data: nav_values, error: nav_error } = await supabase.rpc("get_nav_values", {
+    p_kg: weight,
+    p_km: distance
+  });
+  
+  if (nav_error) {
+    console.error("Fel vid hämtning av NAV taxor: " + nav_error.message);
+    return {
+      ...currentResult,
+      nav_error: nav_error.message,
+      nav_ers_exklusive_tillägg: undefined
+    }
+  }
+  const taxaValues = nav_values[0];
+
+  // Räkna ut generell kalkyl som :
+    // avg term: 1a + 1b*vikt i TON
+    // ank term: 2a + 2b*vikt i TON
+    // fjärr: 10*vikt i TON
+  const generell_avg_term = taxaValues.nav_avg_terminal_direktlastat_frs 
+                   + taxaValues.nav_avg_terminal_direktlastat_ton * (weight / 1000);
+  const generell_ank_term = taxaValues.nav_ank_terminal_direktlastat_frs
+                   + taxaValues.nav_ank_terminal_direktlastat_ton * (weight / 1000);
+  const generell_fjarr = taxaValues.nav_taxa_fjarr_direktgods * (weight / 1000);
+
+  // Räkna ut justerad kalkyl som:
+    // avg/ank terminal samma
+    // fjärr: generell * koeff från tabell
+  const justerad_avg_term = generell_avg_term;
+  const justerad_ank_term = generell_ank_term;
+
+  const { data: coefficient, error: coefficient_error } = await supabase.rpc("get_coefficient", {
+    p_from_taxepunkt: sender_taxep,
+    p_to_taxepunkt: receiver_taxep
+  });
+
+  if (coefficient_error) {
+    console.error("Fel vid hämtning av koefficient: ", coefficient_error.message);
+    return {
+      ...currentResult,
+      nav_error: coefficient_error.message,
+      nav_ers_exklusive_tillägg: undefined
+    }
+  }
+
+  const justerad_fjarr = generell_fjarr * coefficient;
+
+  // Räkna ut ersättning andel:
+    // Alla tre: andelen generell / sum(alla tre generell)  
+  const sum_justerad = justerad_avg_term + justerad_ank_term + justerad_fjarr;
+  const sum_generell = generell_avg_term + generell_ank_term + generell_fjarr;
+
+  const andel_avg_term = generell_avg_term / sum_generell;
+  const andel_ank_term = generell_ank_term / sum_generell;
+  const andel_fjarr = generell_fjarr / sum_generell;
+
+  // Räkna ut fördelningsnetto:
+    // Skillnad mellan sum(justerad) och total kundnetto fördelas enligt andel ovan
+  const fordelningsnetto_avg_term = (sum_justerad - 
+    (currentResult.addon_warnings ? currentResult.estimated_revenue : currentResult.base_revenue!))
+    * andel_avg_term;
+  const fordelningsnetto_ank_term = (sum_justerad - 
+    (currentResult.addon_warnings ? currentResult.estimated_revenue : currentResult.base_revenue!))
+    * andel_ank_term;
+  const fordelningsnetto_fjarr = (sum_justerad - 
+    (currentResult.addon_warnings ? currentResult.estimated_revenue : currentResult.base_revenue!)) 
+    * andel_fjarr;
+  
+  // Räkna ut ersättning exklusive tillägg genom justerad kalkyl + fördelningsnetto
+  return {
+    ...currentResult,
+    nav_error: undefined,
+    nav_ers_exklusive_tillägg: {
+      avg_term_ers: justerad_avg_term + fordelningsnetto_avg_term,
+      ank_term_ers: justerad_ank_term + fordelningsnetto_ank_term,
+      fjarr_ers: justerad_fjarr + fordelningsnetto_fjarr
+    }
+  } as ProfitabilityResult;
+}
+
+type BaseCalculationStep = {
+  step: number;
+  label: string;
+  executor: (
+    input: ProfitabilityInput,
+    weight_plus_one: number
+  ) => Promise<number | null>;
+};
+
+const BASE_CALCULATION_STEPS: BaseCalculationStep[] = [
+  { step: 1, label: "steg 1", executor: try_steg_1 },
+  { step: 2, label: "steg 2", executor: try_steg_2 },
+  { step: 3, label: "steg 3", executor: try_steg_3 },
+  { step: 4, label: "steg 4", executor: try_steg_4 },
+  { step: 5, label: "steg 5", executor: try_steg_5 },
+];
+
 /**
- * Kör hela trappstegsmodellen basically.
+ * Trappstegsmodellen. Hittar kundnetto för sändelse
+ */
+async function calculateBaseRevenue(
+  input: ProfitabilityInput,
+  weight_plus_one: number,
+): Promise<ProfitabilityResult | null> {
+  for (const step of BASE_CALCULATION_STEPS) {
+    try {
+      const estimated = await step.executor(input, weight_plus_one);
+
+      if (estimated !== null) {
+        return {
+          step_used: step.step,
+          estimated_revenue: estimated,
+        };
+      }
+    } catch (error) {
+      console.error(
+        `Fel i ${step.label}. Felmeddelande:`,
+        error instanceof Error ? error.message : error,
+      );
+
+      return {
+        step_used: -1,
+        estimated_revenue: 0,
+        detail: `Något gick fel i ${step.label}`,
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Kör hela trappstegsmodellen.
  * Om step_used är -1 ( => estimated_revenue = 0) så har ett fel inträffat.
- * I så fall har "detail" mer info om vad som gått snett
+ * I så fall har "detail" mer info om vad som gått snett.
+ *
  * @param input Alla parametrar som behövs för alla steg i modellen
- * @returns {
- *   step_used: number;
- *   estimated_revenue: number;
- *   detail?: string;
- * }
  */
 export async function calculateProfitability(
   input: ProfitabilityInput
 ): Promise<ProfitabilityResult> {
-
   valideraInput(input);
   const weight_plus_one = await roundUpWeight(input.chargeable_weight);
 
-  // Försök göra steg 1.
-  try {
-    const steg1Estimated = await try_steg_1(input, weight_plus_one);
+  const baseResult = await calculateBaseRevenue(input, weight_plus_one);
 
-    // Om steg 1 gav null så fick vi ingen träff. Fortsätt med steg 2
-    if (steg1Estimated !== null) {
-      return await addAddonsToProfitabilityResult(input, {
-        step_used: 1,
-        estimated_revenue: steg1Estimated
-      });
-    }
-  } catch (error) {
-    console.error("Fel i steg 1, fortsätter till steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
+  if (!baseResult) {
     return {
       step_used: -1,
       estimated_revenue: 0,
-      detail: "Något gick fel i steg 1"
-    }
+      detail: "Inga steg gav träff",
+    };
   }
 
-  // Försök göra steg 2
-  try {
-    const steg2Estimated = await try_steg_2(input, weight_plus_one);
-    
-    // Om steg 2 gav null så fick vi ingen träff. Fortsätt med steg 3
-    if (steg2Estimated !== null) {
-      return await addAddonsToProfitabilityResult(input, {
-        step_used: 2,
-        estimated_revenue: steg2Estimated
-      });
-    }
-  } catch (error) {
-    console.error("Fel i steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
-    return {
-      step_used: -1,
-      estimated_revenue: 0,
-      detail: "Något gick fel i steg 2"
-    }
+  if (baseResult.step_used === -1) {
+    return baseResult;
   }
 
-  // Försök göra steg 3
-  try {
-    const steg3Estimated = await (try_steg_3(input, weight_plus_one));
-
-    // Om steg 3 gav null så fick vi ingen träff. Fortsätt med steg 4
-    if (steg3Estimated !== null) {
-      return await addAddonsToProfitabilityResult(input, {
-        step_used: 3,
-        estimated_revenue: steg3Estimated
-      });
-    }
-  } catch (error) {
-    console.error("Fel i steg 3. Felmeddelande:", error instanceof Error ? error.message : error);
-    return {
-      step_used: -1,
-      estimated_revenue: 0,
-      detail: "Något gick fel i steg 3"
-    }
-  }
-
-  // Försök göra steg 4
-  try {
-    const steg4Estimated = await try_steg_4(input, weight_plus_one);
-
-    // Om steg 4 gav null så fick vi ingen träff. Fortsätt med steg 5
-    if (steg4Estimated !== null) {
-      return await addAddonsToProfitabilityResult(input, {
-        step_used: 4,
-        estimated_revenue: steg4Estimated
-      });
-    }
-  } catch (error) {
-    console.error("Fel i steg 4. Felmeddelande:", error instanceof Error ? error.message : error);
-    return {
-      step_used: -1,
-      estimated_revenue: 0,
-      detail: "Något gick fel i steg 4"
-    }
-  }
-
-  // Försök göra steg 5
-  try {
-    const steg5Estimated = await try_steg_5(input, weight_plus_one);
-
-    // Om steg 5 gav null så fick vi ingen träff. Då har vi testat alla steg i modellen
-    if (steg5Estimated !== null) {
-      return await addAddonsToProfitabilityResult(input, {
-        step_used: 5,
-        estimated_revenue: steg5Estimated
-      });
-    }
-  } catch (error) {
-    console.error("Fel i steg 5. Felmeddelande:", error instanceof Error ? error.message : error);
-    return {
-      step_used: -1,
-      estimated_revenue: 0,
-      detail: "Något gick fel i steg 5"
-    }
-  }
-
-  return {
-    step_used: -1,
-    estimated_revenue: 0,
-    detail: "Inga steg gav träff"
-  }
+  const addonResult = await applyAddons(input, baseResult);
+  const navResults = await applyNavAdjustments(input, addonResult);
+  return navResults;
 }
 
 export function normalizeText(value: string): string {

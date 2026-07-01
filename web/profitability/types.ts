@@ -1,19 +1,3 @@
-export type TrappstegRow = {
-  kundnamn: string;
-  taxeprel: string;
-  vklfgrv: number;
-  kndntofgrv: number | null;
-  forh_se_radvis: number | null;
-  forh_se_kundvis: number | null;
-  km: number | null;
-};
-
-export type MedelseRow = {
-  km_bucket: number;
-  vklfgrv: number;
-  kndnto_medelse: number;
-};
-
 export type AddonDirection = "from" | "to";
 
 export type AddonType =
@@ -73,6 +57,12 @@ export type AddonCalculationResult = {
   warnings: AddonWarning[];
 };
 
+export type NavResult = {
+  avg_term_ers: number,
+  ank_term_ers: number,
+  fjarr_ers: number
+}
+
 export type ProfitabilityInput = {
   kundnamn: string;
   taxPointRelation: string;
@@ -91,23 +81,24 @@ export type ProfitabilityInput = {
 };
 
 export type ProfitabilityResult = {
+
+  // Trappstegsmodellen steg använt
   step_used: number;
 
   // Totalt pris inklusive tillägg.
   estimated_revenue: number;
 
-  // Pris innan tillägg.
-  base_revenue?: number;
+  // Håller felmeddelande för trappstegsmodellen
+  detail?: string;
 
+  /////////////////// Tilläggsberäkning
+  base_revenue?: number; // Pris innan tillägg. Kundnetto
   addon_total?: number;
   addons?: CalculatedAddon[];
   addon_warnings?: AddonWarning[];
 
-  detail?: string;
+  /////////////////// NAV beräkning
+  nav_error?: string;
+  nav_ers_exklusive_tillägg?: NavResult;
 
-  // Befintliga Jaro-fält behålls.
-  jaro_matched_name?: string;
-  jaro_score?: number;
-  best_name?: string;
-  best_score?: number;
 };
