@@ -278,7 +278,6 @@ export function getConsignmentFlm(consignment: ConsignmentListItem): number {
  */
 export async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
-  useEntireName: boolean,
 ): Promise<ProfitabilityValue | null> {
   try {
     const data = await calculateProfitability(consignment);

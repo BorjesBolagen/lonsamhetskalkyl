@@ -358,6 +358,7 @@ async function applyAddons(
 async function applyNavAdjustments(
   input: ProfitabilityInput,
   currentResult: ProfitabilityResult,
+  weight_plus_one: number
 ): Promise<ProfitabilityResult> {
   
   const supabase = await getSupabaseServerClient();
@@ -382,7 +383,7 @@ async function applyNavAdjustments(
   // Få från tabeller:
     // Värden för avg term: NAV taxa kr/snd (1a) och NAV taxa kr/ton (1b)
     // Värden för ank term: NAV taxa kr/snd (2a) och NAV taxa kr/ton (2b)
-    // Värden för fjärr: Min(viktklass, viktklass+1) i tabell (10) (Denna min() görs i supabase)
+    // Värden för fjärr: Både med nuvarande viktklass och viktklass+1
   const { data: nav_values, error: nav_error } = await supabase.rpc("get_nav_values", {
     p_kg: weight,
     p_km: distance
@@ -406,7 +407,13 @@ async function applyNavAdjustments(
                    + taxaValues.nav_avg_terminal_direktlastat_ton * (weight / 1000);
   const generell_ank_term = taxaValues.nav_ank_terminal_direktlastat_frs
                    + taxaValues.nav_ank_terminal_direktlastat_ton * (weight / 1000);
-  const generell_fjarr = taxaValues.nav_taxa_fjarr_direktgods * (weight / 1000);
+  
+  // Ta hänsyn till brytpunktsberäkning
+  const generell_fjarr_current = taxaValues.nav_taxa_fjarr_current * (weight / 1000);
+  const generell_fjarr_above = taxaValues.nav_taxa_fjarr_above * (weight_plus_one / 1000);
+
+  // Välj mindre av de två
+  const generell_fjarr = generell_fjarr_current < generell_fjarr_above ? generell_fjarr_current : generell_fjarr_above;
 
   // Räkna ut justerad kalkyl som:
     // avg/ank terminal samma
@@ -441,24 +448,19 @@ async function applyNavAdjustments(
 
   // Räkna ut fördelningsnetto:
     // Skillnad mellan sum(justerad) och total kundnetto fördelas enligt andel ovan
-  const fordelningsnetto_avg_term = (sum_justerad - 
-    (currentResult.addon_warnings ? currentResult.estimated_revenue : currentResult.base_revenue!))
-    * andel_avg_term;
-  const fordelningsnetto_ank_term = (sum_justerad - 
-    (currentResult.addon_warnings ? currentResult.estimated_revenue : currentResult.base_revenue!))
-    * andel_ank_term;
-  const fordelningsnetto_fjarr = (sum_justerad - 
-    (currentResult.addon_warnings ? currentResult.estimated_revenue : currentResult.base_revenue!)) 
-    * andel_fjarr;
-  
+  const gap = (currentResult.addon_warnings ? currentResult.estimated_revenue : currentResult.base_revenue!) - sum_justerad;
+  const fordelningsnetto_avg_term = gap * andel_avg_term;
+  const fordelningsnetto_ank_term = gap * andel_ank_term;
+  const fordelningsnetto_fjarr = gap * andel_fjarr;
+
   // Räkna ut ersättning exklusive tillägg genom justerad kalkyl + fördelningsnetto
   return {
     ...currentResult,
     nav_error: undefined,
     nav_ers_exklusive_tillägg: {
-      avg_term_ers: justerad_avg_term + fordelningsnetto_avg_term,
-      ank_term_ers: justerad_ank_term + fordelningsnetto_ank_term,
-      fjarr_ers: justerad_fjarr + fordelningsnetto_fjarr
+      avg_term_ers: roundMoney(justerad_avg_term + fordelningsnetto_avg_term),
+      ank_term_ers: roundMoney(justerad_ank_term + fordelningsnetto_ank_term),
+      fjarr_ers: roundMoney(justerad_fjarr + fordelningsnetto_fjarr)
     }
   } as ProfitabilityResult;
 }
@@ -542,7 +544,7 @@ export async function calculateProfitability(
   }
 
   const addonResult = await applyAddons(input, baseResult);
-  const navResults = await applyNavAdjustments(input, addonResult);
+  const navResults = await applyNavAdjustments(input, addonResult, weight_plus_one);
   return navResults;
 }
 

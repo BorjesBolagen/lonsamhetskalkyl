@@ -29,6 +29,21 @@ export type Database = {
         }
         Relationships: []
       }
+      addon_hvo: {
+        Row: {
+          id: number
+          name: string
+        }
+        Insert: {
+          id?: number
+          name: string
+        }
+        Update: {
+          id?: number
+          name?: string
+        }
+        Relationships: []
+      }
       addon_tid: {
         Row: {
           carriers_share: number | null
@@ -82,25 +97,25 @@ export type Database = {
           balanstillagg: string | null
           id: number
           orttillagg: string | null
+          postnummer: number
           postort: string | null
           stor: string | null
-          taxepunkt: number
         }
         Insert: {
           balanstillagg?: string | null
           id?: number
           orttillagg?: string | null
+          postnummer: number
           postort?: string | null
           stor?: string | null
-          taxepunkt: number
         }
         Update: {
           balanstillagg?: string | null
           id?: number
           orttillagg?: string | null
+          postnummer?: number
           postort?: string | null
           stor?: string | null
-          taxepunkt?: number
         }
         Relationships: []
       }
@@ -494,19 +509,19 @@ export type Database = {
       }
       paketbur_prices: {
         Row: {
-          antal_burar: number | null
+          antal_burar: number
           pris: number | null
-          relation: string | null
+          relation: string
         }
         Insert: {
-          antal_burar?: number | null
+          antal_burar: number
           pris?: number | null
-          relation?: string | null
+          relation: string
         }
         Update: {
-          antal_burar?: number | null
+          antal_burar?: number
           pris?: number | null
-          relation?: string | null
+          relation?: string
         }
         Relationships: []
       }
@@ -788,10 +803,7 @@ export type Database = {
           vkl: number
         }[]
       }
-      get_medel_forh_kundvis: {
-        Args: { in_kundnamn: string; in_use_entire_name: boolean }
-        Returns: number
-      }
+      get_medel_forh_kundvis: { Args: { in_kundnamn: string }; Returns: number }
       get_medel_se: {
         Args: { in_kilometer: number; in_viktklass: number }
         Returns: number
@@ -803,16 +815,13 @@ export type Database = {
           nav_ank_terminal_direktlastat_ton: number
           nav_avg_terminal_direktlastat_frs: number
           nav_avg_terminal_direktlastat_ton: number
-          nav_taxa_fjarr_direktgods: number
+          nav_taxa_fjarr_above: number
+          nav_taxa_fjarr_current: number
         }[]
       }
       get_office_for_taxep: { Args: { in_taxep: number }; Returns: string }
       get_snitt_forh_se_radvis: {
-        Args: {
-          in_input_weight: number
-          in_name: string
-          in_use_entire_name: boolean
-        }
+        Args: { in_kundnamn: string; in_weight: number }
         Returns: number
       }
       get_taxep: { Args: { in_postal_code: number }; Returns: number }
@@ -827,14 +836,14 @@ export type Database = {
       normalize_addon_postort: { Args: { p_value: string }; Returns: string }
       normalize_addon_taxepunkt: { Args: { p_value: string }; Returns: string }
       resolve_addon_location: {
-        Args: { p_postort: string; p_taxepunkt: string }
+        Args: { p_postnummer: string; p_postort: string }
         Returns: {
           balance_ambiguous: boolean
           has_balance_addon: boolean
           match_source: string
+          matched_postnummer: string
           matched_postort: string
           matched_rows: number
-          matched_taxepunkt: string
           orttillagg_ambiguous: boolean
           orttillagg_class: number
           stor: string
@@ -912,7 +921,6 @@ export type Database = {
           in_name: string
           in_taxep_receiver: number
           in_taxep_sender: number
-          in_use_entire_name?: boolean
         }
         Returns: {
           kundnettofrakt: number
@@ -925,7 +933,6 @@ export type Database = {
           in_name: string
           in_taxep_receiver: number
           in_taxep_sender: number
-          in_use_entire_name?: boolean
         }
         Returns: Database["public"]["CompositeTypes"]["steg_2_result"]
         SetofOptions: {
@@ -940,7 +947,6 @@ export type Database = {
           in_kundnamn: string
           in_taxep_receiver: number
           in_taxep_sender: number
-          in_use_entire_name?: boolean
           in_weight: number
         }
         Returns: Database["public"]["CompositeTypes"]["steg_3_result"]

@@ -95,18 +95,15 @@ export function useHomeProfitability({
                     // Priority: 1. Translation name, 2. Jaro if over threshold, 3. Original
                     let selectedNameForProfitability = consignment.customerName;
                     let selectedNameSource: "translation" | "jaro" | "base" = "base";
-                    let useEntireName = false;
 
                     if (translations.length > 0) {
                       // Use first translation name
                       selectedNameForProfitability = translations[0];
                       selectedNameSource = "translation";
-                      useEntireName = true;
                     } else if (best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD) {
                       // Use jaro name if it meets threshold
                       selectedNameForProfitability = best_name;
                       selectedNameSource = "jaro";
-                      useEntireName = true;
                     }
                     // Otherwise use original name (already set as default)
 
@@ -116,7 +113,7 @@ export function useHomeProfitability({
                     };
 
                     const profitabilityValue =
-                      await calculateConsignmentProfitabilityPrice(resolvedConsignment, useEntireName);
+                      await calculateConsignmentProfitabilityPrice(resolvedConsignment);
 
                     return {
                       ...consignment,
