@@ -1,0 +1,526 @@
+================================================================================
+KODANALYSRAPPORT – lonsamhetskalkyl
+Datum: 2026-07-02
+Genererad av: Claude Code (automatisk kodgranskning)
+================================================================================
+
+Föregående rapport: kodanalys_2026-06-29.txt (ligger på branchen
+claude/quirky-ptolemy-ekQSw; ej mergad till main). Den täckte commits
+2026-06-22 – 2026-06-23 (t.o.m. PR #28) och skrevs INNAN säkerhetsfixarna
+mergades. Denna rapport täcker därför hela intervallet sedan rapporten
+2026-06-22 på main: commits 2026-06-18 – 2026-06-29 (inkl. addons-branchen
+som mergades 18/6 och PR #29/#30 med säkerhetsfixarna), samt en fullständig
+genomgång av kodbasens nuvarande tillstånd på main.
+
+Totalt sedan förra rapporten: ca 61 filer ändrade, ca +5100 / -1300 rader.
+
+
+================================================================================
+1. VAD HAR HÄNT SEDAN SIST (commits 2026-06-18 – 2026-06-29)
+================================================================================
+
+NYTT / TILLAGT
+--------------
+* Tilläggsprissättning ("addons") – commit 835a82f "Tillägg" (Viktor):
+  - Ny motor web/profitability/addonEngine.ts (231 rader) som beräknar orts-
+    och storstadstillägg m.m. via RPC, med varningssystem (AddonWarning).
+  - Ny komponent web/components/PriceWithAddons.tsx (394 rader) som visar
+    prisuppdelning (grundpris + tillägg) med tooltip i home och simulator.
+  - web/profitability/types.ts kraftigt utbyggd (+86 rader), simulator-sidan
+    uppdaterad. Tailwind/postcss-versioner pinnades i package.json.
+* Namnmatchning & adminsida – commits 84d8dc0 "Sync" + 604c1c8 "Mycket jobb på
+  namnmatching" (Jakob):
+  - Adminsidan (web/app/admin/page.tsx, +360 rader) hanterar nu
+    namnöversättningar (kund-alias) med ny API-route
+    web/app/api/profitability/name-translations/route.ts.
+  - Ny återanvändbar komponent web/components/Dropdown.tsx (NameDropdown).
+  - web/lib/supabaseServerSchema.ts utökad (+269 rader) med typer för fler
+    tabeller/RPC:er.
+* Lastbilar och linjer i home-vyn – commit a6fe6b3 (Viktor):
+  - web/app/home/hooks/useHomeLoader.ts i princip omskriven (+534 rader):
+    inkrementell laddning av ekipage-/linjekort i batchar, per-kort-refresh.
+  - Ny konfigfil web/vehicleSelectionConfig.ts (fordonstyper).
+  - Settings-sidan utbyggd med fordonsval m.m. (+369 rader).
+  - useHomeCache/useHomeLineState/useHomePreferences justerade för ny cache-
+    och kortmodell (sessionStorage).
+* Prisestimering för paketburar – commit 277dee7 (Felix):
+  - Nytt PAKETBUR-flöde i web/profitability/service.ts (+108 rader) med uppslag
+    mot tabellen paketbur_prices (trappstegsprissättning per antal burar).
+  - web/lib/ilogMappers.ts räknar ut antal burar ur PPL-egenskaper.
+* Favicon tillagd/uppdaterad (a8f951b, 5f8222f).
+
+ÄNDRAT / FIXAT
+--------------
+* Säkerhets- och kvalitetsfixar utifrån förra rapporten (se avsnitt 2 för
+  detaljerad verifiering):
+  - a06e1b5 "fix H1-3 vulnerabilities": ny central auth-helper
+    web/lib/authHelpers.ts (requireUser/requireAdmin) som nu anropas i ~20
+    API-routes (users, messages, profitability, ilog, distance-map,
+    import-historical m.fl.); kolumnbegränsning i /api/users/get/user;
+    division-med-noll-vakter i trappsteg_steg.ts.
+  - 699cefd "Fix M1": typade Supabase-anrop (SupabaseClient<Database>) i
+    profitability-routen.
+  - 2de6837 "Fix M2": de fyra sekventiella tax_point_lookup-anropen i routen
+    hopslagna till EN batchad .or()-query.
+  - 13df9b9 "Fix M3": formatvalidering av taxPointRelation (i steg 4) +
+    utökat schema.
+* Forgot-password-flödet omskrivet (5a1f0fd): e-postvalidering, neutrala svar
+  vid okänd adress, redirect-URL från NEXT_PUBLIC_SITE_URL, uppstädning i
+  web/lib/api.ts och reset-password-sidan.
+
+BORTTAGET
+---------
+* web/app/api/token/route.ts (oanvänd token-route, togs bort i 5a1f0fd).
+* use_entire_name-parametern togs bort ur profitability-API:t och service-
+  lagret (604c1c8) – men rester finns kvar i frontend (se fynd M13).
+
+Merge-historik: PR #25/#26/#27 (name-matching + dev), PR #29
+(fix-vulnerabilities), PR #30 (dev -> main, 2026-06-29).
+
+
+================================================================================
+2. UPPFÖLJNING AV FÖRRA RAPPORTENS FYND
+================================================================================
+
+Teamet har uttryckligen arbetat med förra rapportens lista (commits "fix H1-3",
+"Fix M1", "Fix M2", "Fix M3") – bra! Verifierad status per fynd:
+
+FIXAT
+-----
+* H1 (auktorisering /api/users/get/user): FIXAD. requireUser() krävs och
+  kolumnerna begränsas (själv: id/email/namn/roll, andra: endast id + namn).
+  Rest: platshållaren `const isAdmin = false; // replace with your admin
+  check` är kvar som död kod, och alla inloggade kan fortfarande slå upp
+  namn för godtyckliga userId.
+* H2 (auth på /api/profitability): FIXAD. requireUser() först i routen; även
+  jaro-estimation, name-translations, distance-map och alla ilog-routes.
+* L1 (död kod): FIXAD. page.tsx omskriven; EGENFAKTURERAT är nu aktiv kod.
+* L7 (iLog-credentials): FIXAD så långt det går att verifiera – enbart
+  server-side, inget NEXT_PUBLIC_-prefix, .env gitignorad.
+
+DELVIS FIXAT
+------------
+* H3 (division med noll): vakter finns nu (totalVikt === 0 -> null), MEN fixen
+  introducerade en ny HÖG-bugg: Math.min på tom array ger Infinity (se H2 nedan).
+* M1 (otypade supabase-anrop): route.ts typad, men nya paketburskoden
+  återinför fem `(supabase as any)`-anrop, och en fallback i try_sune_lookup
+  (trappsteg_steg.ts:344) är fortfarande otypad.
+* M2 (N+1 mot tax_point_lookup): routens uppslag är batchat, men
+  try_paketbur_lookup gör återigen upp till 4 sekventiella anrop mot samma
+  tabell som routen redan slagit upp i samma request (se M10).
+* M3 (validering av taxPointRelation): valideras nu – men bara i steg 4.
+  Steg 1, 2, 3 och 5 splittar fortfarande ovaliderat, och de körs FÖRE steg 4
+  (se M8).
+* M5 (duplicerad auth-kod): helpern finns och används brett, men PATCH i
+  /api/users kör egen inline-kontroll och ett halvdussin routes gör dubbla
+  getCurrentUser-anrop (se L3).
+* L2 (inkonsekventa svarsformat): ilog-/users-routes är nu konsekventa, men
+  /api/profitability ({success,value}), /api/import-historical ({error}) och
+  /api/distance-map (status:false med HTTP 200) avviker fortfarande.
+* L3 (Number.isFinite/postnummer): routen filtrerar nu NaN, men servicekodens
+  paketbur-uppslag gör parseInt utan NaN-vakt (se M7).
+* L6 (monolitisk Home): datalogiken är utbruten i hooks och equipageCards är
+  memoizerad, men komponenten är ~435 rader, inga useCallback, och korten är
+  inte React.memo-ade.
+
+EJ FIXAT (kvarstår från förra rapporten)
+----------------------------------------
+* M4: _isDbValidDestination delas fortfarande via `(consignment as any)`.
+* M6: de fyra utility-funktionerna är fortfarande duplicerade mellan
+  homeTypesAndUtils.ts och transportPlanningUtils.ts – och har nu DIVERGERAT
+  (olika validering, död parameter). Risken förra rapporten varnade för har
+  alltså materialiserats.
+* M7: ingen caching av iLog-anrop (ilogClient kör cache: "no-store" överallt).
+* L4: forgot-password loggar fortfarande message/name/status/code från
+  Supabase via console.error.
+* L5: /api/users kör fortfarande select("*") utan paginering.
+
+
+================================================================================
+3. PRIORITERAD LISTA – NYA FÖRBÄTTRINGSFÖRSLAG
+================================================================================
+
+--------------------------------------------------------------------------------
+HÖG PRIORITET
+--------------------------------------------------------------------------------
+
+[HÖG] H1. Användarskapande sker klient-side med anon-nyckel – risk för publik
+      självregistrering och privilegie-eskalering
+  Fil: web/app/admin/page.tsx (~rad 448), web/lib/api.ts (~rad 31)
+  Adminpanelen skapar konton via supabase.auth.signUp(...) direkt från
+  webbläsarens anon-klient, vilket kräver att publik signup är påslagen i
+  Supabase – då kan vem som helst med den publika anon-nyckeln skapa konton
+  utan att gå via admin. Dessutom sätts role klient-side via
+  supabase.from("User").update({ role, ... }); om RLS-policyn inte
+  kolumnbegränsar kan en användare sätta role='admin' på sig själv direkt mot
+  PostgREST – och requireAdmin litar på just denna kolumn. Inga RLS-policies
+  finns i repot att verifiera.
+  Åtgärd: flytta användarskapandet till en server-route med requireAdmin +
+  supabaseAdmin.auth.admin.createUser, stäng av publik signup, och lås
+  role-kolumnen i RLS. Verifiera RLS-policyn för User-tabellen omgående.
+
+[HÖG] H2. Math.min på tom array ger Infinity som intäkt (regression från H3-fixen)
+  Fil: web/profitability/trappsteg_steg.ts (~rad 85)
+  Om steg 1 får träffrader men estimeraPris returnerar null för båda dataseten
+  (precis fallet division-med-noll-fixen skyddar mot) blir estimates tom och
+  Math.min() returnerar Infinity, som skickas som estimated_revenue med
+  step_used: 1. Infinity serialiseras till null i JSON och korrumperar
+  lönsamhetsvisningen. Dessutom kastar `if (estOrginal)` bort legitima 0-pris
+  (0 är falsy).
+  Åtgärd: `if (estimates.length === 0) return null;` före Math.min, och
+  använd `est !== null` i stället för truthiness.
+
+[HÖG] H3. Substring-matchning av paketbursrelation kan hämta fel prislista
+  Fil: web/profitability/service.ts (~rad 175-177)
+  Relationen matchas med .ilike("relation", `%GB-SM%`) – en ren
+  substringsökning. En kort relation (t.ex. "S-G") matchar även rader för
+  helt andra relationer ("OS-GB" m.fl.), och fel pris multipliceras ut till
+  kund utan varning.
+  Åtgärd: använd .eq() (eller .ilike utan %-wildcards) efter normalisering.
+
+[HÖG] H4. DB-fel i resolveTaxPoints sväljs och omklassar sändningar till
+      STYCKEGODS
+  Fil: web/app/api/profitability/route.ts (~rad 53-63)
+  resolveTaxPoints destrukturerar bara data och ignorerar error. Vid DB-fel
+  (eller ogiltig .or()-filtersträng, se M5) blir träfflistan tom,
+  _isDbValidDestination sätts till false och determineFlowType klassar
+  sändningen som STYCKEGODS -> tyst 0 kr med "Beräkningsmodell saknas". Ett
+  transient databasfel ändrar alltså flödesklassificeringen utan spår.
+  Åtgärd: kontrollera error, logga och returnera fel; skilj "uppslag
+  misslyckades" från "finns inte i databasen".
+
+[HÖG] H5. Kort-refresh under pågående laddning låser home-UI:t permanent
+  Fil: web/app/home/hooks/useHomeLoader.ts (~rad 439-441, 514-515, 550-551)
+  refreshEquipageConsignments/refreshLineConsignments skriver över den
+  globala latestLoadIdRef med nytt Date.now(). Trycker användaren ↻ på ett
+  kort medan fulladdningen pågår avbryts batchloopen tyst, finally-guarden
+  hoppar över setLoadingLines(false) och knappen fastnar i "Hämtar valda
+  bokningar..." tills sidan laddas om; resterande ekipage laddas aldrig och
+  pågående hydrering lämnar kort med evig spinner.
+  Åtgärd: separata avbrotts-scope för fulladdning respektive per-kort-refresh,
+  och återställ loadingLines ovillkorligt i finally.
+
+[HÖG] H6. Cache-restore av status "loading" ger permanenta spinners
+  Fil: web/app/home/hooks/useHomeCache.ts (~rad 106-122)
+  Cachen persisteras vid varje delstatusändring, så sessionStorage kan
+  innehålla ekipage med profitabilityStatus "loading"/"idle". Vid restore
+  återupptas ingen hydrering, men page.tsx visar spinner för båda statusarna
+  -> navigera bort mitt i beräkningen och tillbaka ger "Beräknar..." för
+  alltid.
+  Åtgärd: mappa "loading" till "idle" vid restore och trigga
+  hydrateProfitabilityForEquipages för dessa kort.
+
+--------------------------------------------------------------------------------
+MEDEL PRIORITET
+--------------------------------------------------------------------------------
+
+Säkerhet
+--------
+[MEDEL] M1. Kontoenumeration i forgot-password via timing och olika felsvar
+  Fil: web/app/api/auth/forgot-password/route.ts (~rad 33-39, 62-89)
+  Okänd e-post ger omedelbart neutralt svar medan känd e-post triggar
+  resetPasswordForEmail (långsamt utskick) – mätbar timingskillnad. 429- och
+  400-svar returneras dessutom bara när kontot finns, vilket i sig bekräftar
+  kontot. Åtgärd: alltid samma neutrala svar, kör utskicket fire-and-forget,
+  egen rate-limiting per IP.
+
+[MEDEL] M2. Vanlig session kan byta lösenord utan att ange nuvarande lösenord
+  Fil: web/app/reset-password/page.tsx (~rad 121-125, 180-182)
+  Fallbacken "check for existing session" gör att VILKEN inloggad session som
+  helst (inte bara recovery-sessioner) kan sätta nytt lösenord via
+  updateUser({ password }) – kringgår currentPassword-kontrollen i
+  /api/users/set/password. På en delad/olåst dator kan kontot tas över genom
+  att surfa till /reset-password. Åtgärd: sätt hasRecoverySession endast vid
+  PASSWORD_RECOVERY-event/kodutbyte.
+
+[MEDEL] M3. Reset-länkens redirect faller tillbaka på request-origin
+  Fil: web/app/api/auth/forgot-password/route.ts (~rad 44-58)
+  Saknas NEXT_PUBLIC_SITE_URL används new URL(request.url).origin, som bakom
+  vissa proxies styrs av Host-headern -> återställningslänkar kan pekas mot
+  angriparens domän. Koden varnar i produktion men använder ändå origin
+  (fail-open). Åtgärd: vägra skicka länk i produktion om variabeln saknas.
+
+[MEDEL] M4. Interna felmeddelanden läcker till klienten i flera routes
+  Filer: web/app/api/users/get/user/route.ts, users/route.ts,
+  messages/get/messages/route.ts, profitability/jaro-estimation/route.ts,
+  users/delete/user/route.ts m.fl.
+  Rå error.message från Postgres/Supabase skickas i JSON-svar och kan avslöja
+  tabellnamn/constraints. Åtgärd: logga detaljer server-side, returnera
+  generiska meddelanden (som forgot-password redan gör).
+
+[MEDEL] M5. PostgREST-filterinjektion via ortnamn samt oescapade LIKE-wildcards
+  Filer: web/app/api/profitability/route.ts (~rad 56-61),
+  web/profitability/trappsteg_steg.ts (~rad 325-346)
+  Användarstyrda ortnamn interpoleras oescapade i .or()-filtersträngen
+  (`postort.ilike.${c}`) – en ort med "," eller ")" (t.ex. "MO I RANA,
+  NORGE") bryter filtret, och felet sväljs sedan tyst (se H4). Sunes
+  fuzzy-matchning interpolerar namn i %A%B%-mönster utan att escapa %/_.
+  Åtgärd: bygg filtren med .in()/.eq() eller sanera/citera värdena; escapa
+  LIKE-wildcards.
+
+[MEDEL] M6. Accounts-tabell med lösenordskolumn i klartext i DB-schemat
+  Fil: web/lib/supabaseServerSchema.ts (~rad 17-31)
+  Det genererade schemat visar en tabell Accounts med kolumnerna name och
+  password (string). Tabellen används inte i koden men finns i databasen –
+  innehåller den riktiga konton lagras lösenord sannolikt i klartext.
+  Åtgärd: granska innehållet, droppa tabellen eller hasha, regenerera schemat.
+
+Buggar / logikfel
+-----------------
+[MEDEL] M7. Paketburs-uppslag: parseInt utan NaN-vakt, svalda query-fel och
+  kolli-fallback som burantal
+  Filer: web/profitability/service.ts (~rad 128-196),
+  web/lib/ilogMappers.ts (~rad 544)
+  Utländska postnummer kan ge NaN eller partiell parsning till fel postnummer;
+  alla fyra uppslagen ignorerar error; antal burar över högsta pristrappan ger
+  "Inget pris hittades" (0 kr) i stället för högsta trappans pris; och när
+  PPL-egenskapen saknas faller ilogMappers tillbaka på kolli-fältet så att
+  t.ex. 40 kolli prissätts som 40 burar. Verifiera även att pris-kolumnen är
+  styckpris per bur (raden slås upp på Math.ceil men multipliceras med
+  faktiskt antal). Åtgärd: NaN-vakter, felkontroll, clampa till högsta
+  trappan, ta bort/flagga kolli-fallbacken.
+
+[MEDEL] M8. Inkonsekvent parsning av taxPointRelation på tre ställen
+  Filer: web/app/api/profitability/route.ts (~rad 17, 130-145),
+  web/profitability/addonEngine.ts (~rad 66),
+  web/profitability/trappsteg_steg.ts (~rad 21, 101, 162, 268)
+  route.ts rensar till siffror, addonEngine splittar på -/–/— utan rensning,
+  trappstegen splittar rått utan validering. Samma indata (t.ex.
+  "553 02 - 111 20" eller en-dash) kan ge fungerande tillägg men NaN i
+  grundprisberäkningen – grundpris och tillägg räknas då på olika relationer.
+  finalTaxPointRelation byggs dessutom bara om när inkommande värde var tomt,
+  så en osanerad originalsträng skickas vidare trots att rensade taxepunkter
+  finns. Åtgärd: EN delad util för parsning/validering, anropad en gång i
+  routen; bygg alltid om relationen från de rensade delarna.
+
+[MEDEL] M9. roundUpWeight returnerar -1 vid fel och används okontrollerat
+  Filer: web/lib/backend/utils.ts (~rad 47-60),
+  web/profitability/service.ts (~rad 375)
+  Vid RPC-fel blir weight_plus_one = -1 och skickas tyst in i alla fem stegen
+  som viktklass – i värsta fall matchas fel prisrad. Åtgärd: kasta fel eller
+  kontrollera returvärdet; överväg att beräkna avrundningen lokalt i stället
+  för ett extra DB-roundtrip per beräkning.
+
+[MEDEL] M10. Linjeorientering efter valda områden är tyst urkopplad
+  Fil: web/app/home/hooks/useHomeLoader.ts (~rad 275, 502-504)
+  I a6fe6b3 ersattes områdesetiketterna med en hårdkodad tom array som skickas
+  till orientLineNameForSelectedAreas – linjenamn vänds därför aldrig efter
+  användarens valda områden ("Stockholm - Umeå" i stället för omvänt).
+  Åtgärd: skicka selectedAreaLabels, eller ta bort orienteringskoden om
+  beteendet är avsiktligt.
+
+[MEDEL] M11. ensureEquipageTotals räknar aldrig om FLM efter kort-refresh
+  Filer: web/app/home/hooks/homeTypesAndUtils.ts (~rad 101-114),
+  useHomeLoader.ts (~rad 471-486)
+  `totalFlm ?? ...` faller aldrig tillbaka eftersom fältet alltid är ett tal.
+  Efter ↻ på ett ekipage där bokningar tillkommit/försvunnit uppdateras
+  vikten men FLM-stapeln visar gamla värdet. Åtgärd: räkna alltid om
+  totalerna från consignments.
+
+Prestanda
+---------
+[MEDEL] M12. N+1: tre API-anrop per sändning utan dedup i home-hydreringen
+  Fil: web/app/home/hooks/useHomeProfitability.ts (~rad 61-69)
+  Per consignment görs getBestNameMatch + getNameTranslations +
+  calculateProfitability parallellt över ALLA sändningar samtidigt – ett
+  ekipage med 30 sändningar ger 90 anrop, en batch om 4 ekipage upp till
+  ~360. Samma kundnamn slås upp gång på gång. Åtgärd: dedupa namn-uppslag
+  per normaliserat namn (Map-cache per laddning), chunk:a på sändningsnivå
+  eller inför en batch-endpoint.
+
+[MEDEL] M13. Sekventiella RPC-par i trappsteg 1, 2, 4 och 5
+  Fil: web/profitability/trappsteg_steg.ts (~rad 28-49, 107-127, 225-244,
+  272-290)
+  Varje steg gör två oberoende RPC-anrop (vikt + vikt+1) sekventiellt; bara
+  steg 3 använder Promise.all. En fjärrberäkning som når steg 5 gör upp till
+  11 sekventiella DB-roundtrips. Åtgärd: Promise.all i alla steg (mönstret
+  finns redan i steg 3) – nästan halverad latens. Gäller även
+  try_paketbur_lookup (4 sekventiella uppslag som dessutom dubblerar
+  routens redan gjorda uppslag).
+
+[MEDEL] M14. Dubbel omvänd avståndslookup i simulatorn
+  Filer: web/app/simulator/useSimulatorPlanner.ts (~rad 202-216),
+  web/app/api/distance-map/route.ts (~rad 66-121)
+  API-routen provar redan båda riktningarna i distance_map, men klienten gör
+  ändå ett andra HTTP-anrop med omvänd relation vid miss – det kan aldrig ge
+  nytt svar. I simulatorns O(n²)-kandidatloop dubbleras antalet anrop i
+  onödan. Åtgärd: ta bort klientens reverse-försök eller batch-hämta.
+
+[MEDEL] M15. sessionStorage-persistens som sidoeffekt inuti setState-updater
+  Fil: web/app/home/hooks/useHomeLineState.ts (~rad 96, 159)
+  persistCurrentHomeCache (JSON.stringify av hela kortlistan) körs inuti
+  setLineCards-updatern – React-updaters ska vara rena (StrictMode kör dem
+  två gånger; concurrent rendering kan spara state som aldrig committas).
+  Dessutom O(n²)-serialisering under hydreringen. Åtgärd: flytta till en
+  (debouncad) useEffect på lineCards.
+
+Kodkvalitet
+-----------
+[MEDEL] M16. useEntireName är död kod som ser funktionell ut
+  Filer: web/app/home/hooks/homeTypesAndUtils.ts (~rad 279-296),
+  useHomeProfitability.ts (~rad 96-119), page.tsx (~rad 196-201)
+  Backend-stödet togs bort i 604c1c8, men parametern och all flaggberäkning
+  finns kvar i två anropare och skickas in i en funktion som ignorerar den.
+  Åtgärd: ta bort parametern + flagglogiken (eller återinför stödet i API:t).
+
+[MEDEL] M17. Duplicerad parser för referensvärde med motstridig validering
+  Filer: web/app/settings/page.tsx (~rad 79-90),
+  web/lib/backend/transportPlanningUtils.ts (~rad 77-94)
+  Settings-varianten accepterar >= 0, Home/simulator-varianten kräver > 0 och
+  faller annars tillbaka på default. Sparar användaren 0 visar settings 0 men
+  Home räknar med defaultvärdet – tyst inkonsekvens. Åtgärd: en enda
+  exporterad parser med bestämt gränsvärde.
+
+[MEDEL] M18. Opinnad tredjeparts-CSS från CDN utan SRI
+  Fil: web/app/layout.tsx (~rad 33-36)
+  Tabler-ikoner laddas från cdn.jsdelivr.net med @latest – varje ny release
+  ändrar appen utan kodändring (supply chain-risk), ingen integrity-hash,
+  och hårt CDN-beroende. Åtgärd: pinna version med SRI-hash eller bundla
+  @tabler/icons-webfont via npm.
+
+[MEDEL] M19. Kända sårbarheter i npm-beroenden (Dependabot: 8 st, varav höga)
+  Filer: ml-backend/package-lock.json, web/package-lock.json
+  npm audit (2026-07-02) bekräftar: ml-backend har 6 sårbarheter (4 HÖGA:
+  minimatch, path-to-regexp, picomatch, ws – ReDoS/DoS/minnesläckage; 2
+  måttliga: brace-expansion, qs), samtliga fixbara med ett enkelt
+  `npm audit fix` utan breaking changes. web har 2 måttliga (postcss <8.5.10
+  via next – XSS i CSS-stringify; kräver next-uppgradering). Åtgärd: kör
+  `npm audit fix` i ml-backend omgående och planera next-bump i web;
+  aktivera gärna Dependabot-PR:ar för ml-backend som redan finns för web.
+
+--------------------------------------------------------------------------------
+LÅG PRIORITET
+--------------------------------------------------------------------------------
+
+[LÅG] L1. `throw userError` i stället för `return` ger 500 i stället för 401
+  Filer: web/app/api/messages/get/messages/route.ts (~rad 11),
+  messages/get/unreadMessages/route.ts (~rad 10). Åtgärd: return userError.
+
+[LÅG] L2. authHelpers: e-post verifieras inte trots doc-kommentaren, och
+  requireAdmin gör tre separata Supabase-anrop (getUser körs två gånger).
+  Fil: web/lib/authHelpers.ts (~rad 10-24). Åtgärd: kontrollera
+  email_confirmed_at (eller rätta kommentaren) och återanvänd user-objektet.
+
+[LÅG] L3. Rester av gamla auth-mönstret: PATCH i /api/users kör inline-
+  rollkontroll i stället för requireAdmin(), och messages/add,
+  messages/get/*, users/delete/user, set/filters, set/password gör ett andra
+  duplicerat getCurrentUser-anrop efter requireUser/requireAdmin.
+  Åtgärd: helpern först i varje route, ta bort dubbelanropen.
+
+[LÅG] L4. request.json() utan try/catch ger 500 i stället för 400 vid trasig
+  body. Filer: forgot-password, login, users/set/password. Åtgärd: try/catch
+  + 400 "Ogiltig JSON".
+
+[LÅG] L5. login: translateError faller tillbaka på rått Supabase-meddelande
+  (web/app/api/login/route.ts ~rad 16-18). Åtgärd: generisk fallback.
+
+[LÅG] L6. Recovery-koden städas inte ur URL:en i ?code=-flödet på
+  reset-password-sidan (hash-flödet städas). Åtgärd: samma
+  history.replaceState efter kodutbyte.
+
+[LÅG] L7. /api/test saknar egen auth (skyddas enbart av middleware-redirect).
+  Åtgärd: ta bort routen eller lägg till requireUser().
+
+[LÅG] L8. Trappstegens vakter använder `=== null` och missar undefined –
+  `undefined * x * weight` blir NaN som returneras som intäkt; steg 2/3
+  skickar dessutom data rakt in medan steg 4/5 plockar d?.[0]. valideraInput
+  tillåter samtidigt vikt <= 0 medan addonEngine kastar för samma indata
+  (förvirrande ADDON_CALCULATION_FAILED-varning). Fil:
+  web/profitability/trappsteg_steg.ts (~rad 133-146, 182-196, 293-307),
+  service.ts (~rad 289-300). Åtgärd: `== null`/Number.isFinite-vakter och
+  samma viktkontrakt i båda motorerna.
+
+[LÅG] L9. addonEngine: toFiniteNumber nollar tyst ogiltiga belopp utan
+  AddonWarning, och tillägg appliceras bara i trappstegsflödet –
+  PAKETBUR/SUNE/EGENFAKTURERAT får aldrig tillägg (dokumentera om avsiktligt).
+  Fil: web/profitability/addonEngine.ts (~rad 35-43, 107-124).
+
+[LÅG] L10. Date.now() som loadId kan kollidera vid snabba klick – stale svar
+  kan skriva över nyare. Fil: useHomeLoader.ts (~rad 405, 514, 551).
+  Åtgärd: monotont ökande räknare.
+
+[LÅG] L11. Retry utan backoff och utan felklassning i
+  getIlogConsignmentsWithRetry – omedelbar retry även på 401/403 dubblerar
+  lasten vid systematiska fel. Fil: homeTypesAndUtils.ts (~rad 234-246).
+
+[LÅG] L12. UI-småfix i home: tredje tooltip-implementationen
+  (TruckLineTooltip duplicerar InfoTooltip), meningslös ternary
+  `=== 1 ? "ekipage" : "ekipage"` (page.tsx ~rad 266), oanvänd import
+  normalizeText i useHomeLoader, onödig typ-cast i getConsignmentFlm, samt
+  NameDropdown som saknar click-outside/Escape-stängning (Dropdown.tsx).
+
+[LÅG] L13. Supabase CLI-temporärfiler committade: web/supabase/.temp/
+  (linked-project.json läcker projekt-ref, org-id och kontots e-post).
+  Åtgärd: .gitignore + git rm --cached.
+
+[LÅG] L14. jaro-estimation kraschar på tomt RPC-svar: `!data` fångar inte
+  `[]`, så data[0].best_name kastar TypeError -> 500 i stället för 404.
+  Fil: web/app/api/profitability/jaro-estimation/route.ts (~rad 27-41).
+
+[LÅG] L15. web/lib/api.ts: getIlogUnassignedConsignments saknar
+  response.ok-kontroll och typning; mönstret `(await response.json()).message`
+  i ~15 funktioner kraschar på HTML-felsidor (502) och maskerar verkliga fel;
+  TODO-artefakter ("pallar inte detta just nu klockan är 2am", "NOT DONE
+  YET" på funktioner som används skarpt). Åtgärd: gemensam
+  handleResponse<T>()-helper + städning.
+
+[LÅG] L16. Settings-buggar: ändrat referensvärde sätter inte
+  hasUnsavedChanges (ändringen kan tappas utan varning), och
+  milkostnadsfältet snäpper tillbaka till default mitt i inmatningen
+  eftersom onChange ersätter tomt värde direkt. Fil:
+  web/app/settings/page.tsx (~rad 617-658).
+
+[LÅG] L17. loadFilteredLinesAndEquipagesForSelectedAreas skickar hårdkodat []
+  som ekipage och returnerar därför alltid tom ekipagelista trots namn och
+  returtyp; ilogMappers doc-kommentar beskriver en vikt-fallbackkedja som
+  listmappern inte implementerar. Filer:
+  web/lib/backend/transportPlanningUtils.ts (~rad 464-480),
+  web/lib/ilogMappers.ts (~rad 480-541).
+
+[LÅG] L18. Kodkvalitet/duplicering i övrigt: simulator/page.tsx (1568 rader)
+  har två nästan identiska tabellrenderingar och typen PriceBreakdownValue
+  kopierad från PriceWithAddons; roundMoney-logiken inlinad i
+  try_paketbur_lookup trots att funktionen finns i samma fil; identiska
+  guard-block i routeConsignment (FJARR vs SUNE-fallback); döda importer i
+  service.ts/trappsteg_steg.ts; SUNE-detekteringens kommentar nämner
+  avsändarort som inte kontrolleras i koden; kvarlämnad platshållare
+  `const isAdmin = false` i users/get/user.
+
+--------------------------------------------------------------------------------
+POSITIVT NOTERAT
+--------------------------------------------------------------------------------
+* Auth-helpern används nu konsekvent i nästan alla routes, service role-
+  klienten används sparsamt och alltid bakom admin-kontroller, och
+  import-historical binder jobb till admin_id.
+* ilog-routes validerar date/equipageId/consignmentId med regex och debugRaw
+  är avstängt i produktion. Inga öppna redirects hittades.
+* Ingen dangerouslySetInnerHTML och inga XSS-fynd i granskade komponenter;
+  inga hemligheter i committade filer (.env gitignorad).
+* importEngine.ts har robust CSV-parsning (BOM, citattecken,
+  delimiterdetektering, batchad upsert med dedupe).
+* PriceWithAddons-tooltippen är korrekt byggd (portal, aria-describedby,
+  positionsclamping).
+
+================================================================================
+SAMMANSTÄLLNING
+================================================================================
+HÖG:   6  (klient-side användarskapande/rollsättning, Infinity-intäkt,
+           substring-prismatchning, svalda DB-fel som omklassar flöden,
+           UI-låsning vid refresh, cache-restore med eviga spinners)
+MEDEL: 19 (7 säkerhet/beroenden, 5 buggar, 4 prestanda, 3 kodkvalitet)
+LÅG:   18 (grupperade småfix)
+
+Kvarstår från förra rapporten: M4 (_isDbValidDestination), M6 (duplicerade
+utils – nu divergerade), M7 (iLog-cache), L4 (fellogning), L5 (select * utan
+paginering) samt delfixar av H3/M1/M2/M3/M5/L2/L3/L6.
+
+Rekommenderad första åtgärd:
+1) H1 – verifiera RLS-policyn för User.role och flytta användarskapandet
+   server-side (störst säkerhetsrisk).
+2) H2–H4 – tre buggar i prisberäkningen som kan ge fel belopp mot kund helt
+   tyst; alla tre är små, avgränsade fixar.
+3) H5–H6 – home-vyns låsningar, märks direkt för användarna.
+4) M8 – en delad util för taxPointRelation stänger samtidigt resterna av
+   gamla M3 och förhindrar att grundpris och tillägg räknas på olika
+   relationer.
+================================================================================
