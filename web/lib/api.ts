@@ -19,6 +19,7 @@ type HistoricalImportResponse = {
 	insertedRows: number;
 	filteredOutRows: number;
 	replacedRows: number;
+	paketburRowsUpdated?: number;
 };
 
 // ============================================================

@@ -111,7 +111,7 @@ export async function try_styckegods_lookup(
   }
 
   const grundPris = tonPrice * weightInTon;
-  const prisInklTillägg = grundPris * 1.085; // Tilläg
+  const prisInklTillägg = grundPris * 1.085; // Tillägg
   const finalPrice = Math.round((prisInklTillägg + Number.EPSILON) * 100) / 100;
   
   return {
