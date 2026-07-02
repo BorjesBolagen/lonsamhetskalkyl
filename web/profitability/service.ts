@@ -262,8 +262,74 @@ async function addAddonsToProfitabilityResult(
   const baseRevenue = roundMoney(baseResult.estimated_revenue);
 
   try {
-    const addonResult = await calculateApplicableAddons(input);
-    const addonTotal = roundMoney(addonResult.addonTotal);
+  const addonResult =
+  await calculateApplicableAddons(input);
+
+  const addonTotal =
+    roundMoney(addonResult.addonTotal);
+
+  const estimatedRevenue =
+    roundMoney(baseRevenue + addonTotal);
+
+  console.log("Addon applied per consignment", {
+    customerName: input.kundnamn,
+
+    sender: {
+      postort: input.pickupCity ?? null,
+      postnummer: input.pickupPostalCode ?? null,
+      matchedPostort:
+        addonResult.lookup?.sender?.matchedCity ?? null,
+      matchedPostnummer:
+        addonResult.lookup?.sender?.matchedPostalCode
+        ?? addonResult.lookup?.sender?.matchedTaxPoint
+        ?? null,
+      matchSource:
+        addonResult.lookup?.sender?.matchSource ?? null,
+      orttillaggClass:
+        addonResult.lookup?.sender?.localityClass ?? null,
+    },
+
+    receiver: {
+      postort: input.destinationCity ?? null,
+      postnummer: input.destinationPostalCode ?? null,
+      matchedPostort:
+        addonResult.lookup?.receiver?.matchedCity ?? null,
+      matchedPostnummer:
+        addonResult.lookup?.receiver?.matchedPostalCode
+        ?? addonResult.lookup?.receiver?.matchedTaxPoint
+        ?? null,
+      matchSource:
+        addonResult.lookup?.receiver?.matchSource ?? null,
+      orttillaggClass:
+        addonResult.lookup?.receiver?.localityClass ?? null,
+      stor:
+        addonResult.lookup?.receiver?.stor ?? null,
+      hasBalanceAddon:
+        addonResult.lookup?.receiver?.hasBalanceAddon ?? false,
+    },
+
+    chargeableWeight: input.chargeable_weight,
+
+    appliedAddons: addonResult.addons.map((addon) => ({
+      type: addon.type,
+      name: addon.name,
+      direction: addon.direction,
+      amount: addon.amount,
+      class: addon.class ?? null,
+      region: addon.region ?? null,
+      matchedPostort: addon.matchedCity ?? null,
+      matchedPostnummer:
+        addon.matchedPostalCode
+        ?? addon.matchedTaxPoint
+        ?? null,
+      lookupSource: addon.lookupSource ?? null,
+    })),
+
+    addonTotal,
+    estimatedRevenue,
+
+    warnings: addonResult.warnings,
+  });
 
     return {
       ...baseResult,
@@ -271,6 +337,7 @@ async function addAddonsToProfitabilityResult(
       addon_total: addonTotal,
       estimated_revenue: roundMoney(baseRevenue + addonTotal),
       addons: addonResult.addons,
+      addon_lookup: addonResult.lookup,
       addon_warnings: addonResult.warnings,
     };
   } catch (error) {

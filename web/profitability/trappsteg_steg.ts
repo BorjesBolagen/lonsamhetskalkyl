@@ -20,8 +20,6 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-    const useEntireName = input.useEntireName ?? false;
-
     // Fråga supabase om (kundnamn, viktklass, avsändningstaxepunkt, mottagningstaxepunkt) finns.
     // Om det finns returneras alla dessa raders kundnettofrakt och vikt
     // Gör först med vanlig vikt
@@ -31,7 +29,6 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
         in_input_weight: weight,
         in_taxep_sender: sender_taxep,
         in_taxep_receiver: receiver_taxep,
-        in_use_entire_name: useEntireName,
     });
 
     if (error_orginal) {
@@ -44,7 +41,6 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
         in_input_weight: weight_plus_one,
         in_taxep_sender: sender_taxep,
         in_taxep_receiver: receiver_taxep,
-        in_use_entire_name: useEntireName,
     })
 
     if (error_plus_ett) {
@@ -103,8 +99,6 @@ export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: num
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-    const useEntireName = input.useEntireName ?? false;
-
     const supabase = await getSupabaseServerClient();
 
     // Kolla om supabase har match på kundnamn, km och viktklass
@@ -113,7 +107,6 @@ export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: num
         in_input_weight: weight,
         in_taxep_sender: sender_taxep,
         in_taxep_receiver: receiver_taxep,
-        in_use_entire_name: useEntireName,
     });
 
     if (error_orginal) {
@@ -126,7 +119,6 @@ export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: num
         in_input_weight: weight_plus_one,
         in_taxep_sender: sender_taxep,
         in_taxep_receiver: receiver_taxep,
-        in_use_entire_name: useEntireName,
     });
 
     if (error_plus_ett) {
@@ -167,14 +159,12 @@ export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: num
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-    const useEntireName = input.useEntireName ?? false;
-
     // Kolla om supabase har match på bara kundnamn
     const supabase = await getSupabaseServerClient();
     const [{ data: data_orginal, error: error_orginal }, { data: data_plus_ett, error: error_plus_ett }] = 
         await Promise.all([
-            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep, in_use_entire_name: useEntireName }),
-            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight_plus_one, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep, in_use_entire_name: useEntireName })
+            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep }),
+            supabase.rpc("steg_3", { in_kundnamn: kundnamn, in_weight: weight_plus_one, in_taxep_sender: sender_taxep, in_taxep_receiver: receiver_taxep })
         ]);
 
     if (error_orginal) {

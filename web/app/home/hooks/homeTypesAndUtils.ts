@@ -7,7 +7,7 @@ import type { ConsignmentListItem, LineItem } from "../../../lib/ilogTypes";
 import { normalizeText } from "../../../lib/areaLineConfig";
 
 export const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
-export const HOME_CACHE_KEY = "home-lines-cache-v11";
+export const HOME_CACHE_KEY = "home-lines-cache-v12";
 
 export type ProfitabilityStatus = "idle" | "loading" | "done" | "error";
 

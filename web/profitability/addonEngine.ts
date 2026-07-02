@@ -4,6 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import type {
   AddonCalculationResult,
   AddonLocationLookup,
+  CalculatedAddon,
   ProfitabilityInput,
 } from "./types";
 
@@ -32,6 +33,19 @@ function normalizeOptionalText(
   return normalized.length > 0 ? normalized : null;
 }
 
+function normalizePostalCode(
+  value: string | null | undefined,
+): string | null {
+  const normalized = normalizeOptionalText(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const digitsOnly = normalized.replace(/\D/g, "");
+  return digitsOnly.length > 0 ? digitsOnly : null;
+}
+
 function toFiniteNumber(
   value: unknown,
   fallback = 0,
@@ -42,11 +56,22 @@ function toFiniteNumber(
     : fallback;
 }
 
+function toNullableString(
+  value: unknown,
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return String(value);
+}
+
 function emptyLocationLookup(): AddonLocationLookup {
   return {
     matchSource: "none",
     matchedRows: 0,
     matchedTaxPoint: null,
+    matchedPostalCode: null,
     matchedCity: null,
     localityClass: null,
     stor: null,
@@ -59,33 +84,71 @@ function emptyLocationLookup(): AddonLocationLookup {
   };
 }
 
-/**
- * Delar taxepunktsrelationen i avsändar- och mottagartaxepunkt.
- * Exempel: "55302-11120" => senderTaxPoint = "55302", receiverTaxPoint = "11120".
- */
-function splitTaxPointRelation(
-  taxPointRelation: string | null | undefined,
-): {
-  senderTaxPoint: string | null;
-  receiverTaxPoint: string | null;
-} {
-  const relation = normalizeOptionalText(taxPointRelation);
-
-  if (!relation) {
-    return {
-      senderTaxPoint: null,
-      receiverTaxPoint: null,
-    };
-  }
-
-  const parts = relation
-    .split(/[\-–—]/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+function normalizeAddon(
+  addon: CalculatedAddon,
+): CalculatedAddon {
+  const matchedPostalCode =
+    toNullableString(addon.matchedPostalCode)
+    ?? toNullableString(addon.matchedTaxPoint);
 
   return {
-    senderTaxPoint: parts[0] ?? null,
-    receiverTaxPoint: parts[1] ?? null,
+    ...addon,
+
+    amount:
+      toFiniteNumber(addon.amount),
+
+    class:
+      addon.class === null
+        ? null
+        : toFiniteNumber(addon.class),
+
+    matchedPostalCode,
+
+    // Bakåtkompatibilitet. Fältet heter fortfarande matchedTaxPoint i delar av UI:t,
+    // men värdet är nu postnummer från addons_postal.
+    matchedTaxPoint:
+      toNullableString(addon.matchedTaxPoint)
+      ?? matchedPostalCode,
+  };
+}
+
+function normalizeLookup(
+  lookup: AddonLocationLookup | null | undefined,
+): AddonLocationLookup {
+  if (!lookup) {
+    return emptyLocationLookup();
+  }
+
+  const matchedPostalCode =
+    toNullableString(lookup.matchedPostalCode)
+    ?? toNullableString(lookup.matchedTaxPoint);
+
+  return {
+    ...lookup,
+
+    matchedRows:
+      toFiniteNumber(lookup.matchedRows),
+
+    matchedPostalCode,
+
+    // Bakåtkompatibilitet. Värdet är postnummer.
+    matchedTaxPoint:
+      toNullableString(lookup.matchedTaxPoint)
+      ?? matchedPostalCode,
+
+    matchedCity:
+      toNullableString(lookup.matchedCity),
+
+    localityClass:
+      lookup.localityClass === null
+        ? null
+        : toFiniteNumber(lookup.localityClass),
+
+    ambiguous: {
+      locality: Boolean(lookup.ambiguous?.locality),
+      metropolitan: Boolean(lookup.ambiguous?.metropolitan),
+      balance: Boolean(lookup.ambiguous?.balance),
+    },
   };
 }
 
@@ -105,32 +168,15 @@ function normalizeResult(
       toFiniteNumber(value.addonTotal),
 
     addons: Array.isArray(value.addons)
-      ? value.addons.map((addon) => ({
-          ...addon,
-
-          amount:
-            toFiniteNumber(addon.amount),
-
-          class:
-            addon.class === null
-              ? null
-              : toFiniteNumber(addon.class),
-
-          matchedTaxPoint:
-            addon.matchedTaxPoint === null
-              ? null
-              : String(addon.matchedTaxPoint),
-        }))
+      ? value.addons.map(normalizeAddon)
       : [],
 
     lookup: {
       sender:
-        value.lookup?.sender
-        ?? emptyLocationLookup(),
+        normalizeLookup(value.lookup?.sender),
 
       receiver:
-        value.lookup?.receiver
-        ?? emptyLocationLookup(),
+        normalizeLookup(value.lookup?.receiver),
     },
 
     warnings: Array.isArray(value.warnings)
@@ -146,8 +192,13 @@ function normalizeResult(
  * - orttillägg till mottagaren
  * - storstadstillägg till mottagaren
  * - balanstillägg till mottagaren
+ * - TID-tillägg via kundnamn och linjerelation
  *
- * Taxepunkt används först. Postort används om taxepunkten inte hittas.
+ * Postnummer används först. Postort används som fallback i Supabase om
+ * postnummer saknas eller inte ger träff.
+ *
+ * RPC-parametrarna heter fortfarande p_*_taxepunkt för bakåtkompatibilitet,
+ * men värdet som skickas är postnummer från iLog.
  */
 export async function calculateApplicableAddons(
   input: ProfitabilityInput,
@@ -161,61 +212,59 @@ export async function calculateApplicableAddons(
     );
   }
 
-  const relationParts =
-    splitTaxPointRelation(input.taxPointRelation);
+  const senderPostalCode =
+    normalizePostalCode(input.pickupPostalCode);
 
-  const senderTaxPoint =
-    normalizeOptionalText(input.senderTaxPoint)
-    ?? relationParts.senderTaxPoint;
-
-  const receiverTaxPoint =
-    normalizeOptionalText(input.receiverTaxPoint)
-    ?? relationParts.receiverTaxPoint;
+  const receiverPostalCode =
+    normalizePostalCode(input.destinationPostalCode);
 
   const supabase =
     await getSupabaseServerClient();
 
+  // De genererade Supabase-typerna känner inte till nya SQL-funktioner
+  // förrän databastyperna har regenererats. Därför görs just detta RPC-anrop otypat.
   const rpc =
     supabase.rpc.bind(
       supabase,
     ) as unknown as UntypedSupabaseRpc;
 
   const {
-  data,
-  error,
-} = await rpc(
-  "calculate_applicable_addons",
-  {
-    p_sender_taxepunkt:
-      senderTaxPoint,
+    data,
+    error,
+  } = await rpc(
+    "calculate_applicable_addons",
+    {
+      // Bakåtkompatibla parameternamn. Värdet är postnummer, inte taxepunkt.
+      p_sender_taxepunkt:
+        senderPostalCode,
 
-    p_sender_postort:
-      normalizeOptionalText(
-        input.pickupCity,
-      ),
+      p_sender_postort:
+        normalizeOptionalText(
+          input.pickupCity,
+        ),
 
-    p_receiver_taxepunkt:
-      receiverTaxPoint,
+      p_receiver_taxepunkt:
+        receiverPostalCode,
 
-    p_receiver_postort:
-      normalizeOptionalText(
-        input.destinationCity,
-      ),
+      p_receiver_postort:
+        normalizeOptionalText(
+          input.destinationCity,
+        ),
 
-    p_chargeable_weight:
-      weight,
+      p_chargeable_weight:
+        weight,
 
-    p_customer_name:
-      normalizeOptionalText(
-        input.kundnamn,
-      ),
+      p_customer_name:
+        normalizeOptionalText(
+          input.kundnamn,
+        ),
 
-    p_linjerel:
-      normalizeOptionalText(
-        input.linjerel,
-      ),
-  },
-);
+      p_linjerel:
+        normalizeOptionalText(
+          input.linjerel,
+        ),
+    },
+  );
 
   if (error) {
     throw new Error(

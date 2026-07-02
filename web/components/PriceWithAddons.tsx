@@ -108,6 +108,10 @@ function getAddonLabel(
       : "Balanstillägg";
   }
 
+  if (addon.type === "tidtillagg") {
+    return "TID-tillägg";
+  }
+
   return addon.name;
 }
 
