@@ -271,6 +271,11 @@ export type ProfitabilityValue = {
   addon_total?: number;
   addons?: ProfitabilityAddon[];
 
+  addon_lookup?: {
+    sender: ProfitabilityAddonLocationLookup;
+    receiver: ProfitabilityAddonLocationLookup;
+  };
+
   addon_warnings?: Array<{
     code: string;
     message: string;
@@ -312,13 +317,22 @@ export const getNameTranslations = async (name: string): Promise<BasicResponse<N
 
 	return (await response.json()) as BasicResponse<NameTranslationResponse>;
 }
+export type ProfitabilityAddonType =
+  | "orttillagg"
+  | "storstadstillagg"
+  | "balanstillagg"
+  | "tidtillagg";
+
+export type ProfitabilityAddonLookupSource =
+  | "postnummer"
+  | "taxepunkt"
+  | "postort"
+  | "name_linjerel"
+  | "none";
+
 export type ProfitabilityAddon = {
   id: number;
-
-  type:
-    | "orttillagg"
-    | "storstadstillagg"
-    | "balanstillagg";
+  type: ProfitabilityAddonType;
 
   direction:
     | "from"
@@ -333,18 +347,37 @@ export type ProfitabilityAddon = {
     | "goteborg"
     | null;
 
-  lookupSource:
-    | "taxepunkt"
-    | "postort"
-    | "none";
+  lookupSource: ProfitabilityAddonLookupSource;
 
+  // Bakåtkompatibelt namn. Värdet kan numera vara postnummer.
   matchedTaxPoint: string | null;
+
+  // Nytt tydligare namn för addons_postal.postnummer.
+  matchedPostalCode?: string | null;
+
   matchedCity: string | null;
+};
+
+export type ProfitabilityAddonLocationLookup = {
+  matchSource: ProfitabilityAddonLookupSource;
+  matchedRows: number;
+  matchedTaxPoint: string | null;
+  matchedPostalCode?: string | null;
+  matchedCity: string | null;
+  localityClass: number | null;
+  stor: "s" | "g" | null;
+  hasBalanceAddon: boolean;
+  ambiguous: {
+    locality: boolean;
+    metropolitan: boolean;
+    balance: boolean;
+  };
 };
 
 
 export const calculateProfitability = async (
-    consignment: ConsignmentListItem,
+  consignment: ConsignmentListItem,
+  useEntireName = false,
 ): Promise<ProfitabilityResponse> => {
 
     const params = new URLSearchParams({
@@ -365,6 +398,7 @@ export const calculateProfitability = async (
 		invoiceStatus: consignment.invoiceStatus || "",
         internalPrice: String(consignment.internalPrice || 0),
 		paketburar: String(consignment.paketburar || 0),
+		useEntireName: String(useEntireName),
     });
 
     const url = `/api/profitability?${params.toString()}`;
@@ -605,3 +639,4 @@ export const getAmountOfPages = async (pageSize: number): Promise<BasicResponse<
 
 	return (await response.json()) as BasicResponse<number>;
 }
+

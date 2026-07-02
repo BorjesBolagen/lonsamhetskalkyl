@@ -2,7 +2,12 @@
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
 import { useState, useEffect, useRef } from "react";
-import { addMessage, signUpProcedure, getIlogEquipages, getIlogConsignments, getCurrentlySignedInUser } from "@/lib/api";
+import {
+  addMessage,
+  signUpProcedure,
+  getIlogEquipages,
+  getIlogConsignments,
+} from "@/lib/api";
 import { Enums, Constants, TablesUpdate } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
@@ -11,6 +16,7 @@ import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
 import PasswordInput from "../../components/PasswordInput";
 import { ConsignmentListItem, EquipageItem } from "@/lib/ilogTypes";
 import { StorageError } from "@supabase/storage-js";
+import { DEFAULT_HVO_PERCENTAGE } from "@/lib/backend/constants";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 
@@ -20,7 +26,6 @@ type TrafficLeader = {
   last_name: string | null;
   email: string | null;
   role: string | null;
-  // add any other fields your User table has
 };
 
 const formatRole = (role: string | null) => {
@@ -28,6 +33,14 @@ const formatRole = (role: string | null) => {
   if (role === "traffic_leader") return "Trafikledare";
   return role ?? "—";
 };
+
+function parseHvoPercentageValue(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+
+  return DEFAULT_HVO_PERCENTAGE;
+}
 
 export default function Admin() {
   const [trafficLeaders, setTrafficLeaders] = useState<TrafficLeader[]>([]);
@@ -45,6 +58,16 @@ export default function Admin() {
   const normalize = (str: string) =>
     str.toLowerCase().replace(/\s+/g, " ").trim();
 
+  const [hvoPercentage, setHvoPercentage] = useState<number | "">(
+    DEFAULT_HVO_PERCENTAGE,
+  );
+  const [isLoadingHvoPercentage, setIsLoadingHvoPercentage] = useState(true);
+  const [isSavingHvoPercentage, setIsSavingHvoPercentage] = useState(false);
+  const [hvoPercentageStatus, setHvoPercentageStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -60,6 +83,35 @@ export default function Admin() {
     };
 
     fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    const fetchHvoPercentage = async () => {
+      setIsLoadingHvoPercentage(true);
+      setHvoPercentageStatus(null);
+
+      try {
+        const response = await fetch("/api/hvo");
+        const json = await response.json();
+
+        if (!response.ok || !json.status) {
+          throw new Error(json.message || "Kunde inte hämta HVO-inställning.");
+        }
+
+        setHvoPercentage(parseHvoPercentageValue(json.data?.hvoPercentage));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setHvoPercentageStatus({
+          type: "error",
+          message: `Kunde inte hämta HVO-inställning: ${message}`,
+        });
+        setHvoPercentage(DEFAULT_HVO_PERCENTAGE);
+      } finally {
+        setIsLoadingHvoPercentage(false);
+      }
+    };
+
+    fetchHvoPercentage();
   }, []);
 
   const [lastImport, setLastImport] = useState<string | null>(null);
@@ -131,15 +183,22 @@ export default function Admin() {
   } = useHistoricalImport();
 
   // Temporary stuff for name translation matching
-  const [isNameTranslationPopupOpen, setIsNameTranslationPopupOpen] = useState(false);
+  const [isNameTranslationPopupOpen, setIsNameTranslationPopupOpen] =
+    useState(false);
   const [translationStartDate, setTranslationStartDate] = useState("");
   const [translationEndDate, setTranslationEndDate] = useState("");
   const [loadingTranslation, setLoadingTranslation] = useState(false);
 
   // Mellan dessa datum har vi redan gjort namnöversättning
-  const [oldestTranslationDate, setOldestTranslationDate] = useState<string | null>(null);
-  const [newestTranslationDate, setNewestTranslationDate] = useState<string | null>(null);
-  const [totalNameTranslations, setTotalNameTranslations] = useState<number | null>(null);
+  const [oldestTranslationDate, setOldestTranslationDate] = useState<
+    string | null
+  >(null);
+  const [newestTranslationDate, setNewestTranslationDate] = useState<
+    string | null
+  >(null);
+  const [totalNameTranslations, setTotalNameTranslations] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     getSupabaseBrowserClient()
@@ -148,7 +207,9 @@ export default function Admin() {
       .order("upload_date", { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data }) => { setNewestTranslationDate(data?.upload_date ?? null) });
+      .then(({ data }) => {
+        setNewestTranslationDate(data?.upload_date ?? null);
+      });
   }, []);
 
   useEffect(() => {
@@ -173,14 +234,14 @@ export default function Admin() {
   const [logs, setLogs] = useState<{ message: string; color: LogColor }[]>([]);
 
   function addLog(message: string, color: LogColor = "green") {
-    setLogs(prev => [...prev, { message, color }]);
+    setLogs((prev) => [...prev, { message, color }]);
   }
 
   const colorClass: Record<LogColor, string> = {
-  yellow: "text-yellow-400",
-  red: "text-red-400",
-  green: "text-green-400"
-};
+    yellow: "text-yellow-400",
+    red: "text-red-400",
+    green: "text-green-400",
+  };
 
   const logBottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -190,7 +251,6 @@ export default function Admin() {
   }, [logs]);
 
   async function handleReadTranslation() {
-
     if (!translationStartDate || !translationEndDate) {
       addLog(`Angiva datum saknas`, "red");
       return;
@@ -215,62 +275,92 @@ export default function Admin() {
 
       // 2. Fetch all days in batches
       const CONCURRENCY = 5;
-      const ilogData: { date: string; consignments: ConsignmentListItem[] }[] = [];
+      const ilogData: { date: string; consignments: ConsignmentListItem[] }[] =
+        [];
       const startTime = Date.now();
       let completedDays = 0;
 
       for (let i = 0; i < days.length; i += CONCURRENCY) {
         const batch = days.slice(i, i + CONCURRENCY);
-        addLog(`Arbetar med dagar ${batch}`)
+        addLog(`Arbetar med dagar ${batch}`);
         const batchResults = await Promise.all(
           batch.map(async (day) => {
             const equipageResults = await Promise.all(
               equipages.map(async (equipage) => {
                 try {
-                  const res = await getIlogConsignments(day, equipage.id, signal);
+                  const res = await getIlogConsignments(
+                    day,
+                    equipage.id,
+                    signal,
+                  );
 
                   if (res.data !== undefined && res.data.length > 0) {
                     const waybill = res.data[0].waybillnumber;
                     const asNumber = Number(waybill);
                     if (isNaN(asNumber)) {
-                      throw new Error(`Waybillnumber "${waybill}" är inte ett nummer`);
+                      throw new Error(
+                        `Waybillnumber "${waybill}" är inte ett nummer`,
+                      );
                     }
-                    if (res.data[0].customerName.includes("*") || res.data[0].senderName.includes("*") || res.data[0].receiverName.includes("*")) {
-                      addLog(`${res.data[0].customerName} :: ${res.data[0].senderName} :: ${res.data[0].receiverName} `);
+                    if (
+                      res.data[0].customerName.includes("*") ||
+                      res.data[0].senderName.includes("*") ||
+                      res.data[0].receiverName.includes("*")
+                    ) {
+                      addLog(
+                        `${res.data[0].customerName} :: ${res.data[0].senderName} :: ${res.data[0].receiverName} `,
+                      );
                     }
                   }
                   return res.data ?? [];
                 } catch (error) {
                   if ((error as Error).name === "AbortError") throw error;
-                  const msg = error instanceof Error ? error.message : String(error);
-                  addLog(`Fel för ekipage ${equipage.id} dag ${day}: ${msg}. Hoppar över.`, "red");
+                  const msg =
+                    error instanceof Error ? error.message : String(error);
+                  addLog(
+                    `Fel för ekipage ${equipage.id} dag ${day}: ${msg}. Hoppar över.`,
+                    "red",
+                  );
                   return [];
                 }
-              })
+              }),
             );
 
             // Flatten and filter out empty equipages
-            const consignments = equipageResults.flat().filter(c => c !== null);
-            addLog(`Hämtade alla sändelser för dag ${day}. Lägger in i databas`)
+            const consignments = equipageResults
+              .flat()
+              .filter((c) => c !== null);
+            addLog(
+              `Hämtade alla sändelser för dag ${day}. Lägger in i databas`,
+            );
 
             // Call RPC immediately with this day's data
-            const { data, error } = await supabase.rpc("fill_name_translation_from_consignments", {
-              in_data: consignments,
-              in_date: day,
-            });
+            const { data, error } = await supabase.rpc(
+              "fill_name_translation_from_consignments",
+              {
+                in_data: consignments,
+                in_date: day,
+              },
+            );
             if (error) throw error;
 
-            addLog(`Dag ${day} hittade ${data[0].inserted} översättningar och ignorerade ${data[0].skipped}`, "yellow");
+            addLog(
+              `Dag ${day} hittade ${data[0].inserted} översättningar och ignorerade ${data[0].skipped}`,
+              "yellow",
+            );
 
             completedDays++;
             const elapsed = (Date.now() - startTime) / 1000;
             const avgPerDay = elapsed / completedDays;
-            const remaining = Math.round(avgPerDay * (days.length - completedDays));
-            const remainingStr = remaining > 0 ? `~${remaining}s` : " — snart klar!";
+            const remaining = Math.round(
+              avgPerDay * (days.length - completedDays),
+            );
+            const remainingStr =
+              remaining > 0 ? `~${remaining}s` : " — snart klar!";
             addLog(`Estimerad tid kvar: ${remainingStr}`);
 
             return { date: day, consignments };
-          })
+          }),
         );
 
         ilogData.push(...batchResults);
@@ -279,8 +369,10 @@ export default function Admin() {
       // 3. Upload to Supabase Storage
       addLog("Laddar upp iLog data till Supabase...");
       const fileName = `ilog_${translationStartDate}_${translationEndDate}_${Date.now()}.json`;
-      const blob = new Blob([JSON.stringify(ilogData)], { type: "application/json" });
-      
+      const blob = new Blob([JSON.stringify(ilogData)], {
+type: "application/json",
+      });
+
       try {
         const { error: uploadError } = await supabase.storage
           .from("ilog-uploads")
@@ -294,12 +386,12 @@ export default function Admin() {
       }
 
       // 4. Call RPC (later)
-
     } catch (error) {
       if ((error as Error).name === "AbortError") {
         addLog("Avbruten av användaren");
-      } else { 
-        const msg = error instanceof Error ? error.message : JSON.stringify(error);
+      } else {
+        const msg =
+          error instanceof Error ? error.message : JSON.stringify(error);
         addLog("Okänt fel: " + msg);
       }
     } finally {
@@ -307,16 +399,16 @@ export default function Admin() {
     }
   }
 
-function getDaysBetween(start: string, end: string): string[] {
-  const days = [];
-  const current = new Date(start);
-  const last = new Date(end);
-  while (current <= last) {
-    days.push(current.toISOString().split("T")[0].replace(/-/g, ""));
-    current.setDate(current.getDate() + 1);
+  function getDaysBetween(start: string, end: string): string[] {
+    const days = [];
+    const current = new Date(start);
+    const last = new Date(end);
+    while (current <= last) {
+      days.push(current.toISOString().split("T")[0].replace(/-/g, ""));
+      current.setDate(current.getDate() + 1);
+    }
+    return days;
   }
-  return days;
-}
 
   const handleUpdateUser = async (user: TrafficLeader) => {
     const trimmedPassword = editPassword.trim();
@@ -463,6 +555,10 @@ function getDaysBetween(start: string, end: string): string[] {
       const defaultFilters = {
         areas: DEFAULT_AREAS,
         theme: "light",
+        hvoPercentage:
+          typeof hvoPercentage === "number"
+            ? hvoPercentage
+            : DEFAULT_HVO_PERCENTAGE,
       };
 
       // Update user profile with role, name, and preferences
@@ -498,6 +594,43 @@ function getDaysBetween(start: string, end: string): string[] {
       setIsSigningUp(false);
     }
   };
+  const handleSaveHvoPercentage = async () => {
+    const validHvoPercentage =
+      hvoPercentage === "" || hvoPercentage < 0
+        ? DEFAULT_HVO_PERCENTAGE
+        : hvoPercentage;
+
+    setIsSavingHvoPercentage(true);
+    setHvoPercentageStatus(null);
+
+    try {
+      const response = await fetch("/api/hvo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hvoPercentage: validHvoPercentage }),
+      });
+      const json = await response.json();
+
+      if (!response.ok || !json.status) {
+        throw new Error(json.message || "Kunde inte spara HVO-tillägg.");
+      }
+
+      setHvoPercentage(validHvoPercentage);
+      setHvoPercentageStatus({
+        type: "success",
+        message: "HVO-tillägg sparat för alla användare.",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setHvoPercentageStatus({
+        type: "error",
+        message: `Kunde inte spara HVO-tillägg: ${message}`,
+      });
+    } finally {
+      setIsSavingHvoPercentage(false);
+    }
+  };
+
   const filteredUsers = trafficLeaders.filter((u) => {
     const query = normalize(userSearch);
 
@@ -574,6 +707,57 @@ function getDaysBetween(start: string, end: string): string[] {
               >
                 Läs in namn
               </button>
+            </div>
+          </div>
+
+          {/* HVO-TILLÄGG */}
+          <div className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md">
+            <h3 className="font-bold text-lg mb-4 border-b-2 border-green-500 pb-2">
+              HVO-tillägg
+            </h3>
+
+            <div className="rounded-lg bg-[var(--secondary-element)] p-4 space-y-4">
+              <div>
+                <label
+                  htmlFor="hvoPercentage"
+                  className="block text-sm font-medium mb-2"
+                >
+                  Procent (%) som adderas på kundnettot för HVO-kunder
+                </label>
+                <input
+                  id="hvoPercentage"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={hvoPercentage}
+                  disabled={isLoadingHvoPercentage || isSavingHvoPercentage}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setHvoPercentage(value === "" ? "" : Number(value));
+                    setHvoPercentageStatus(null);
+                  }}
+                  className="w-full p-3 border-2 border-gray-300 rounded bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSaveHvoPercentage}
+                  disabled={isLoadingHvoPercentage || isSavingHvoPercentage}
+                  className="px-4 py-2 bg-[#446E30] hover:bg-[#365926] text-[var(--text-primary)] font-semibold rounded shadow transition-colors duration-300 disabled:opacity-50"
+                >
+                  {isSavingHvoPercentage ? "Sparar..." : "Spara HVO-tillägg"}
+                </button>
+
+                {hvoPercentageStatus && (
+                  <span
+                    className={`text-sm font-medium ${hvoPercentageStatus.type === "success" ? "text-green-700" : "text-red-700"}`}
+                  >
+                    {hvoPercentageStatus.message}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -806,16 +990,27 @@ function getDaysBetween(start: string, end: string): string[] {
             <div className="space-y-4">
               <p className="text-sm text-[var(--text-secondary)]">
                 Välj en .csv-fil med historiska kusk-rader. Importen kör en full
-                kontroll, och eventuella fel visas i rutan nedan.
-                Kom ihåg att spara filen med UTF-8 formattering!
+                kontroll, och eventuella fel visas i rutan nedan. Kom ihåg att
+                spara filen med UTF-8 formattering!
               </p>
               <p className="text-sm text-[var(--text-secondary)]">
                 <span>
-                  Senaste importen skedde <b>{lastImport ? new Date(lastImport).toLocaleString("sv-SE") : "Hämtar data..."}</b>
+                  Senaste importen skedde{" "}
+                  <b>
+                    {lastImport
+                      ? new Date(lastImport).toLocaleString("sv-SE")
+                      : "Hämtar data..."}
+                  </b>
                 </span>
-                <br/>
+                <br />
                 <span>
-                  och täcker sändelser med avräkningsdatum fram till <b>{lastUploadDate ? new Date(lastUploadDate).toLocaleString("sv-SE") : "Hämtar data..."}</b>.
+                  och täcker sändelser med avräkningsdatum fram till{" "}
+                  <b>
+                    {lastUploadDate
+                      ? new Date(lastUploadDate).toLocaleString("sv-SE")
+                      : "Hämtar data..."}
+                  </b>
+                  .
                 </span>
               </p>
 
@@ -1136,28 +1331,39 @@ function getDaysBetween(start: string, end: string): string[] {
             <p className="mb-1">
               KUSK-data i databasen täcker avräkningsdatumen{" "}
               <b>
-                {oldestUploadDate ? new Date(oldestUploadDate).toLocaleDateString("sv-SE") : "Hämtar data..."} </b>till{" "}
+                {oldestUploadDate
+                  ? new Date(oldestUploadDate).toLocaleDateString("sv-SE")
+                  : "Hämtar data..."}{" "}
+              </b>
+              till{" "}
               <b>
-                {lastUploadDate ? new Date(lastUploadDate).toLocaleDateString("sv-SE") : "Hämtar data..."}
+                {lastUploadDate
+                  ? new Date(lastUploadDate).toLocaleDateString("sv-SE")
+                  : "Hämtar data..."}
               </b>
             </p>
 
             <p className="mb-1">
               Namnöversättning har redan gjorts på datumen{" "}
               <b>
-                {oldestTranslationDate ? new Date(oldestTranslationDate).toLocaleDateString("sv-SE") : "Hämtar data..."} </b>till{" "}
+                {oldestTranslationDate
+                  ? new Date(oldestTranslationDate).toLocaleDateString("sv-SE")
+                  : "Hämtar data..."}{" "}
+              </b>
+              till{" "}
               <b>
-                {newestTranslationDate ? new Date(newestTranslationDate).toLocaleDateString("sv-SE") : "Hämtar data..."}
+                {newestTranslationDate
+                  ? new Date(newestTranslationDate).toLocaleDateString("sv-SE")
+                  : "Hämtar data..."}
               </b>
             </p>
 
             <p className="mb-2">
-              Det finns totalt <b>{totalNameTranslations}</b> översättningar mellan iLog och KUSK namn
+              Det finns totalt <b>{totalNameTranslations}</b> översättningar
+              mellan iLog och KUSK namn
             </p>
 
-            <p>
-              Ange datum som namnöversättningen ska ske mellan
-            </p>
+            <p>Ange datum som namnöversättningen ska ske mellan</p>
 
             <div className="grid grid-cols-2 gap-3 mb-2">
               <div className="space-y-1">
@@ -1197,7 +1403,9 @@ function getDaysBetween(start: string, end: string): string[] {
 
             <div className="mt-4">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-m text-[var(--text-secondary)]">Logg</span>
+                <span className="text-m text-[var(--text-secondary)]">
+                  Logg
+                </span>
                 <div className="flex gap-2">
                   {loadingTranslation && (
                     <button
@@ -1216,14 +1424,18 @@ function getDaysBetween(start: string, end: string): string[] {
                 </div>
               </div>
               <div className="w-full h-60 overflow-y-auto rounded-lg bg-gray-900 text-green-400 text-sm font-mono p-3 flex flex-col gap-1">
-                {logs.length === 0 
-                  ? <span className="text-gray-500">Väntar...</span>
-                  : logs.map((log, i) => (
-                    <span key={i} className={`whitespace-pre ${colorClass[log.color]}`}>
+                {logs.length === 0 ? (
+                  <span className="text-gray-500">Väntar...</span>
+                ) : (
+                  logs.map((log, i) => (
+                    <span
+                      key={i}
+                      className={`whitespace-pre ${colorClass[log.color]}`}
+                    >
                       {log.message}
                     </span>
                   ))
-                }
+                )}
                 <div ref={logBottomRef} />
               </div>
             </div>

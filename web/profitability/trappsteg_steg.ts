@@ -20,7 +20,6 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-
     // Fråga supabase om (kundnamn, viktklass, avsändningstaxepunkt, mottagningstaxepunkt) finns.
     // Om det finns returneras alla dessa raders kundnettofrakt och vikt
     // Gör först med vanlig vikt
@@ -100,7 +99,6 @@ export async function try_steg_2(input: ProfitabilityInput, weight_plus_one: num
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-
     const supabase = await getSupabaseServerClient();
 
     // Kolla om supabase har match på kundnamn, km och viktklass
@@ -161,7 +159,6 @@ export async function try_steg_3(input: ProfitabilityInput, weight_plus_one: num
     const kundnamn = normalizeText(input.kundnamn);
     const [sender_taxep, receiver_taxep] = input.taxPointRelation?.trim().split("-").map(Number) || [];
     const weight = Number(input.chargeable_weight);
-
     // Kolla om supabase har match på bara kundnamn
     const supabase = await getSupabaseServerClient();
     const [{ data: data_orginal, error: error_orginal }, { data: data_plus_ett, error: error_plus_ett }] = 

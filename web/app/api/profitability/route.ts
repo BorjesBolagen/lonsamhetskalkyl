@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { routeConsignment } from "@/profitability/service";
+import { SupabaseClient } from "@supabase/supabase-js";
+
+import { requireUser } from "@/lib/authHelpers";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { requireUser } from "@/lib/authHelpers";
-import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/supabaseServerSchema";
+import { routeConsignment } from "@/profitability/service";
+import type { ProfitabilityInput } from "@/profitability/types";
+
+function parseBooleanParam(value: string | null): boolean {
+  return value === "true" || value === "1";
+}
 
 function cleanTaxPoint(value: string | null | undefined): string {
   return (value ?? "").replace(/[^0-9]/g, "");
@@ -88,6 +94,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
 
+    const useEntireName = parseBooleanParam(searchParams.get("useEntireName"));
+
     const consignment = {
       consignmentId: Number(searchParams.get("consignmentId")) || 0,
       customerName: searchParams.get("customerName") || "",
@@ -155,16 +163,21 @@ export async function GET(req: NextRequest) {
     };
 
 
-    const input = {
+    const input: ProfitabilityInput = {
       kundnamn: enrichedConsignment.customerName,
       taxPointRelation: finalTaxPointRelation,
       chargeable_weight: enrichedConsignment.weight ?? 0,
+      useEntireName,
 
-      // Tilläggslogiken använder enskilda taxepunkter.
+      // Trappstegslogiken använder enskilda taxepunkter.
       senderTaxPoint,
       receiverTaxPoint,
 
-      // Fallback i addons_postal om taxepunkt inte hittas.
+      // Addon-logiken använder postnummer först.
+      pickupPostalCode: enrichedConsignment.pickupPostalCode || null,
+      destinationPostalCode: enrichedConsignment.destinationPostalCode || null,
+
+      // Addon-logiken använder postort som fallback.
       pickupCity: enrichedConsignment.pickupLocationCity || null,
       destinationCity: enrichedConsignment.destinationCity || null,
     };
