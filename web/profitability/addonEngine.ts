@@ -22,6 +22,25 @@ type UntypedSupabaseRpc = (
   args: Record<string, unknown>,
 ) => Promise<UntypedRpcResult>;
 
+type UntypedSelectResult = {
+  data: unknown;
+  error: UntypedRpcError | null;
+};
+
+type UntypedSupabaseFrom = (
+  tableName: string,
+) => {
+  select: (columns: string) => Promise<UntypedSelectResult>;
+};
+
+type AddonTidRow = {
+  name: string | null;
+  linjerel: string | null;
+  carriers_share: number | null;
+};
+
+const TIME_ADDON_AMOUNT = 828;
+
 function normalizeOptionalText(
   value: string | null | undefined,
 ): string | null {
@@ -33,17 +52,22 @@ function normalizeOptionalText(
   return normalized.length > 0 ? normalized : null;
 }
 
-function normalizePostalCode(
+function normalizeNameKey(
   value: string | null | undefined,
-): string | null {
-  const normalized = normalizeOptionalText(value);
+): string {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
 
-  if (!normalized) {
-    return null;
-  }
-
-  const digitsOnly = normalized.replace(/\D/g, "");
-  return digitsOnly.length > 0 ? digitsOnly : null;
+function normalizeLineRelationKey(
+  value: string | null | undefined,
+): string {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^0-9A-ZÅÄÖ]/g, "");
 }
 
 function toFiniteNumber(
@@ -56,14 +80,22 @@ function toFiniteNumber(
     : fallback;
 }
 
-function toNullableString(
+function isAddonTidRow(
   value: unknown,
-): string | null {
-  if (value === null || value === undefined) {
-    return null;
+): value is AddonTidRow {
+  if (
+    value === null
+    || typeof value !== "object"
+    || Array.isArray(value)
+  ) {
+    return false;
   }
 
-  return String(value);
+  return (
+    "name" in value
+    && "linjerel" in value
+    && "carriers_share" in value
+  );
 }
 
 function emptyLocationLookup(): AddonLocationLookup {
@@ -71,7 +103,6 @@ function emptyLocationLookup(): AddonLocationLookup {
     matchSource: "none",
     matchedRows: 0,
     matchedTaxPoint: null,
-    matchedPostalCode: null,
     matchedCity: null,
     localityClass: null,
     stor: null,
@@ -84,71 +115,33 @@ function emptyLocationLookup(): AddonLocationLookup {
   };
 }
 
-function normalizeAddon(
-  addon: CalculatedAddon,
-): CalculatedAddon {
-  const matchedPostalCode =
-    toNullableString(addon.matchedPostalCode)
-    ?? toNullableString(addon.matchedTaxPoint);
+/**
+ * Delar taxepunktsrelationen i avsändar- och mottagartaxepunkt.
+ * Exempel: "55302-11120" => senderTaxPoint = "55302", receiverTaxPoint = "11120".
+ */
+function splitTaxPointRelation(
+  taxPointRelation: string | null | undefined,
+): {
+  senderTaxPoint: string | null;
+  receiverTaxPoint: string | null;
+} {
+  const relation = normalizeOptionalText(taxPointRelation);
 
-  return {
-    ...addon,
-
-    amount:
-      toFiniteNumber(addon.amount),
-
-    class:
-      addon.class === null
-        ? null
-        : toFiniteNumber(addon.class),
-
-    matchedPostalCode,
-
-    // Bakåtkompatibilitet. Fältet heter fortfarande matchedTaxPoint i delar av UI:t,
-    // men värdet är nu postnummer från addons_postal.
-    matchedTaxPoint:
-      toNullableString(addon.matchedTaxPoint)
-      ?? matchedPostalCode,
-  };
-}
-
-function normalizeLookup(
-  lookup: AddonLocationLookup | null | undefined,
-): AddonLocationLookup {
-  if (!lookup) {
-    return emptyLocationLookup();
+  if (!relation) {
+    return {
+      senderTaxPoint: null,
+      receiverTaxPoint: null,
+    };
   }
 
-  const matchedPostalCode =
-    toNullableString(lookup.matchedPostalCode)
-    ?? toNullableString(lookup.matchedTaxPoint);
+  const parts = relation
+    .split(/[\-–—]/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
 
   return {
-    ...lookup,
-
-    matchedRows:
-      toFiniteNumber(lookup.matchedRows),
-
-    matchedPostalCode,
-
-    // Bakåtkompatibilitet. Värdet är postnummer.
-    matchedTaxPoint:
-      toNullableString(lookup.matchedTaxPoint)
-      ?? matchedPostalCode,
-
-    matchedCity:
-      toNullableString(lookup.matchedCity),
-
-    localityClass:
-      lookup.localityClass === null
-        ? null
-        : toFiniteNumber(lookup.localityClass),
-
-    ambiguous: {
-      locality: Boolean(lookup.ambiguous?.locality),
-      metropolitan: Boolean(lookup.ambiguous?.metropolitan),
-      balance: Boolean(lookup.ambiguous?.balance),
-    },
+    senderTaxPoint: parts[0] ?? null,
+    receiverTaxPoint: parts[1] ?? null,
   };
 }
 
@@ -168,20 +161,98 @@ function normalizeResult(
       toFiniteNumber(value.addonTotal),
 
     addons: Array.isArray(value.addons)
-      ? value.addons.map(normalizeAddon)
+      ? value.addons.map((addon) => ({
+          ...addon,
+
+          amount:
+            toFiniteNumber(addon.amount),
+
+          class:
+            addon.class === null
+              ? null
+              : toFiniteNumber(addon.class),
+
+          matchedTaxPoint:
+            addon.matchedTaxPoint === null
+              ? null
+              : String(addon.matchedTaxPoint),
+        }))
       : [],
 
     lookup: {
       sender:
-        normalizeLookup(value.lookup?.sender),
+        value.lookup?.sender
+        ?? emptyLocationLookup(),
 
       receiver:
-        normalizeLookup(value.lookup?.receiver),
+        value.lookup?.receiver
+        ?? emptyLocationLookup(),
     },
 
     warnings: Array.isArray(value.warnings)
       ? value.warnings
       : [],
+  };
+}
+
+async function resolveTimeAddon(
+  supabase: unknown,
+  customerName: string | null,
+  lineRelation: string | null,
+): Promise<CalculatedAddon | null> {
+  const normalizedCustomerName = normalizeNameKey(customerName);
+  const normalizedLineRelation = normalizeLineRelationKey(lineRelation);
+
+  if (!normalizedCustomerName || !normalizedLineRelation) {
+    return null;
+  }
+
+  const from = (
+    supabase as { from: UntypedSupabaseFrom }
+  ).from.bind(supabase);
+
+  const { data, error } = await from("addon_tid")
+    .select("name, linjerel, carriers_share");
+
+  if (error) {
+    throw new Error(
+      `Tidstilläggen kunde inte hämtas: ${error.message}`,
+    );
+  }
+
+  const rows = Array.isArray(data)
+    ? data.filter(isAddonTidRow)
+    : [];
+
+  const match = rows.find((row) => (
+    normalizeNameKey(row.name) === normalizedCustomerName
+    && normalizeLineRelationKey(row.linjerel) === normalizedLineRelation
+  ));
+
+  if (!match) {
+    return null;
+  }
+
+  const configuredAmount = toFiniteNumber(
+    match.carriers_share,
+    TIME_ADDON_AMOUNT,
+  );
+
+  const amount = configuredAmount > 0
+    ? configuredAmount
+    : TIME_ADDON_AMOUNT;
+
+  return {
+    id: -10_000,
+    type: "tidtillagg",
+    direction: "route",
+    name: "Tidstillägg",
+    amount,
+    class: null,
+    region: null,
+    lookupSource: "name_linjerel",
+    matchedTaxPoint: null,
+    matchedCity: null,
   };
 }
 
@@ -192,13 +263,9 @@ function normalizeResult(
  * - orttillägg till mottagaren
  * - storstadstillägg till mottagaren
  * - balanstillägg till mottagaren
- * - TID-tillägg via kundnamn och linjerelation
+ * - tidstillägg utifrån kundnamn + linjerelation i addon_tid
  *
- * Postnummer används först. Postort används som fallback i Supabase om
- * postnummer saknas eller inte ger träff.
- *
- * RPC-parametrarna heter fortfarande p_*_taxepunkt för bakåtkompatibilitet,
- * men värdet som skickas är postnummer från iLog.
+ * Taxepunkt används först. Postort används om taxepunkten inte hittas.
  */
 export async function calculateApplicableAddons(
   input: ProfitabilityInput,
@@ -212,17 +279,28 @@ export async function calculateApplicableAddons(
     );
   }
 
-  const senderPostalCode =
-    normalizePostalCode(input.pickupPostalCode);
+  const relationParts =
+    splitTaxPointRelation(input.taxPointRelation);
 
-  const receiverPostalCode =
-    normalizePostalCode(input.destinationPostalCode);
+  const senderTaxPoint =
+    normalizeOptionalText(input.senderTaxPoint)
+    ?? relationParts.senderTaxPoint;
+
+  const receiverTaxPoint =
+    normalizeOptionalText(input.receiverTaxPoint)
+    ?? relationParts.receiverTaxPoint;
+
+  const customerName = normalizeOptionalText(
+    input.kundnamn,
+  );
+
+  const lineRelation = normalizeOptionalText(
+    input.linjerel,
+  );
 
   const supabase =
     await getSupabaseServerClient();
 
-  // De genererade Supabase-typerna känner inte till nya SQL-funktioner
-  // förrän databastyperna har regenererats. Därför görs just detta RPC-anrop otypat.
   const rpc =
     supabase.rpc.bind(
       supabase,
@@ -234,9 +312,8 @@ export async function calculateApplicableAddons(
   } = await rpc(
     "calculate_applicable_addons",
     {
-      // Bakåtkompatibla parameternamn. Värdet är postnummer, inte taxepunkt.
       p_sender_taxepunkt:
-        senderPostalCode,
+        senderTaxPoint,
 
       p_sender_postort:
         normalizeOptionalText(
@@ -244,7 +321,7 @@ export async function calculateApplicableAddons(
         ),
 
       p_receiver_taxepunkt:
-        receiverPostalCode,
+        receiverTaxPoint,
 
       p_receiver_postort:
         normalizeOptionalText(
@@ -255,14 +332,10 @@ export async function calculateApplicableAddons(
         weight,
 
       p_customer_name:
-        normalizeOptionalText(
-          input.kundnamn,
-        ),
+        customerName,
 
       p_linjerel:
-        normalizeOptionalText(
-          input.linjerel,
-        ),
+        lineRelation,
     },
   );
 
@@ -282,7 +355,53 @@ export async function calculateApplicableAddons(
     );
   }
 
-  return normalizeResult(
+  const normalizedResult = normalizeResult(
     data as unknown as AddonCalculationResult,
   );
+
+  const alreadyHasTimeAddon = normalizedResult.addons.some(
+    (addon) => addon.type === "tidtillagg",
+  );
+
+  if (alreadyHasTimeAddon) {
+    return normalizedResult;
+  }
+
+  let timeAddon: CalculatedAddon | null = null;
+
+  try {
+    timeAddon = await resolveTimeAddon(
+      supabase,
+      customerName,
+      lineRelation,
+    );
+  } catch (error) {
+    return {
+      ...normalizedResult,
+      warnings: [
+        ...normalizedResult.warnings,
+        {
+          code: "TIME_ADDON_LOOKUP_FAILED",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Tidstillägget kunde inte beräknas.",
+        },
+      ],
+    };
+  }
+
+  if (!timeAddon) {
+    return normalizedResult;
+  }
+
+  return {
+    ...normalizedResult,
+    addonTotal:
+      normalizedResult.addonTotal + timeAddon.amount,
+    addons: [
+      ...normalizedResult.addons,
+      timeAddon,
+    ],
+  };
 }

@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SupabaseClient } from "@supabase/supabase-js";
-
-import { requireUser } from "@/lib/authHelpers";
+import { routeConsignment } from "@/profitability/service";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { Database } from "@/lib/supabaseServerSchema";
-import { routeConsignment } from "@/profitability/service";
 import type { ProfitabilityInput } from "@/profitability/types";
 
 function parseBooleanParam(value: string | null): boolean {
   return value === "true" || value === "1";
 }
+import { requireUser } from "@/lib/authHelpers";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { Database } from "@/lib/supabaseServerSchema";
 
 function cleanTaxPoint(value: string | null | undefined): string {
   return (value ?? "").replace(/[^0-9]/g, "");
@@ -117,6 +116,12 @@ export async function GET(req: NextRequest) {
       paketburar: Number(searchParams.get("paketburar")) || 0,
     } as ConsignmentListItem;
 
+    const lineRelation =
+      searchParams.get("linjerel")
+      || searchParams.get("lineRelation")
+      || consignment.zoneName
+      || null;
+
     const supabase = await getSupabaseServerClient();
 
     const [destinationTaxPoint, resolvedSenderTaxPoint] = await resolveTaxPoints(
@@ -169,17 +174,16 @@ export async function GET(req: NextRequest) {
       chargeable_weight: enrichedConsignment.weight ?? 0,
       useEntireName,
 
-      // Trappstegslogiken använder enskilda taxepunkter.
+      // Tilläggslogiken använder enskilda taxepunkter.
       senderTaxPoint,
       receiverTaxPoint,
 
-      // Addon-logiken använder postnummer först.
-      pickupPostalCode: enrichedConsignment.pickupPostalCode || null,
-      destinationPostalCode: enrichedConsignment.destinationPostalCode || null,
-
-      // Addon-logiken använder postort som fallback.
+      // Fallback i addons_postal om taxepunkt inte hittas.
       pickupCity: enrichedConsignment.pickupLocationCity || null,
       destinationCity: enrichedConsignment.destinationCity || null,
+
+      // Används av tidstillägg mot addon_tid.
+      linjerel: lineRelation,
     };
 
     const result = await routeConsignment(

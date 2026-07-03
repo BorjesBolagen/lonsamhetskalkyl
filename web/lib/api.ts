@@ -270,11 +270,6 @@ export type ProfitabilityValue = {
   addon_total?: number;
   addons?: ProfitabilityAddon[];
 
-  addon_lookup?: {
-    sender: ProfitabilityAddonLocationLookup;
-    receiver: ProfitabilityAddonLocationLookup;
-  };
-
   addon_warnings?: Array<{
     code: string;
     message: string;
@@ -316,26 +311,19 @@ export const getNameTranslations = async (name: string): Promise<BasicResponse<N
 
 	return (await response.json()) as BasicResponse<NameTranslationResponse>;
 }
-export type ProfitabilityAddonType =
-  | "orttillagg"
-  | "storstadstillagg"
-  | "balanstillagg"
-  | "tidtillagg";
-
-export type ProfitabilityAddonLookupSource =
-  | "postnummer"
-  | "taxepunkt"
-  | "postort"
-  | "name_linjerel"
-  | "none";
-
 export type ProfitabilityAddon = {
   id: number;
-  type: ProfitabilityAddonType;
+
+  type:
+    | "orttillagg"
+    | "storstadstillagg"
+    | "balanstillagg"
+    | "tidtillagg";
 
   direction:
     | "from"
-    | "to";
+    | "to"
+    | "route";
 
   name: string;
   amount: number;
@@ -346,31 +334,14 @@ export type ProfitabilityAddon = {
     | "goteborg"
     | null;
 
-  lookupSource: ProfitabilityAddonLookupSource;
+  lookupSource:
+    | "taxepunkt"
+    | "postort"
+    | "name_linjerel"
+    | "none";
 
-  // Bakåtkompatibelt namn. Värdet kan numera vara postnummer.
   matchedTaxPoint: string | null;
-
-  // Nytt tydligare namn för addons_postal.postnummer.
-  matchedPostalCode?: string | null;
-
   matchedCity: string | null;
-};
-
-export type ProfitabilityAddonLocationLookup = {
-  matchSource: ProfitabilityAddonLookupSource;
-  matchedRows: number;
-  matchedTaxPoint: string | null;
-  matchedPostalCode?: string | null;
-  matchedCity: string | null;
-  localityClass: number | null;
-  stor: "s" | "g" | null;
-  hasBalanceAddon: boolean;
-  ambiguous: {
-    locality: boolean;
-    metropolitan: boolean;
-    balance: boolean;
-  };
 };
 
 
@@ -378,6 +349,21 @@ export const calculateProfitability = async (
   consignment: ConsignmentListItem,
   useEntireName = false,
 ): Promise<ProfitabilityResponse> => {
+
+    const consignmentWithLineRelation = consignment as ConsignmentListItem & {
+        linjerel?: string | null;
+        linjeRel?: string | null;
+        lineRelation?: string | null;
+        line_relation?: string | null;
+    };
+
+    const lineRelation =
+        consignmentWithLineRelation.linjerel
+        || consignmentWithLineRelation.linjeRel
+        || consignmentWithLineRelation.lineRelation
+        || consignmentWithLineRelation.line_relation
+        || consignment.zoneName
+        || "";
 
     const params = new URLSearchParams({
         consignmentId: String(consignment.consignmentId || 0),
@@ -389,6 +375,7 @@ export const calculateProfitability = async (
         destinationLocationName: consignment.destinationLocationName || "",
         weight: String(consignment.weight || 0),
         zoneName: consignment.zoneName || "",
+        linjerel: lineRelation,
         consignmentProperties: consignment.consignmentProperties || "",
         pickupLocationCity: consignment.pickupLocationCity || "",
         taxPointRelation: consignment.taxPointRelation || "",
@@ -638,4 +625,3 @@ export const getAmountOfPages = async (pageSize: number): Promise<BasicResponse<
 
 	return (await response.json()) as BasicResponse<number>;
 }
-

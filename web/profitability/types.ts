@@ -14,7 +14,7 @@ export type MedelseRow = {
   kndnto_medelse: number;
 };
 
-export type AddonDirection = "from" | "to";
+export type AddonDirection = "from" | "to" | "route";
 
 export type AddonType =
   | "orttillagg"
@@ -23,7 +23,6 @@ export type AddonType =
   | "tidtillagg";
 
 export type AddonLookupSource =
-  | "postnummer"
   | "taxepunkt"
   | "postort"
   | "name_linjerel"
@@ -38,13 +37,7 @@ export type CalculatedAddon = {
   class: number | null;
   region: "stockholm" | "goteborg" | null;
   lookupSource: AddonLookupSource;
-
-  // Bakåtkompatibelt namn. Värdet kan numera vara postnummer.
   matchedTaxPoint: string | null;
-
-  // Nytt tydligare namn för addons_postal.postnummer.
-  matchedPostalCode?: string | null;
-
   matchedCity: string | null;
 };
 
@@ -56,13 +49,7 @@ export type AddonWarning = {
 export type AddonLocationLookup = {
   matchSource: AddonLookupSource;
   matchedRows: number;
-
-  // Bakåtkompatibelt namn. Värdet kan numera vara postnummer.
   matchedTaxPoint: string | null;
-
-  // Nytt tydligare namn för addons_postal.postnummer.
-  matchedPostalCode?: string | null;
-
   matchedCity: string | null;
   localityClass: number | null;
   stor: "s" | "g" | null;
@@ -94,20 +81,16 @@ export type ProfitabilityInput = {
   chargeable_weight: number;
   useEntireName?: boolean;
 
-  // Taxepunkter används fortfarande av trappstegsmodellen.
+  // Taxepunkt används först för tillägg.
+  // Postort används som fallback om taxepunkten saknas eller inte hittas i addons_postal.
   senderTaxPoint?: string | null;
   receiverTaxPoint?: string | null;
-
-  // Addon-logiken använder postnummer först.
-  pickupPostalCode?: string | null;
-  destinationPostalCode?: string | null;
-
-  // Addon-logiken använder postort som fallback när postnummer saknas/inte matchar.
   pickupCity?: string | null;
   destinationCity?: string | null;
 
-  // Används av TID-tillägg.
   linjerel?: string | null;
+  pickupPostalCode?: string | null;
+  destinationPostalCode?: string | null;
 };
 
 export type ProfitabilityResult = {
@@ -121,7 +104,6 @@ export type ProfitabilityResult = {
 
   addon_total?: number;
   addons?: CalculatedAddon[];
-  addon_lookup?: AddonCalculationResult["lookup"];
   addon_warnings?: AddonWarning[];
 
   detail?: string;

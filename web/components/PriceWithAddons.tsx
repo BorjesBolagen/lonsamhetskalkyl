@@ -109,7 +109,7 @@ function getAddonLabel(
   }
 
   if (addon.type === "tidtillagg") {
-    return "TID-tillägg";
+    return "Tidstillägg";
   }
 
   return addon.name;
