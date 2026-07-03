@@ -232,15 +232,7 @@ export const getIlogConsignments = async (
 		throw new Error("Request failed: " + (await response.text()));
 	}
 
-	const json = (await response.json()) as IlogResponse<ConsignmentListItem[]>;
-
-	// Filter för "Ej i lastlista" (Status 1)
-    if (json.data && Array.isArray(json.data)) {
-        // Vi kastar om (c as any) för säkerhets skull, om 'ownStatus' inte lagts in i typerna än
-        json.data = json.data.filter((c: any) => c.ownStatus !== "Status 1");
-    }
-
-    return json;
+	return (await response.json()) as IlogResponse<ConsignmentListItem[]>;
 };
 
 /**
@@ -327,7 +319,8 @@ export type ProfitabilityAddon = {
     | "orttillagg"
     | "storstadstillagg"
     | "balanstillagg"
-    | "tidtillagg";
+    | "tidtillagg"
+    | "hvotillagg";
 
   direction:
     | "from"
@@ -346,6 +339,7 @@ export type ProfitabilityAddon = {
   lookupSource:
     | "taxepunkt"
     | "postort"
+    | "name"
     | "name_linjerel"
     | "none";
 

@@ -20,11 +20,13 @@ export type AddonType =
   | "orttillagg"
   | "storstadstillagg"
   | "balanstillagg"
-  | "tidtillagg";
+  | "tidtillagg"
+  | "hvotillagg";
 
 export type AddonLookupSource =
   | "taxepunkt"
   | "postort"
+  | "name"
   | "name_linjerel"
   | "none";
 

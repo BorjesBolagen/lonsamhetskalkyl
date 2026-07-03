@@ -1,10 +1,10 @@
 import "server-only";
 
-import type { ProfitabilityInput, ProfitabilityResult } from "./types";
+import type { AddonWarning, CalculatedAddon, ProfitabilityInput, ProfitabilityResult } from "./types";
 import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
 import { calculateApplicableAddons } from "./addonEngine";
 import { roundUpWeight } from "@/lib/backend/utils";
-import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
+import { DEFAULT_HVO_PERCENTAGE } from "@/lib/backend/constants";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { try_sune_lookup } from "./trappsteg_steg";
@@ -260,6 +260,134 @@ function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+
+type HvoCustomerRow = {
+  name: string | null;
+};
+
+type UserHvoSettingsRow = {
+  filters: unknown;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+  );
+}
+
+function normalizeCustomerKey(
+  value: string | null | undefined,
+): string {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
+
+function getHvoPercentageFromFilters(filters: unknown): number | null {
+  if (!isRecord(filters) || !("hvoPercentage" in filters)) {
+    return null;
+  }
+
+  const numericValue = Number(filters.hvoPercentage);
+
+  return Number.isFinite(numericValue) && numericValue >= 0
+    ? numericValue
+    : null;
+}
+
+function formatPercentage(value: number): string {
+  return new Intl.NumberFormat(
+    "sv-SE",
+    {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    },
+  ).format(value);
+}
+
+async function getConfiguredHvoPercentage(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+): Promise<number> {
+  const { data: authData } = await supabase.auth.getUser();
+  const userId = authData.user?.id;
+
+  if (!userId) {
+    return DEFAULT_HVO_PERCENTAGE;
+  }
+
+  const { data, error } = await supabase
+    .from("User")
+    .select("filters")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`HVO-inställningen kunde inte hämtas: ${error.message}`);
+  }
+
+  const valueFromFilters = getHvoPercentageFromFilters(
+    (data as UserHvoSettingsRow | null)?.filters,
+  );
+
+  return valueFromFilters ?? DEFAULT_HVO_PERCENTAGE;
+}
+
+async function resolveHvoAddon(
+  input: ProfitabilityInput,
+  baseRevenue: number,
+): Promise<CalculatedAddon | null> {
+  const customerKey = normalizeCustomerKey(input.kundnamn);
+
+  if (!customerKey || baseRevenue <= 0) {
+    return null;
+  }
+
+  const supabase = await getSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("addon_hvo")
+    .select("name");
+
+  if (error) {
+    throw new Error(`HVO-kunder kunde inte hämtas: ${error.message}`);
+  }
+
+  const rows = Array.isArray(data)
+    ? (data as HvoCustomerRow[])
+    : [];
+
+  const isHvoCustomer = rows.some(
+    (row) => normalizeCustomerKey(row.name) === customerKey,
+  );
+
+  if (!isHvoCustomer) {
+    return null;
+  }
+
+  const hvoPercentage = await getConfiguredHvoPercentage(supabase);
+  const amount = roundMoney(baseRevenue * (hvoPercentage / 100));
+
+  if (amount <= 0) {
+    return null;
+  }
+
+  return {
+    id: -20_000,
+    type: "hvotillagg",
+    direction: "route",
+    name: `HVO-tillägg ${formatPercentage(hvoPercentage)} %`,
+    amount,
+    class: null,
+    region: null,
+    lookupSource: "name",
+    matchedTaxPoint: null,
+    matchedCity: null,
+  };
+}
+
 /**
  * Lägger tillägg på ett färdigt grundpris från trappstegsmodellen.
  *
@@ -271,42 +399,67 @@ async function addAddonsToProfitabilityResult(
   baseResult: ProfitabilityResult,
 ): Promise<ProfitabilityResult> {
   const baseRevenue = roundMoney(baseResult.estimated_revenue);
+  const addons: CalculatedAddon[] = [];
+  const addonWarnings: AddonWarning[] = [];
 
   try {
     const addonResult = await calculateApplicableAddons(input);
-    const addonTotal = roundMoney(addonResult.addonTotal);
-
-    return {
-      ...baseResult,
-      base_revenue: baseRevenue,
-      addon_total: addonTotal,
-      estimated_revenue: roundMoney(baseRevenue + addonTotal),
-      addons: addonResult.addons,
-      addon_warnings: addonResult.warnings,
-    };
+    addons.push(...addonResult.addons);
+    addonWarnings.push(...addonResult.warnings);
   } catch (error) {
     console.error(
-      "Tilläggen kunde inte beräknas. Grundpriset används:",
+      "Tilläggen kunde inte beräknas. Grundpriset används för övriga tillägg:",
       error instanceof Error ? error.message : error,
     );
 
-    return {
-      ...baseResult,
-      base_revenue: baseRevenue,
-      addon_total: 0,
-      estimated_revenue: baseRevenue,
-      addons: [],
-      addon_warnings: [
-        {
-          code: "ADDON_CALCULATION_FAILED",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Tilläggen kunde inte beräknas.",
-        },
-      ],
-    };
+    addonWarnings.push({
+      code: "ADDON_CALCULATION_FAILED",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Tilläggen kunde inte beräknas.",
+    });
   }
+
+  try {
+    const hasHvoAddon = addons.some((addon) => addon.type === "hvotillagg");
+    const hvoAddon = hasHvoAddon
+      ? null
+      : await resolveHvoAddon(input, baseRevenue);
+
+    if (hvoAddon) {
+      addons.push(hvoAddon);
+    }
+  } catch (error) {
+    console.error(
+      "HVO-tillägget kunde inte beräknas:",
+      error instanceof Error ? error.message : error,
+    );
+
+    addonWarnings.push({
+      code: "HVO_ADDON_CALCULATION_FAILED",
+      message:
+        error instanceof Error
+          ? error.message
+          : "HVO-tillägget kunde inte beräknas.",
+    });
+  }
+
+  const addonTotal = roundMoney(
+    addons.reduce(
+      (sum, addon) => sum + addon.amount,
+      0,
+    ),
+  );
+
+  return {
+    ...baseResult,
+    base_revenue: baseRevenue,
+    addon_total: addonTotal,
+    estimated_revenue: roundMoney(baseRevenue + addonTotal),
+    addons,
+    addon_warnings: addonWarnings,
+  };
 }
 
 /**

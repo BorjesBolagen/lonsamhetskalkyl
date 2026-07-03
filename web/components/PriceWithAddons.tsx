@@ -112,6 +112,10 @@ function getAddonLabel(
     return "Tidstillägg";
   }
 
+  if (addon.type === "hvotillagg") {
+    return addon.name || "HVO-tillägg";
+  }
+
   return addon.name;
 }
 
