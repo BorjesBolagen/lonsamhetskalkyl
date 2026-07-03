@@ -4,9 +4,24 @@ import { Database } from "@/lib/supabaseServerSchema";
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from 'next/headers'
+import { AsyncLocalStorage } from "node:async_hooks";
 import { COOKIE_MAX_AGE } from "./constants";
 
+// Cron-jobb körs utan inloggad användare. Kod som körs inuti
+// runWithSupabaseAdminContext får service role-klienten från
+// getSupabaseServerClient, så att befintlig beräkningskod (trappsteg,
+// tillägg m.m.) fungerar oförändrad utan cookies/RLS-session.
+const supabaseAdminContext = new AsyncLocalStorage<boolean>();
+
+export function runWithSupabaseAdminContext<T>(fn: () => Promise<T>): Promise<T> {
+  return supabaseAdminContext.run(true, fn);
+}
+
 export async function getSupabaseServerClient() {
+  if (supabaseAdminContext.getStore()) {
+    return getSupabaseAdminClient();
+  }
+
   const cookieStore = await cookies()
   const rememberMe = cookieStore.get("sb-remember-me")?.value === "1";
 

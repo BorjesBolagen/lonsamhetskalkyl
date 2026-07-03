@@ -152,6 +152,45 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_equipage_forecast: {
+        Row: {
+          consignment_count: number
+          created_at: string
+          equipage_id: number
+          equipage_name: string
+          forecast_date: string
+          id: number
+          total_estimated_revenue: number
+          total_flm: number
+          total_weight_kg: number
+          updated_at: string
+        }
+        Insert: {
+          consignment_count?: number
+          created_at?: string
+          equipage_id: number
+          equipage_name: string
+          forecast_date: string
+          id?: number
+          total_estimated_revenue?: number
+          total_flm?: number
+          total_weight_kg?: number
+          updated_at?: string
+        }
+        Update: {
+          consignment_count?: number
+          created_at?: string
+          equipage_id?: number
+          equipage_name?: string
+          forecast_date?: string
+          id?: number
+          total_estimated_revenue?: number
+          total_flm?: number
+          total_weight_kg?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       distance_map: {
         Row: {
           distance: number
