@@ -116,6 +116,14 @@ function getAddonLabel(
     return addon.name || "HVO-tillägg";
   }
 
+  if (addon.type === "dmttillagg") {
+    return addon.name || "DMT-tillägg";
+  }
+
+  if (addon.type === "styckegodstillagg") {
+    return addon.name || "Styckegodstillägg";
+  }
+
   return addon.name;
 }
 

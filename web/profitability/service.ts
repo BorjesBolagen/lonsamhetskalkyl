@@ -137,7 +137,10 @@ export async function routeConsignment(
   };
 
   // Hjälpfunktion: Om ett specialflöde misslyckas, skicka till Trappstegsmodellen
-  const fallbackToTrappsteg = async (reason: string) => {
+  const fallbackToTrappsteg = async (
+    reason: string,
+    dmtMode: DmtMode = "distance",
+  ) => {
     console.warn(`${reason}-uppslag misslyckades, skickar till Fjärr (Trappstegsmodellen)...`);
     if (!input.taxPointRelation || input.taxPointRelation.trim() === "") {
       return { step_used: -1, estimated_revenue: 0, detail: `Fjärr: Saknar taxepunktsrelation (Fallback från ${reason})` };
@@ -145,7 +148,7 @@ export async function routeConsignment(
     if (!input.kundnamn || input.kundnamn.trim() === "") {
       return { step_used: -1, estimated_revenue: 0, detail: `Fjärr: Saknar kundnamn (Fallback från ${reason})` };
     }
-    return await calculateProfitability(inputWithLineRelation);
+    return await calculateProfitability(inputWithLineRelation, { dmtMode });
   };
 
   switch (flowType) {
@@ -166,11 +169,19 @@ export async function routeConsignment(
           const paketburPrice = await try_paketbur_lookup(consignment);
           
           if (paketburPrice !== null) {
-              return { 
-                  step_used: 0, 
-                  estimated_revenue: paketburPrice, 
-                  detail: "Paketbur: Enligt prislista" 
-              };
+              return await addAddonsToProfitabilityResult(
+                inputWithLineRelation,
+                { 
+                    step_used: 0, 
+                    estimated_revenue: paketburPrice, 
+                    detail: "Paketbur: Enligt prislista" 
+                },
+                {
+                  includeLocationAndCustomerAddons: false,
+                  includeHvoAddon: false,
+                  dmtMode: "fjarr_paket",
+                },
+              );
           }
           
           // Hittades inte, kör trappstegsmodellen
@@ -186,11 +197,29 @@ export async function routeConsignment(
           const styckeResult = await try_styckegods_lookup(consignment);
 
           if (styckeResult !== null) {
-              return {
-                  step_used: 0, 
-                  estimated_revenue: styckeResult.price,
-                  detail: styckeResult.method,
+              const styckegodsInput: ProfitabilityInput = {
+                ...inputWithLineRelation,
+                distanceKm:
+                  styckeResult.distanceKm
+                  ?? inputWithLineRelation.distanceKm
+                  ?? null,
               };
+
+              return await addAddonsToProfitabilityResult(
+                styckegodsInput,
+                {
+                    step_used: 0,
+                    base_revenue: styckeResult.basePrice,
+                    estimated_revenue: styckeResult.price,
+                    addons: styckeResult.addons,
+                    detail: styckeResult.method,
+                },
+                {
+                  includeLocationAndCustomerAddons: false,
+                  includeHvoAddon: false,
+                  dmtMode: "distance",
+                },
+              );
           }
 
           // Hittades inte, kör trappstegsmodellen
@@ -308,6 +337,361 @@ function formatPercentage(value: number): string {
   ).format(value);
 }
 
+
+type DmtMode = "distance" | "fjarr_paket" | "none";
+
+type AddonApplicationOptions = {
+  includeLocationAndCustomerAddons?: boolean;
+  includeHvoAddon?: boolean;
+  dmtMode?: DmtMode;
+};
+
+type CalculateProfitabilityOptions = {
+  dmtMode?: DmtMode;
+};
+
+type DmtRow = {
+  id?: number | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  rule_type: string | null;
+  rule_key: string | null;
+  km_from: number | string | null;
+  km_to: number | string | null;
+  percentage: number | string | null;
+};
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  const numericValue = Number(value);
+
+  return Number.isFinite(numericValue)
+    ? numericValue
+    : fallback;
+}
+
+function normalizeDateString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized)
+    ? normalized
+    : null;
+}
+
+function getTodayDateString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getDmtPeriodKey(row: DmtRow): string {
+  return `${row.valid_from ?? ""}|${row.valid_to ?? ""}`;
+}
+
+function selectApplicableDmtRows(rows: DmtRow[]): DmtRow[] {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const today = getTodayDateString();
+
+  const activeRows = rows.filter((row) => {
+    const validFrom = normalizeDateString(row.valid_from);
+    const validTo = normalizeDateString(row.valid_to);
+
+    return Boolean(
+      validFrom
+      && validTo
+      && validFrom <= today
+      && validTo >= today,
+    );
+  });
+
+  const candidates = activeRows.length > 0
+    ? activeRows
+    : rows;
+
+  const sortedRows = [...candidates].sort((a, b) => {
+    const aFrom = normalizeDateString(a.valid_from) ?? "";
+    const bFrom = normalizeDateString(b.valid_from) ?? "";
+
+    if (aFrom !== bFrom) {
+      return bFrom.localeCompare(aFrom);
+    }
+
+    const aTo = normalizeDateString(a.valid_to) ?? "";
+    const bTo = normalizeDateString(b.valid_to) ?? "";
+
+    return bTo.localeCompare(aTo);
+  });
+
+  const selectedPeriod = getDmtPeriodKey(sortedRows[0]);
+
+  return sortedRows.filter(
+    (row) => getDmtPeriodKey(row) === selectedPeriod,
+  );
+}
+
+function normalizeDmtRuleKey(value: string | null | undefined): string {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/Å/g, "A")
+    .replace(/Ä/g, "A")
+    .replace(/Ö/g, "O")
+    .replace(/[^0-9A-Z]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function parseTaxPoint(value: string | number | null | undefined): number | null {
+  const normalized = String(value ?? "").replace(/[^0-9]/g, "");
+
+  if (!normalized) {
+    return null;
+  }
+
+  const taxPoint = Number(normalized);
+
+  return Number.isFinite(taxPoint)
+    ? taxPoint
+    : null;
+}
+
+function getTaxPointsFromInput(input: ProfitabilityInput): {
+  senderTaxPoint: number | null;
+  receiverTaxPoint: number | null;
+} {
+  const directSenderTaxPoint = parseTaxPoint(input.senderTaxPoint);
+  const directReceiverTaxPoint = parseTaxPoint(input.receiverTaxPoint);
+
+  if (directSenderTaxPoint !== null && directReceiverTaxPoint !== null) {
+    return {
+      senderTaxPoint: directSenderTaxPoint,
+      receiverTaxPoint: directReceiverTaxPoint,
+    };
+  }
+
+  const parts = (input.taxPointRelation ?? "")
+    .split(/[\-–—]/)
+    .map((part) => parseTaxPoint(part));
+
+  return {
+    senderTaxPoint: directSenderTaxPoint ?? parts[0] ?? null,
+    receiverTaxPoint: directReceiverTaxPoint ?? parts[1] ?? null,
+  };
+}
+
+function getInputDistanceKm(input: ProfitabilityInput): number | null {
+  const distanceKm = toFiniteNumber(input.distanceKm, NaN);
+
+  return Number.isFinite(distanceKm) && distanceKm > 0
+    ? distanceKm
+    : null;
+}
+
+async function queryDistanceMapKm(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  sender: number,
+  receiver: number,
+): Promise<number | null> {
+  const { data, error } = await (supabase as any)
+    .from("distance_map" as any)
+    .select("distance")
+    .eq("sender", sender)
+    .eq("receiver", receiver)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Avstånd för DMT kunde inte hämtas: ${error.message}`);
+  }
+
+  const distanceKm = toFiniteNumber(data?.distance, NaN);
+
+  return Number.isFinite(distanceKm) && distanceKm > 0
+    ? distanceKm
+    : null;
+}
+
+async function resolveDistanceKm(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  input: ProfitabilityInput,
+): Promise<number | null> {
+  const directDistanceKm = getInputDistanceKm(input);
+
+  if (directDistanceKm !== null) {
+    return directDistanceKm;
+  }
+
+  const { senderTaxPoint, receiverTaxPoint } = getTaxPointsFromInput(input);
+
+  if (senderTaxPoint === null || receiverTaxPoint === null) {
+    return null;
+  }
+
+  const directDistance = await queryDistanceMapKm(
+    supabase,
+    senderTaxPoint,
+    receiverTaxPoint,
+  );
+
+  if (directDistance !== null) {
+    return directDistance;
+  }
+
+  // distance_map kan ligga speglad beroende på hur relationen importerats.
+  // Testa därför även omvänd taxepunktsrelation innan DMT uteblir.
+  return await queryDistanceMapKm(
+    supabase,
+    receiverTaxPoint,
+    senderTaxPoint,
+  );
+}
+
+function findDistanceDmtRow(rows: DmtRow[], distanceKm: number): DmtRow | null {
+  return rows.find((row) => {
+    if (normalizeDmtRuleKey(row.rule_type) !== "KM_INTERVAL") {
+      return false;
+    }
+
+    const kmFrom = toFiniteNumber(row.km_from, NaN);
+    const kmToRaw = row.km_to;
+    const kmTo = kmToRaw === null || kmToRaw === undefined
+      ? null
+      : toFiniteNumber(kmToRaw, NaN);
+
+    if (!Number.isFinite(kmFrom) || distanceKm < kmFrom) {
+      return false;
+    }
+
+    return kmTo === null || (Number.isFinite(kmTo) && distanceKm <= kmTo);
+  }) ?? null;
+}
+
+function findDmtRowByKeys(
+  rows: DmtRow[],
+  acceptedKeys: string[],
+): DmtRow | null {
+  const normalizedAcceptedKeys = acceptedKeys.map(normalizeDmtRuleKey);
+
+  return rows.find((row) => {
+    const ruleKey = normalizeDmtRuleKey(row.rule_key);
+    const ruleType = normalizeDmtRuleKey(row.rule_type);
+
+    return normalizedAcceptedKeys.includes(ruleKey)
+      || normalizedAcceptedKeys.includes(ruleType);
+  }) ?? null;
+}
+
+function findFjarrPaketDmtRow(rows: DmtRow[]): DmtRow | null {
+  return findDmtRowByKeys(
+    rows,
+    [
+      "FJARR_PAKET",
+      "PAKETBUR_FJARR",
+      "PAKETBUR/FJARR",
+      "PAKETBUR / FJARR",
+    ],
+  );
+}
+
+function buildDmtAddonName(
+  percentage: number,
+  mode: DmtMode,
+  distanceKm: number | null,
+): string {
+  const percentageText = formatPercentage(percentage);
+
+  if (mode === "fjarr_paket") {
+    return `DMT-tillägg Paketbur/Fjärr ${percentageText} %`;
+  }
+
+  if (distanceKm !== null) {
+    return `DMT-tillägg ${percentageText} % (${Math.round(distanceKm)} km)`;
+  }
+
+  return `DMT-tillägg ${percentageText} %`;
+}
+
+async function resolveDmtAddon(
+  input: ProfitabilityInput,
+  baseRevenue: number,
+  mode: DmtMode,
+): Promise<CalculatedAddon | null> {
+  if (mode === "none" || baseRevenue <= 0) {
+    return null;
+  }
+
+  const supabase = await getSupabaseServerClient();
+
+  const { data, error } = await (supabase as any)
+    .from("addon_dmt" as any)
+    .select("id, valid_from, valid_to, rule_type, rule_key, km_from, km_to, percentage")
+    .order("valid_from", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    throw new Error(`DMT-inställningen kunde inte hämtas: ${error.message}`);
+  }
+
+  const rows = Array.isArray(data)
+    ? (data as DmtRow[])
+    : [];
+
+  const applicableRows = selectApplicableDmtRows(rows);
+
+  if (applicableRows.length === 0) {
+    return null;
+  }
+
+  let matchedDistanceKm: number | null = null;
+
+  let matchedRow: DmtRow | null = null;
+
+  if (mode === "fjarr_paket") {
+    matchedRow = findFjarrPaketDmtRow(applicableRows);
+  }
+
+  const row = matchedRow ?? (mode === "distance"
+    ? await (async () => {
+        matchedDistanceKm = await resolveDistanceKm(supabase, input);
+
+        return matchedDistanceKm === null
+          ? null
+          : findDistanceDmtRow(applicableRows, matchedDistanceKm);
+      })()
+    : null);
+
+  if (!row) {
+    return null;
+  }
+
+  const percentage = toFiniteNumber(row.percentage, 0);
+
+  if (percentage <= 0) {
+    return null;
+  }
+
+  const amount = roundMoney(baseRevenue * (percentage / 100));
+
+  if (amount <= 0) {
+    return null;
+  }
+
+  return {
+    id: -30_000,
+    type: "dmttillagg",
+    direction: "route",
+    name: buildDmtAddonName(percentage, mode, matchedDistanceKm),
+    amount,
+    class: null,
+    region: null,
+    lookupSource: "dmt_rule",
+    matchedTaxPoint: null,
+    matchedCity: null,
+  };
+}
+
 async function getConfiguredHvoPercentage(
   supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
 ): Promise<number> {
@@ -389,60 +773,108 @@ async function resolveHvoAddon(
 }
 
 /**
- * Lägger tillägg på ett färdigt grundpris från trappstegsmodellen.
+ * Lägger tillägg på ett färdigt grundpris.
  *
- * Om tilläggsberäkningen misslyckas behålls grundpriset så att
+ * Om en tilläggsberäkning misslyckas behålls grundpriset så att
  * den befintliga lönsamhetsberäkningen fortfarande fungerar.
  */
 async function addAddonsToProfitabilityResult(
   input: ProfitabilityInput,
   baseResult: ProfitabilityResult,
+  options: AddonApplicationOptions = {},
 ): Promise<ProfitabilityResult> {
-  const baseRevenue = roundMoney(baseResult.estimated_revenue);
-  const addons: CalculatedAddon[] = [];
-  const addonWarnings: AddonWarning[] = [];
+  const baseRevenue = roundMoney(
+    baseResult.base_revenue ?? baseResult.estimated_revenue,
+  );
 
-  try {
-    const addonResult = await calculateApplicableAddons(input);
-    addons.push(...addonResult.addons);
-    addonWarnings.push(...addonResult.warnings);
-  } catch (error) {
-    console.error(
-      "Tilläggen kunde inte beräknas. Grundpriset används för övriga tillägg:",
-      error instanceof Error ? error.message : error,
-    );
+  const addons: CalculatedAddon[] = Array.isArray(baseResult.addons)
+    ? [...baseResult.addons]
+    : [];
 
-    addonWarnings.push({
-      code: "ADDON_CALCULATION_FAILED",
-      message:
-        error instanceof Error
-          ? error.message
-          : "Tilläggen kunde inte beräknas.",
-    });
+  const addonWarnings: AddonWarning[] = Array.isArray(baseResult.addon_warnings)
+    ? [...baseResult.addon_warnings]
+    : [];
+
+  const includeLocationAndCustomerAddons =
+    options.includeLocationAndCustomerAddons ?? true;
+
+  const includeHvoAddon =
+    options.includeHvoAddon ?? true;
+
+  const dmtMode =
+    options.dmtMode ?? "distance";
+
+  if (includeLocationAndCustomerAddons) {
+    try {
+      const addonResult = await calculateApplicableAddons(input);
+      addons.push(...addonResult.addons);
+      addonWarnings.push(...addonResult.warnings);
+    } catch (error) {
+      console.error(
+        "Tilläggen kunde inte beräknas. Grundpriset används för övriga tillägg:",
+        error instanceof Error ? error.message : error,
+      );
+
+      addonWarnings.push({
+        code: "ADDON_CALCULATION_FAILED",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Tilläggen kunde inte beräknas.",
+      });
+    }
   }
 
-  try {
-    const hasHvoAddon = addons.some((addon) => addon.type === "hvotillagg");
-    const hvoAddon = hasHvoAddon
-      ? null
-      : await resolveHvoAddon(input, baseRevenue);
+  if (includeHvoAddon) {
+    try {
+      const hasHvoAddon = addons.some((addon) => addon.type === "hvotillagg");
+      const hvoAddon = hasHvoAddon
+        ? null
+        : await resolveHvoAddon(input, baseRevenue);
 
-    if (hvoAddon) {
-      addons.push(hvoAddon);
+      if (hvoAddon) {
+        addons.push(hvoAddon);
+      }
+    } catch (error) {
+      console.error(
+        "HVO-tillägget kunde inte beräknas:",
+        error instanceof Error ? error.message : error,
+      );
+
+      addonWarnings.push({
+        code: "HVO_ADDON_CALCULATION_FAILED",
+        message:
+          error instanceof Error
+            ? error.message
+            : "HVO-tillägget kunde inte beräknas.",
+      });
     }
-  } catch (error) {
-    console.error(
-      "HVO-tillägget kunde inte beräknas:",
-      error instanceof Error ? error.message : error,
-    );
+  }
 
-    addonWarnings.push({
-      code: "HVO_ADDON_CALCULATION_FAILED",
-      message:
-        error instanceof Error
-          ? error.message
-          : "HVO-tillägget kunde inte beräknas.",
-    });
+  if (dmtMode !== "none") {
+    try {
+      const hasDmtAddon = addons.some((addon) => addon.type === "dmttillagg");
+      const dmtAddon = hasDmtAddon
+        ? null
+        : await resolveDmtAddon(input, baseRevenue, dmtMode);
+
+      if (dmtAddon) {
+        addons.push(dmtAddon);
+      }
+    } catch (error) {
+      console.error(
+        "DMT-tillägget kunde inte beräknas:",
+        error instanceof Error ? error.message : error,
+      );
+
+      addonWarnings.push({
+        code: "DMT_ADDON_CALCULATION_FAILED",
+        message:
+          error instanceof Error
+            ? error.message
+            : "DMT-tillägget kunde inte beräknas.",
+      });
+    }
   }
 
   const addonTotal = roundMoney(
@@ -474,11 +906,15 @@ async function addAddonsToProfitabilityResult(
  * }
  */
 export async function calculateProfitability(
-  input: ProfitabilityInput
+  input: ProfitabilityInput,
+  options: CalculateProfitabilityOptions = {},
 ): Promise<ProfitabilityResult> {
 
   valideraInput(input);
   const weight_plus_one = await roundUpWeight(input.chargeable_weight);
+  const addonOptions: AddonApplicationOptions = {
+    dmtMode: options.dmtMode ?? "distance",
+  };
 
   // Försök göra steg 1.
   try {
@@ -489,7 +925,7 @@ export async function calculateProfitability(
       return await addAddonsToProfitabilityResult(input, {
         step_used: 1,
         estimated_revenue: steg1Estimated
-      });
+      }, addonOptions);
     }
   } catch (error) {
     console.error("Fel i steg 1, fortsätter till steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
@@ -509,7 +945,7 @@ export async function calculateProfitability(
       return await addAddonsToProfitabilityResult(input, {
         step_used: 2,
         estimated_revenue: steg2Estimated
-      });
+      }, addonOptions);
     }
   } catch (error) {
     console.error("Fel i steg 2. Felmeddelande:", error instanceof Error ? error.message : error);
@@ -529,7 +965,7 @@ export async function calculateProfitability(
       return await addAddonsToProfitabilityResult(input, {
         step_used: 3,
         estimated_revenue: steg3Estimated
-      });
+      }, addonOptions);
     }
   } catch (error) {
     console.error("Fel i steg 3. Felmeddelande:", error instanceof Error ? error.message : error);
@@ -549,7 +985,7 @@ export async function calculateProfitability(
       return await addAddonsToProfitabilityResult(input, {
         step_used: 4,
         estimated_revenue: steg4Estimated
-      });
+      }, addonOptions);
     }
   } catch (error) {
     console.error("Fel i steg 4. Felmeddelande:", error instanceof Error ? error.message : error);
@@ -569,7 +1005,7 @@ export async function calculateProfitability(
       return await addAddonsToProfitabilityResult(input, {
         step_used: 5,
         estimated_revenue: steg5Estimated
-      });
+      }, addonOptions);
     }
   } catch (error) {
     console.error("Fel i steg 5. Felmeddelande:", error instanceof Error ? error.message : error);

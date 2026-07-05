@@ -320,7 +320,9 @@ export type ProfitabilityAddon = {
     | "storstadstillagg"
     | "balanstillagg"
     | "tidtillagg"
-    | "hvotillagg";
+    | "hvotillagg"
+    | "dmttillagg"
+    | "styckegodstillagg";
 
   direction:
     | "from"
@@ -341,6 +343,7 @@ export type ProfitabilityAddon = {
     | "postort"
     | "name"
     | "name_linjerel"
+    | "dmt_rule"
     | "none";
 
   matchedTaxPoint: string | null;

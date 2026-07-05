@@ -21,13 +21,16 @@ export type AddonType =
   | "storstadstillagg"
   | "balanstillagg"
   | "tidtillagg"
-  | "hvotillagg";
+  | "hvotillagg"
+  | "dmttillagg"
+  | "styckegodstillagg";
 
 export type AddonLookupSource =
   | "taxepunkt"
   | "postort"
   | "name"
   | "name_linjerel"
+  | "dmt_rule"
   | "none";
 
 export type CalculatedAddon = {
@@ -93,6 +96,7 @@ export type ProfitabilityInput = {
   linjerel?: string | null;
   pickupPostalCode?: string | null;
   destinationPostalCode?: string | null;
+  distanceKm?: number | null;
 };
 
 export type ProfitabilityResult = {

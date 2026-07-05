@@ -1,9 +1,61 @@
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import type { CalculatedAddon } from "./types";
+
+type StyckegodsLookupResult = {
+  price: number;
+  basePrice: number;
+  addonAmount: number;
+  distanceKm: number | null;
+  addons: CalculatedAddon[];
+  method: string;
+};
+
+const STYCKEGODS_ADDON_PERCENTAGE = 8.5;
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+async function resolveDistanceKm(
+  supabaseServer: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  sender: number,
+  receiver: number,
+): Promise<number | null> {
+  const queryDistance = async (
+    from: number,
+    to: number,
+  ): Promise<number | null> => {
+    const { data, error } = await (supabaseServer as any)
+      .from("distance_map" as any)
+      .select("distance")
+      .eq("sender", from)
+      .eq("receiver", to)
+      .maybeSingle();
+
+    if (error) {
+      return null;
+    }
+
+    const distanceKm = Number(data?.distance);
+
+    return Number.isFinite(distanceKm) && distanceKm > 0
+      ? distanceKm
+      : null;
+  };
+
+  const directDistance = await queryDistance(sender, receiver);
+
+  if (directDistance !== null) {
+    return directDistance;
+  }
+
+  return await queryDistance(receiver, sender);
+}
 
 export async function try_styckegods_lookup(
   consignment: ConsignmentListItem
-): Promise<{ price: number; method: string } | null> {
+): Promise<StyckegodsLookupResult | null> {
   if (!consignment.weight || consignment.weight <= 0) {
     return null;
   }
@@ -73,6 +125,18 @@ export async function try_styckegods_lookup(
     }
   }
 
+  const pickupZip = pickupZipClean
+    ? parseInt(pickupZipClean, 10)
+    : NaN;
+
+  const destinationZip = destZipClean
+    ? parseInt(destZipClean, 10)
+    : NaN;
+
+  const distanceKm = Number.isFinite(pickupZip) && Number.isFinite(destinationZip)
+    ? await resolveDistanceKm(supabaseServer, pickupZip, destinationZip)
+    : null;
+
   // Försök hitta linjepris
   if (fromAbbr && toAbbr) {
     const relation = `${fromAbbr}-${toAbbr}`.toUpperCase();
@@ -86,23 +150,13 @@ export async function try_styckegods_lookup(
   }
 
   // Annars kolla baserat på avstånd
-  if (tonPrice === null && pickupZipClean && destZipClean) {
-    const pZip = parseInt(pickupZipClean, 10);
-    const dZip = parseInt(destZipClean, 10);
+  if (tonPrice === null && distanceKm !== null) {
+    const { data: avstandData, error: avstandError } = await (supabaseServer as any)
+      .from("styckegods_avstand" as any).select("pris_per_ton").gte("km", distanceKm).order("km", { ascending: true }).limit(1).maybeSingle();
 
-    const { data: distData, error: distError } = await (supabaseServer as any)
-      .from("distance_map" as any).select("distance").eq("sender", pZip).eq("receiver", dZip).maybeSingle();
-
-    if (!distError && distData && distData.distance) {
-      const actualKm = Number(distData.distance);
-
-      const { data: avstandData, error: avstandError } = await (supabaseServer as any)
-        .from("styckegods_avstand" as any).select("pris_per_ton").gte("km", actualKm).order("km", { ascending: true }).limit(1).maybeSingle();
-
-      if (!avstandError && avstandData) {
-        tonPrice = Number(avstandData.pris_per_ton);
-        calculationMethod = `Styckegods: Avstånd (${actualKm}km)`;
-      }
+    if (!avstandError && avstandData) {
+      tonPrice = Number(avstandData.pris_per_ton);
+      calculationMethod = `Styckegods: Avstånd (${distanceKm}km)`;
     }
   }
 
@@ -110,12 +164,32 @@ export async function try_styckegods_lookup(
     return null;
   }
 
-  const grundPris = tonPrice * weightInTon;
-  const prisInklTillägg = grundPris * 1.085; // Tillägg
-  const finalPrice = Math.round((prisInklTillägg + Number.EPSILON) * 100) / 100;
-  
+  const basePrice = roundMoney(tonPrice * weightInTon);
+  const addonAmount = roundMoney(basePrice * (STYCKEGODS_ADDON_PERCENTAGE / 100));
+  const finalPrice = roundMoney(basePrice + addonAmount);
+  const addons: CalculatedAddon[] = addonAmount > 0
+    ? [
+        {
+          id: -40_000,
+          type: "styckegodstillagg",
+          direction: "route",
+          name: `Styckegodstillägg ${STYCKEGODS_ADDON_PERCENTAGE.toString().replace(".", ",")} %`,
+          amount: addonAmount,
+          class: null,
+          region: null,
+          lookupSource: "none",
+          matchedTaxPoint: null,
+          matchedCity: null,
+        },
+      ]
+    : [];
+
   return {
     price: finalPrice,
-    method: calculationMethod
+    basePrice,
+    addonAmount,
+    distanceKm,
+    addons,
+    method: calculationMethod,
   };
 }
