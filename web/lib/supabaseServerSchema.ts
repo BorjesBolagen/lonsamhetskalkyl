@@ -29,6 +29,54 @@ export type Database = {
         }
         Relationships: []
       }
+      addon_dmt: {
+        Row: {
+          id: number
+          km_from: number | null
+          km_to: number | null
+          percentage: number
+          rule_key: string
+          rule_type: string
+          valid_from: string
+          valid_to: string
+        }
+        Insert: {
+          id?: never
+          km_from?: number | null
+          km_to?: number | null
+          percentage: number
+          rule_key: string
+          rule_type: string
+          valid_from: string
+          valid_to: string
+        }
+        Update: {
+          id?: never
+          km_from?: number | null
+          km_to?: number | null
+          percentage?: number
+          rule_key?: string
+          rule_type?: string
+          valid_from?: string
+          valid_to?: string
+        }
+        Relationships: []
+      }
+      addon_hvo: {
+        Row: {
+          id: number
+          name: string
+        }
+        Insert: {
+          id?: number
+          name: string
+        }
+        Update: {
+          id?: number
+          name?: string
+        }
+        Relationships: []
+      }
       addon_tid: {
         Row: {
           carriers_share: number | null
@@ -94,25 +142,25 @@ export type Database = {
           balanstillagg: string | null
           id: number
           orttillagg: string | null
+          postnummer: number
           postort: string | null
           stor: string | null
-          taxepunkt: number
         }
         Insert: {
           balanstillagg?: string | null
           id?: number
           orttillagg?: string | null
+          postnummer: number
           postort?: string | null
           stor?: string | null
-          taxepunkt: number
         }
         Update: {
           balanstillagg?: string | null
           id?: number
           orttillagg?: string | null
+          postnummer?: number
           postort?: string | null
           stor?: string | null
-          taxepunkt?: number
         }
         Relationships: []
       }
@@ -325,6 +373,24 @@ export type Database = {
         }
         Relationships: []
       }
+      kontor_coefficient: {
+        Row: {
+          coefficient: number | null
+          from_kontor: string
+          to_kontor: string
+        }
+        Insert: {
+          coefficient?: number | null
+          from_kontor: string
+          to_kontor: string
+        }
+        Update: {
+          coefficient?: number | null
+          from_kontor?: string
+          to_kontor?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           body: string
@@ -396,21 +462,111 @@ export type Database = {
           },
         ]
       }
-      paketbur_prices: {
+      nav_ank_terminal_direktlastat_frs: {
         Row: {
-          antal_burar: number | null
-          pris: number | null
-          relation: string | null
+          kg_from: number
+          km_from: number
+          value: number
         }
         Insert: {
-          antal_burar?: number | null
-          pris?: number | null
-          relation?: string | null
+          kg_from: number
+          km_from: number
+          value: number
         }
         Update: {
-          antal_burar?: number | null
+          kg_from?: number
+          km_from?: number
+          value?: number
+        }
+        Relationships: []
+      }
+      nav_ank_terminal_direktlastat_ton: {
+        Row: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Insert: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Update: {
+          kg_from?: number
+          km_from?: number
+          value?: number
+        }
+        Relationships: []
+      }
+      nav_avg_terminal_direktlastat_frs: {
+        Row: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Insert: {
+          kg_from: number
+          km_from?: number
+          value: number
+        }
+        Update: {
+          kg_from?: number
+          km_from?: number
+          value?: number
+        }
+        Relationships: []
+      }
+      nav_avg_terminal_direktlastat_ton: {
+        Row: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Insert: {
+          kg_from: number
+          km_from: number
+          value: number
+        }
+        Update: {
+          kg_from?: number
+          km_from?: number
+          value?: number
+        }
+        Relationships: []
+      }
+      nav_taxa_fjarr_direktgods: {
+        Row: {
+          km_till_och_med: number
+          value: number
+          weight_class: number
+        }
+        Insert: {
+          km_till_och_med: number
+          value: number
+          weight_class: number
+        }
+        Update: {
+          km_till_och_med?: number
+          value?: number
+          weight_class?: number
+        }
+        Relationships: []
+      }
+      paketbur_prices: {
+        Row: {
+          antal_burar: number
+          pris: number | null
+          relation: string
+        }
+        Insert: {
+          antal_burar: number
           pris?: number | null
-          relation?: string | null
+          relation: string
+        }
+        Update: {
+          antal_burar?: number
+          pris?: number | null
+          relation?: string
         }
         Relationships: []
       }
@@ -448,6 +604,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      prisjusteringar: {
+        Row: {
+          datum: string
+          generell_prisjustering: number
+          justerat: number | null
+          procent_verkstallt: number
+        }
+        Insert: {
+          datum: string
+          generell_prisjustering: number
+          justerat?: number | null
+          procent_verkstallt: number
+        }
+        Update: {
+          datum?: string
+          generell_prisjustering?: number
+          justerat?: number | null
+          procent_verkstallt?: number
+        }
+        Relationships: []
       }
       styckegods_avstand: {
         Row: {
@@ -645,6 +822,8 @@ export type Database = {
       calculate_applicable_addons: {
         Args: {
           p_chargeable_weight: number
+          p_customer_name?: string
+          p_linjerel?: string
           p_receiver_postort: string
           p_receiver_taxepunkt: string
           p_sender_postort: string
@@ -674,6 +853,10 @@ export type Database = {
         Args: { user_id: string }
         Returns: number
       }
+      get_coefficient: {
+        Args: { p_from_taxepunkt: number; p_to_taxepunkt: number }
+        Returns: number
+      }
       get_distance: {
         Args: { in_receiver_taxep: number; in_sender_taxep: number }
         Returns: number
@@ -691,6 +874,17 @@ export type Database = {
         Args: { in_kilometer: number; in_viktklass: number }
         Returns: number
       }
+      get_nav_values: {
+        Args: { p_kg: number; p_km: number }
+        Returns: {
+          nav_ank_terminal_direktlastat_frs: number
+          nav_ank_terminal_direktlastat_ton: number
+          nav_avg_terminal_direktlastat_frs: number
+          nav_avg_terminal_direktlastat_ton: number
+          nav_taxa_fjarr_above: number
+          nav_taxa_fjarr_current: number
+        }[]
+      }
       get_office_for_taxep: { Args: { in_taxep: number }; Returns: string }
       get_snitt_forh_se_radvis: {
         Args: { in_kundnamn: string; in_weight: number }
@@ -706,16 +900,15 @@ export type Database = {
         Returns: boolean
       }
       normalize_addon_postort: { Args: { p_value: string }; Returns: string }
-      normalize_addon_taxepunkt: { Args: { p_value: string }; Returns: string }
       resolve_addon_location: {
-        Args: { p_postort: string; p_taxepunkt: string }
+        Args: { p_postnummer: string; p_postort: string }
         Returns: {
           balance_ambiguous: boolean
           has_balance_addon: boolean
           match_source: string
+          matched_postnummer: string
           matched_postort: string
           matched_rows: number
-          matched_taxepunkt: string
           orttillagg_ambiguous: boolean
           orttillagg_class: number
           stor: string
@@ -795,6 +988,7 @@ export type Database = {
           in_taxep_sender: number
         }
         Returns: {
+          avrakningsdatum: string
           kundnettofrakt: number
           vikt: number
         }[]

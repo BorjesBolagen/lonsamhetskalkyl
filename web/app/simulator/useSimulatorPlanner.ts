@@ -28,10 +28,8 @@ import {
   safeSetSessionStorageJson,
   toIlogDate,
 } from "../../lib/backend/transportPlanningUtils";
-import {
-  DEFAULT_MILE_COST,
-  DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-} from "../../lib/backend/constants";
+import { DEFAULT_PROFITABILITY_REFERENCE_VALUE } from "@/lib/constants";
+import { DEFAULT_MILE_COST } from "@/lib/constants";
 
 // Cache-nyckel för att kunna återställa simulatorns senaste lokala urval.
 const SIMULATOR_CACHE_KEY = "simulator-cache-v9";

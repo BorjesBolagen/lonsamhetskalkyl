@@ -4,13 +4,13 @@ import type {
 	EquipageItem,
 	LineItem,
 } from "@/lib/ilogTypes";
-import type { User, Message } from "@/lib/databaseTypes";
+import type { User } from "@/lib/databaseTypes";
 import type {
 	BasicResponse,
 	IlogResponse,
 	MessageResponse,
-	TokenResponse,
 } from "@/lib/returnTypes";
+import type { NavResult } from "@/profitability/types";
 import { Json } from "./supabaseServerSchema";
 
 type HistoricalImportResponse = {
@@ -278,9 +278,9 @@ export type ProfitabilityValue = {
 
   detail?: string;
 
-  // Befintliga Jaro-fält som används i Home.
-  best_score?: number;
-  best_name?: string;
+  /////////////////// NAV beräkning
+  nav_error?: string;
+  nav_ers_exklusive_tillägg?: NavResult;
 };
 
 export type ProfitabilityResponse = {

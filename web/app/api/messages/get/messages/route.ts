@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { User } from "@/lib/databaseTypes";
 import { getCurrentUser } from "@/lib/backend/utils";
-import { MAX_NUMBER_OF_MESSAGES_PER_PAGE } from "@/lib/backend/constants";
+import { MAX_NUMBER_OF_MESSAGES_PER_PAGE } from "@/lib/constants";
 import { requireUser } from "@/lib/authHelpers";
 
 export async function GET(request: Request) {

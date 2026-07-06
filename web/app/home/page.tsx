@@ -192,13 +192,10 @@ export default function Home() {
     const id = consignment.consignmentId;
     setLoadingRows(prev => ({ ...prev, [id]: true }));
     try {
-      // Use the entire name for translation and jaro sources, but not for base
-      const useEntireName = source === "translation" || source === "jaro";
       const profitabilityValue = await calculateConsignmentProfitabilityPrice({
           ...consignment,
           customerName: chosenName,
-        },
-        useEntireName
+        }
       );
       updateEquipageInState(selectedEquipage!.id, (current) => {
         const updatedConsignments = current.consignments.map(c => {
