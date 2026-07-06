@@ -1,0 +1,230 @@
+================================================================================
+KODANALYSRAPPORT – lonsamhetskalkyl
+Datum: 2026-07-06
+Genererad av: Claude Code (automatisk kodgranskning)
+================================================================================
+
+Föregående rapport: kodanalys_2026-07-02.txt (ligger på branchen
+claude/quirky-ptolemy-ekQSw; ej mergad till main). Den täckte commits
+2026-06-18 – 2026-06-29 samt en fullständig genomgång av main vid HEAD 6dd79d4.
+Denna granskning är gjord på samma HEAD (6dd79d4, merge av PR #30).
+
+OBS: Rapporterna 2026-06-29, 2026-07-02 och denna ligger enbart på
+claude/quirky-ptolemy-ekQSw. På main är senaste rapporten fortfarande
+2026-06-22. Överväg att merga branchen (eller flytta rapporterna) så att
+historiken blir synlig för hela teamet.
+
+
+================================================================================
+1. VAD HAR HÄNT SEDAN SIST (2026-07-02 – 2026-07-06)
+================================================================================
+
+INGA NYA KODCOMMITS. main står kvar på 6dd79d4 (merge av PR #30, 2026-06-29)
+och inga nya brancher med kodändringar har pushats. De enda commits som
+tillkommit i repot sedan förra rapporten är själva analysrapporterna på denna
+branch (a5da6ae "kodanalysrapport 2026-06-29", 7d64f27 "kodanalysrapport
+2026-07-02").
+
+Ingenting har alltså lagts till, ändrats eller tagits bort i koden sedan sist.
+För historik över den senaste kodaktiva perioden (addons-motorn,
+namnmatchning/admin-UI, lastbils-/ekipagevyn, paketburspriser samt
+säkerhetsfixarna av H1–H3/M1–M3 från 2026-06-22-rapporten), se avsnitt 1 i
+kodanalys_2026-07-02.txt.
+
+Konsekvens för fyndläget: eftersom koden är oförändrad kvarstår SAMTLIGA
+öppna fynd från rapporten 2026-07-02 (6 HÖG, 19 MEDEL, 18 LÅG). Ingen av dem
+har åtgärdats. Denna granskning gjordes oberoende och bekräftar de centrala
+fynden; dessutom hittades ett antal NYA fynd som inte fanns med i förra
+rapporten – se avsnitt 2.
+
+
+================================================================================
+2. NYA FYND I DENNA GRANSKNING (fanns ej i rapporten 2026-07-02)
+================================================================================
+
+--------------------------------------------------------------------------------
+HÖG PRIORITET
+--------------------------------------------------------------------------------
+
+[HÖG] N-H1. "use server" exponerar interna hjälpfunktioner som publika
+  endpoints
+  Filer: web/lib/authHelpers.ts:1, web/lib/backend/utils.ts:1
+  Båda filerna inleds med direktivet "use server", vilket i Next.js gör VARJE
+  exporterad async-funktion till en anropbar Server Action (POST-endpoint).
+  Filerna är hjälpbibliotek, inte action-moduler. T.ex. roundUpWeight()
+  (utils.ts:47) gör en RPC mot databasen utan någon auth-koll och kan
+  invokeras av oautentiserade klienter via action-ID. requireUser/requireAdmin
+  är ofarliga att anropa men ska inte heller vara publika endpoints.
+  Åtgärd: Byt "use server" mot import "server-only" i båda filerna (samma
+  mönster som web/profitability/addonEngine.ts redan använder). En rads
+  ändring per fil.
+
+--------------------------------------------------------------------------------
+MEDEL PRIORITET
+--------------------------------------------------------------------------------
+
+[MEDEL] N-M1. Vikt 0 klassas som FJÄRR och addon-beräkningen kastar
+  systematiskt
+  Filer: web/app/api/profitability/route.ts (~rad 100),
+  web/profitability/service.ts (~rad 90), web/profitability/addonEngine.ts
+  (~rad 158)
+  Saknad vikt blir 0 via Number(...) || 0. isUnder1000kg kräver weight > 0,
+  så 0-viktsändningar exkluderas från STYCKEGODS och faller igenom till
+  FJÄRR-flödet, där steg-RPC:erna körs med vikt 0 och
+  calculateApplicableAddons kastar ("vikt måste vara > 0"). Resultatet blir
+  systematiskt grundpris utan tillägg + warning för alla sändningar utan
+  vikt.
+  Åtgärd: Avvisa eller flagga vikt <= 0 tidigt i routen eller i
+  determineFlowType i stället för att låta det rinna genom hela kedjan.
+
+[MEDEL] N-M2. För bred flödesklassificering på namnsträngar
+  Fil: web/profitability/service.ts (~rad 64, 84)
+  customer.includes("PAKET") matchar t.ex. "PAKETERING AB" → sändningen går
+  till PAKETBUR-flödet (och får "inget pris" när paketburar saknas).
+  sender.includes("FAST") matchar alla avsändare med "FASTIGHETS AB" i namnet
+  → STYCKEGODS (0 kr, "modell saknas") i stället för FJÄRR-prissättning.
+  Åtgärd: Skärp nyckelorden (ordgränser/exakta koder) eller kombinera med
+  fler kriterier, t.ex. antal paketburar > 0 för PAKETBUR-grenen.
+
+[MEDEL] N-M3. Stale request kan radera ny laddnings data – loadId-guard
+  saknas i catch
+  Fil: web/app/home/hooks/useHomeLoader.ts (~rad 434-437)
+  catch-grenen i loadLines kör setLineError, resetDisplayedData() och
+  setAppliedFilterLabels([]) UTAN att kontrollera latestLoadIdRef.current ===
+  loadId – finally-grenen direkt under gör kollen. En gammal laddning som
+  failar efter att användaren hunnit starta en ny nollställer alltså den nya
+  laddningens kort och visar fel felmeddelande.
+  Åtgärd: Wrappa catch-innehållet i samma loadId-guard som finally använder.
+
+[MEDEL] N-M4. Övergivna laddningar fortsätter skjuta nätverksanrop – ingen
+  AbortController
+  Filer: web/app/home/hooks/homeTypesAndUtils.ts (~rad 234-246,
+  getIlogConsignmentsWithRetry), web/app/home/hooks/useHomeLoader.ts
+  web/lib/api.ts:getIlogConsignments stöder AbortSignal men ingen skickas
+  någonsin. loadId-mekanismen hindrar bara state-skrivningar – en övergiven
+  laddning fortsätter köra batchvisa anrop (6 åt gången + retries) och
+  konkurrerar med den nya laddningen om bandbredd och backend.
+  Åtgärd: Skapa en AbortController per load, abortera i
+  loadLines/clearDisplayedLines och propagera signalen genom retry-hjälparen.
+
+[MEDEL] N-M5. Admin-sidan: tre brister i batchkörning och formulärflöden
+  Fil: web/app/admin/page.tsx
+  (a) Namnöversättnings-batchen kör Promise.all över ALLA ekipage × 5 dagar
+      samtidigt (~rad 222-296) – obegränsad parallellism (Home begränsar
+      annars till 6) och hela datumintervallets data ackumuleras i minnet
+      för en enda slutuppladdning.
+  (b) setIsSigningUp(true) anropas aldrig i handleSignup (~rad 417-499) trots
+      finally { setIsSigningUp(false) } och disabled={isSigningUp} –
+      "Registrerar..." visas aldrig och dubbelsubmit är möjlig (dubbla
+      användare).
+  (c) handleUpdateUser (~rad 333-364) har try/finally utan catch –
+      nätverksfel ger unhandled rejection och modalen står kvar utan
+      felmeddelande.
+  Åtgärd: Chunka ekipagen (återanvänd chunkArray) och ladda upp per
+  dag/batch; sätt isSigningUp först i funktionen; lägg till catch med
+  felmeddelande som i handleDeleteUser.
+
+--------------------------------------------------------------------------------
+LÅG PRIORITET
+--------------------------------------------------------------------------------
+
+[LÅG] N-L1. Vilseledande catch i steg 1: "fortsätter till steg 2" men
+  avbryter allt
+  Fil: web/profitability/service.ts (~rad 388-395)
+  Loggmeddelandet i steg 1-catchen säger "fortsätter till steg 2" men koden
+  returnerar step_used: -1 och avbryter hela trappan – ett transient fel i
+  steg 1 dödar beräkningen trots att steg 2–5 kunde ha gett pris.
+  Åtgärd: Bestäm semantik – antingen fortsätt till nästa steg vid fel, eller
+  rätta loggtexten.
+
+[LÅG] N-L2. Trasiga Tailwind-klasser i admin-UI:t
+  Fil: web/app/admin/page.tsx (rad ~573, 933, 948, 961, 980 m.fl.)
+  text-[var-(--text-primary)] (felplacerat bindestreck), focus.ring-2 (punkt
+  i stället för kolon) och bg-[var(--secondary-element)]-50/-100 (ogiltig
+  suffixsyntax på arbitrary value) genereras inte av Tailwind – focus-ringar
+  och färger appliceras tyst inte.
+  Åtgärd: Rätta till text-[var(--text-primary)], focus:ring-2 och ta bort
+  -50/-100-suffixen.
+
+[LÅG] N-L3. Död kod och oanvända importer/parametrar
+  Filer: web/profitability/service.ts (DEFAULT_NAME_SIMILARITY_THRESHOLD
+  importeras men används ej), web/profitability/trappsteg_steg.ts
+  (roundUpWeight-import), web/profitability/types.ts (TrappstegRow,
+  MedelseRow refereras ingenstans), web/app/home/hooks/useHomeLoader.ts
+  (normalizeText-import; setLineCards finns i params-typen och skickas från
+  useHomeDashboardData men destruktureras aldrig),
+  web/app/home/hooks/useHomeProfitability.ts (NameSource),
+  web/app/admin/page.tsx (getCurrentlySignedInUser),
+  web/app/home/page.tsx (~rad 266: ternary med identiska grenar
+  "ekipage"/"ekipage").
+  Åtgärd: Rensa; slå på no-unused-vars som error i ESLint så det inte
+  återkommer.
+
+
+================================================================================
+3. KVARSTÅENDE ÖPPNA FYND FRÅN 2026-07-02 (koden oförändrad – allt kvarstår)
+================================================================================
+
+Fullständiga beskrivningar finns i kodanalys_2026-07-02.txt. Viktigast:
+
+HÖG (6 st):
+  H1  Användarskapande + rolltilldelning sker klient-side med anon-nyckel
+      (web/app/admin/page.tsx) – verifiera OMGÅENDE att RLS blockerar
+      UPDATE av User.role, annars privilegieeskalering.
+  H2  Math.min på tom array ger Infinity som intäkt i try_steg_1
+      (trappsteg_steg.ts) – regression från division-med-noll-fixen; även
+      truthiness-koll som tappar giltigt 0-pris.
+  H3  Substring-matchning (.ilike %relation%) kan hämta paketburspris från
+      fel relation (service.ts, try_paketbur_lookup).
+  H4  DB-fel i resolveTaxPoints sväljs → sändningar omklassas tyst
+      (route.ts); kombinerat med oescapad .or()-interpolation av ortnamn
+      (även injektionsprimitiv, M5).
+  H5  Kort-refresh under pågående laddning kan låsa home-UI:t permanent.
+  H6  Cache-restore av profitabilityStatus "loading" ger permanenta
+      spinners (useHomeCache.ts) – ingen kod återupptar hydreringen.
+
+MEDEL i urval (19 st totalt):
+  M1  Kontoenumeration i forgot-password (timing + olika felsvar); ingen
+      rate limiting på login/forgot-password/set-password.
+  M2  Lösenordsbyte utan att ange nuvarande lösenord.
+  M8  taxPointRelation parsas olika på tre ställen; steg 1/2/3/5 skickar
+      NaN tyst till RPC (bara steg 4 validerar).
+  M9  roundUpWeight returnerar -1 vid fel och används okontrollerat som
+      viktklass i alla steg → tyst fel prisunderlag.
+  M12 N+1 utan dedup i home-hydreringen (namn-uppslag per consignment trots
+      återkommande kundnamn).
+  M13 Sekventiella RPC-par i steg 1/2/4/5 (bara steg 3 kör Promise.all).
+  M15 sessionStorage-persistens som sidoeffekt inuti setState-updater
+      (O(n²)-serialisering, dubbelkörning i StrictMode).
+  M16 useEntireName är död kod som ser funktionell ut – knapparna för
+      namnval påverkar inte beräkningen.
+  M19 Kända sårbarheter i npm-beroenden (Dependabot: 8 st, varav höga) –
+      kör npm audit och uppgradera.
+
+LÅG: 18 st – bl.a. throw userError → 500 i stället för 401 i två
+  messages-routes, select("*") på User, detaljerade DB-fel till klienten,
+  jaro-estimation kraschar på tomt RPC-svar, committade
+  web/supabase/.temp-filer, settings-fältbuggar.
+
+
+================================================================================
+SAMMANSTÄLLNING
+================================================================================
+Sedan sist:      0 kodcommits (main oförändrad på 6dd79d4 sedan 2026-06-29).
+Nya fynd:        1 HÖG, 5 MEDEL, 3 LÅG (avsnitt 2).
+Kvarstående:     6 HÖG, 19 MEDEL, 18 LÅG från 2026-07-02 (avsnitt 3).
+
+Rekommenderad åtgärdsordning:
+1. N-H1 ("use server" → "server-only") – två rader, stänger oavsiktligt
+   exponerade endpoints.
+2. 07-02 H1 (verifiera/lås RLS på User.role) – potentiell
+   privilegieeskalering.
+3. 07-02 H2 + M9 (Infinity-intäkt, roundUpWeight -1) – felaktiga ekonomiska
+   tal i produktion.
+4. 07-02 H4/M5 + N-M1/N-M2 (tysta felklassificeringar av sändningar) –
+   påverkar prissättningens korrekthet.
+5. M19 (npm audit) – kända sårbarheter i beroenden.
+
+Notera också att ingen av de tre senaste rapporterna nått main – merga gärna
+denna branch så att teamet ser fynden.
+================================================================================
