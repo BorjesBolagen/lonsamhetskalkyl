@@ -280,7 +280,7 @@ export async function calculateConsignmentProfitabilityPrice(
   consignment: ConsignmentListItem,
 ): Promise<ProfitabilityValue | null> {
   try {
-    const data = await calculateProfitability(consignment, useEntireName);
+    const data = await calculateProfitability(consignment);
 
     if (!data || !data.success || !data.value) {
       console.error("Fel i kalkyl:", data?.error);
