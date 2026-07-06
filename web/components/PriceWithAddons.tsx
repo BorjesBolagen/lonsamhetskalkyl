@@ -364,7 +364,7 @@ export default function PriceWithAddons({
               <>
                 <div className="mb-2 flex items-center justify-between gap-5">
                   <span className="font-medium">
-                    NAV exkl. tillägg
+                    NAV-fördelning
                   </span>
                 </div>
 

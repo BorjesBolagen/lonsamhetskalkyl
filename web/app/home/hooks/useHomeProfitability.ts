@@ -10,7 +10,7 @@ import {
   toBarPercent,
 } from "./homeTypesAndUtils";
 import { getBestNameMatch, getNameTranslations } from "@/lib/api";
-import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
+import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/constants";
 import { NameSource } from "@/components/Dropdown";
 
 type UseHomeProfitabilityParams = {

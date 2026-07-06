@@ -1,8 +1,8 @@
 import { ProfitabilityInput } from "./types";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { roundUpWeight } from "../lib/backend/utils";
 import { normalizeText } from "./service";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
+import { translateSupabaseError } from "@/lib/supabaseErrorTranslation";
 
 
 /**
@@ -55,14 +55,56 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
         return null;
     }
 
-    // Funktion som tar ett av de två resultaten och räknar ut estimerad intäkt genom kilopris * vikt för input-frakt
-    const estimeraPris = (rows: Array<{ kundnettofrakt: number; vikt: number }>) => {
-        const totalKundnettofrakt = rows.reduce((sum, row) => sum + row.kundnettofrakt, 0);
+    // Get price adjustments and build prefix sums by date so we can apply
+    // the cumulative "justerat" applicable at each row's avrakningsdatum.
+    const { data: pris_data, error: pris_error } = await supabase
+        .from("prisjusteringar")
+        .select("datum, justerat")
+        .order("datum", { ascending: true });
+
+    if (pris_error) {
+        throw new Error("Fel vid hämtning av prisjusteringar: " + translateSupabaseError(pris_error));
+    }
+
+    // Prepare arrays for binary search / prefix sums. Treat null justerat as 0.
+    const prisByDate = (pris_data ?? [])
+        .map((r: any) => ({
+            datum: new Date(r.datum),
+            justerat: Number(r.justerat ?? 0),
+        }))
+        .sort((a, b) => a.datum.getTime() - b.datum.getTime()); // ascending
+
+    const totalJusterat = prisByDate.reduce((s, r) => s + r.justerat, 0);
+
+    const getCumulativeJusteringFor = (avrakningsdatum?: Date): number => {
+        if (!avrakningsdatum || prisByDate.length === 0) return 0;
+
+        // Sum of adjustments with datum <= avrakningsdatum (older or same-day)
+        let sumOlder = 0;
+        for (const row of prisByDate) {
+            if (row.datum.getTime() <= avrakningsdatum.getTime()) {
+                sumOlder += row.justerat;
+            }
+        }
+
+        // We want adjustments that occurred after avrakningsdatum, i.e. total - older
+        const result = totalJusterat - sumOlder;
+        return result > 0 ? result : 0;
+    };
+
+    // Funktion som tar ett av de två resultaten och räknar ut estimerad intäkt genom
+    // kilopris * vikt för input-frakt. Applies per-row cumulative adjustment based on row.avrakningsdatum.
+    const estimeraPris = async (rows: Array<{ kundnettofrakt: number; vikt: number; avrakningsdatum: string }>) => {
+
+        const totalKundnettofrakt = rows.reduce((sum, row) => {
+            const adj = getCumulativeJusteringFor(new Date(row.avrakningsdatum));
+            return sum + (row.kundnettofrakt * (1 + adj));
+        }, 0);
         const totalVikt = rows.reduce((sum, row) => sum + row.vikt, 0);
 
         // Avoid div by 0 error
         if (totalVikt === 0) return null;
-        return totalKundnettofrakt / totalVikt * weight; //
+        return totalKundnettofrakt / totalVikt * weight;
     };
 
     // Lista med estimerade priser
@@ -70,13 +112,13 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
 
     // Om vi hittade för orginalparametrar, beräkna estimerat pris
     if (hittatOrginalData) {
-        const estOrginal = estimeraPris(data_orginal);
+        const estOrginal = await estimeraPris(data_orginal);
         if (estOrginal) estimates.push(estOrginal);
     }
 
     // Om vi hittade för vikt+1, beräkna estimerat pris
     if (hittatPlusEttData) {
-        const estPlusEtt = estimeraPris(data_plus_ett);
+        const estPlusEtt = await estimeraPris(data_plus_ett);
         if (estPlusEtt) estimates.push(estPlusEtt);
     }
 

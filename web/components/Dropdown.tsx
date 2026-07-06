@@ -1,6 +1,6 @@
 import { ConsignmentWithProfitability } from "@/app/home/hooks/homeTypesAndUtils";
 import { InfoTooltip } from "@/components/InformationBubble";
-import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
+import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/constants";
 import { useState } from "react";
 
 export type NameSource = "translation" | "jaro" | "base";

@@ -29,6 +29,39 @@ export type Database = {
         }
         Relationships: []
       }
+      addon_dmt: {
+        Row: {
+          id: number
+          km_from: number | null
+          km_to: number | null
+          percentage: number
+          rule_key: string
+          rule_type: string
+          valid_from: string
+          valid_to: string
+        }
+        Insert: {
+          id?: never
+          km_from?: number | null
+          km_to?: number | null
+          percentage: number
+          rule_key: string
+          rule_type: string
+          valid_from: string
+          valid_to: string
+        }
+        Update: {
+          id?: never
+          km_from?: number | null
+          km_to?: number | null
+          percentage?: number
+          rule_key?: string
+          rule_type?: string
+          valid_from?: string
+          valid_to?: string
+        }
+        Relationships: []
+      }
       addon_hvo: {
         Row: {
           id: number
@@ -560,6 +593,27 @@ export type Database = {
           },
         ]
       }
+      prisjusteringar: {
+        Row: {
+          datum: string
+          generell_prisjustering: number
+          justerat: number | null
+          procent_verkstallt: number
+        }
+        Insert: {
+          datum: string
+          generell_prisjustering: number
+          justerat?: number | null
+          procent_verkstallt: number
+        }
+        Update: {
+          datum?: string
+          generell_prisjustering?: number
+          justerat?: number | null
+          procent_verkstallt?: number
+        }
+        Relationships: []
+      }
       styckegods_avstand: {
         Row: {
           id: number
@@ -834,7 +888,6 @@ export type Database = {
         Returns: boolean
       }
       normalize_addon_postort: { Args: { p_value: string }; Returns: string }
-      normalize_addon_taxepunkt: { Args: { p_value: string }; Returns: string }
       resolve_addon_location: {
         Args: { p_postnummer: string; p_postort: string }
         Returns: {
@@ -923,6 +976,7 @@ export type Database = {
           in_taxep_sender: number
         }
         Returns: {
+          avrakningsdatum: string
           kundnettofrakt: number
           vikt: number
         }[]

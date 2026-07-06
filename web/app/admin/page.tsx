@@ -10,7 +10,7 @@ import { validatePassword } from "@/lib/validation";
 import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
 import PasswordInput from "../../components/PasswordInput";
 import { ConsignmentListItem, EquipageItem } from "@/lib/ilogTypes";
-import { StorageError } from "@supabase/storage-js";
+import { PriceAdjustmentsPopup } from "@/components/PriceAdjustmentsPopup";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 
@@ -103,6 +103,7 @@ export default function Admin() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isMessagePopupOpen, setIsMessagePopupOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<TrafficLeader | null>(null);
+  const [isPriceAdjustmentsOpen, setIsPriceAdjustmentsOpen] = useState(false);
 
   const [adminMessage, setAdminMessage] = useState("");
   const [adminResponse, setAdminResponse] = useState("");
@@ -275,25 +276,6 @@ export default function Admin() {
 
         ilogData.push(...batchResults);
       }
-
-      // 3. Upload to Supabase Storage
-      addLog("Laddar upp iLog data till Supabase...");
-      const fileName = `ilog_${translationStartDate}_${translationEndDate}_${Date.now()}.json`;
-      const blob = new Blob([JSON.stringify(ilogData)], { type: "application/json" });
-      
-      try {
-        const { error: uploadError } = await supabase.storage
-          .from("ilog-uploads")
-          .upload(fileName, blob);
-        if (uploadError) throw uploadError;
-        addLog("Uppladdning klar");
-      } catch (error) {
-        const msg = error instanceof StorageError ? error.message : String(error);
-        addLog(`Uppladdning misslyckades: ${msg}`);
-        return;
-      }
-
-      // 4. Call RPC (later)
 
     } catch (error) {
       if ((error as Error).name === "AbortError") {
@@ -554,6 +536,12 @@ function getDaysBetween(start: string, end: string): string[] {
                 className="px-4 py-2 border-2 border-[#446E30] text-[#446E30] hover:bg-[#e8f1e9] font-semibold rounded transition-colors"
               >
                 Ladda upp historisk data
+              </button>
+              <button
+                onClick={() => setIsPriceAdjustmentsOpen(true)}
+                className="px-4 py-2 border-2 border-[#446E30] text-[#446E30] hover:bg-[#e8f1e9] font-semibold rounded transition-colors"
+              >
+                Uppdatera prishöjningar
               </button>
               <button
                 onClick={() => setIsAddUserOpen(true)}
@@ -1237,6 +1225,11 @@ function getDaysBetween(start: string, end: string): string[] {
           </div>
         </div>
       )}
+
+      <PriceAdjustmentsPopup
+        isOpen={isPriceAdjustmentsOpen}
+        onClose={() => setIsPriceAdjustmentsOpen(false)}
+      />
 
       <Footer />
     </div>
