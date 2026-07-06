@@ -98,18 +98,6 @@ export type Database = {
         }
         Relationships: []
       }
-            addon_hvo: {
-        Row: {
-          name: string
-        }
-        Insert: {
-          name: string
-        }
-        Update: {
-          name?: string
-        }
-        Relationships: []
-      }
       Addons: {
         Row: {
           carriers_share: number | null
