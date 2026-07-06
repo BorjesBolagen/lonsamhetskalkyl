@@ -110,14 +110,15 @@ export type ProfitabilityResult = {
   // Trappstegsmodellen steg använt
   step_used: number;
 
-  // Totalt pris inklusive tillägg.
+  // Summa intäkter som visas i prognosen. För trappstegsflödet är detta Direktlastat Fjärr-andelen från NAV + tillägg.
   estimated_revenue: number;
 
   // Håller felmeddelande för trappstegsmodellen
   detail?: string;
 
   /////////////////// Tilläggsberäkning
-  base_revenue?: number; // Pris innan tillägg. Kundnetto
+  base_revenue?: number; // Pris/intäktsbas innan tillägg. För trappstegsflödet är detta Direktlastat Fjärr-andelen efter NAV.
+  customer_net_revenue?: number; // Kundnettot från trappstegsmodellen innan NAV-fördelning och tillägg.
   addon_total?: number;
   addons?: CalculatedAddon[];
   addon_warnings?: AddonWarning[];

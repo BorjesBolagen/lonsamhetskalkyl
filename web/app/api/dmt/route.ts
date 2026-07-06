@@ -1,355 +1,617 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { requireUser } from "@/lib/authHelpers";
+import type { Tables, TablesInsert } from "@/lib/supabaseServerSchema";
 
-type DmtRuleKey =
-  | "0-150"
-  | "151-250"
-  | "251-350"
-  | "351-450"
-  | "451-550"
-  | "551-650"
-  | "651-750"
-  | "751-900"
-  | "901-1100"
-  | "1101-"
-  | "FJARR_PAKET";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-type DmtRuleType = "km_interval" | "fjarr_paket";
+type DmtRow = Tables<"addon_dmt">;
+type DmtInsert = TablesInsert<"addon_dmt">;
 
-type DmtRuleConfig = {
-  ruleKey: DmtRuleKey;
-  ruleType: DmtRuleType;
-  kmFrom: number | null;
-  kmTo: number | null;
+type DmtParsedRule = DmtInsert;
+
+type DmtImportSummary = {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  deletedDuplicates: number;
+  periods: number;
+  sheets: number;
 };
 
-type DmtRequestRule = DmtRuleConfig & {
-  percentage: number;
-};
+type Matrix = unknown[][];
 
-type DmtRow = {
-  id?: number;
-  valid_from: string;
-  valid_to: string;
-  rule_type: string;
-  rule_key: string;
-  km_from: number | null;
-  km_to: number | null;
-  percentage: number;
-};
+const DATE_FROM_MARKERS = ["DATE.FROM", "DATE FROM", "VALID.FROM", "VALID FROM"];
+const DATE_TO_MARKERS = ["DATE.TO", "DATE TO", "VALID.TO", "VALID TO"];
 
-type DmtInsertRow = Omit<DmtRow, "id">;
-
-type SupabaseError = {
-  message: string;
-};
-
-const DMT_RULE_CONFIGS: DmtRuleConfig[] = [
-  { ruleKey: "0-150", ruleType: "km_interval", kmFrom: 0, kmTo: 150 },
-  { ruleKey: "151-250", ruleType: "km_interval", kmFrom: 151, kmTo: 250 },
-  { ruleKey: "251-350", ruleType: "km_interval", kmFrom: 251, kmTo: 350 },
-  { ruleKey: "351-450", ruleType: "km_interval", kmFrom: 351, kmTo: 450 },
-  { ruleKey: "451-550", ruleType: "km_interval", kmFrom: 451, kmTo: 550 },
-  { ruleKey: "551-650", ruleType: "km_interval", kmFrom: 551, kmTo: 650 },
-  { ruleKey: "651-750", ruleType: "km_interval", kmFrom: 651, kmTo: 750 },
-  { ruleKey: "751-900", ruleType: "km_interval", kmFrom: 751, kmTo: 900 },
-  { ruleKey: "901-1100", ruleType: "km_interval", kmFrom: 901, kmTo: 1100 },
-  { ruleKey: "1101-", ruleType: "km_interval", kmFrom: 1101, kmTo: null },
-  { ruleKey: "FJARR_PAKET", ruleType: "fjarr_paket", kmFrom: null, kmTo: null },
-];
-
-const DMT_RULE_KEYS = DMT_RULE_CONFIGS.map((rule) => rule.ruleKey);
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function jsonResponse(status: boolean, message: string, data: unknown = null, httpStatus = 200) {
+  return NextResponse.json(
+    { status, message, data },
+    { status: httpStatus },
+  );
 }
 
-function isValidIsoDate(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-
-  return !Number.isNaN(date.getTime());
+function normalizeLabel(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/Å/g, "A")
+    .replace(/Ä/g, "A")
+    .replace(/Ö/g, "O")
+    .replace(/[^0-9A-Z.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function isDmtRuleKey(value: unknown): value is DmtRuleKey {
-  return typeof value === "string" && DMT_RULE_KEYS.includes(value as DmtRuleKey);
+function normalizeRuleKey(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/Å/g, "A")
+    .replace(/Ä/g, "A")
+    .replace(/Ö/g, "O")
+    .replace(/[^0-9A-Z]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
-function getRuleConfig(ruleKey: DmtRuleKey): DmtRuleConfig {
-  const config = DMT_RULE_CONFIGS.find((rule) => rule.ruleKey === ruleKey);
-
-  if (!config) {
-    throw new Error(`Okänd DMT-regel: ${ruleKey}`);
-  }
-
-  return config;
+function isEmptyCell(value: unknown): boolean {
+  return value === null || value === undefined || String(value).trim() === "";
 }
 
-function parseDmtRules(value: unknown): DmtRequestRule[] | null {
-  if (!Array.isArray(value)) {
+function buildIsoDate(year: number, month: number, day: number): string | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
     return null;
   }
 
-  const rules: DmtRequestRule[] = [];
-
-  for (const item of value) {
-    if (!isPlainObject(item) || !isDmtRuleKey(item.ruleKey)) {
-      return null;
-    }
-
-    const percentage = Number(item.percentage);
-
-    if (!Number.isFinite(percentage) || percentage < 0) {
-      return null;
-    }
-
-    const config = getRuleConfig(item.ruleKey);
-
-    rules.push({
-      ...config,
-      percentage,
-    });
+  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
   }
 
-  const uniqueKeys = new Set(rules.map((rule) => rule.ruleKey));
-  const hasAllRules = DMT_RULE_KEYS.every((ruleKey) => uniqueKeys.has(ruleKey));
+  const date = new Date(Date.UTC(year, month - 1, day));
 
-  return hasAllRules && uniqueKeys.size === DMT_RULE_KEYS.length
-    ? rules
-    : null;
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-async function requireAdmin() {
-  const { error: userError } = await requireUser();
-  if (userError) return { supabase: null, userId: null, error: userError };
+function excelSerialDateToIso(value: number): string | null {
+  if (!Number.isFinite(value)) return null;
 
+  // Excel/Sheets lagrar datum som antal dagar sedan 1899-12-30.
+  // Bygg ISO-datum från UTC-delarna så datumet inte flyttas av serverns tidszon.
+  const utcMs = Math.round((value - 25569) * 86400 * 1000);
+  const date = new Date(utcMs);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  return buildIsoDate(
+    date.getUTCFullYear(),
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+  );
+}
+
+function dateObjectToIso(value: Date): string | null {
+  if (Number.isNaN(value.getTime())) return null;
+
+  // Date-objekt från Excel kan representera lokal midnatt. Använd lokala datumdelar
+  // i stället för toISOString(), annars kan 2026-07-01 bli 2026-06-30.
+  return buildIsoDate(
+    value.getFullYear(),
+    value.getMonth() + 1,
+    value.getDate(),
+  );
+}
+
+function parseDateCell(value: unknown): string | null {
+  if (value instanceof Date) {
+    return dateObjectToIso(value);
+  }
+
+  if (typeof value === "number") {
+    return excelSerialDateToIso(value);
+  }
+
+  const text = String(value ?? "").trim();
+
+  if (!text) return null;
+
+  const isoMatch = text.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return buildIsoDate(Number(year), Number(month), Number(day));
+  }
+
+  const slashDateMatch = text.match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);
+  if (slashDateMatch) {
+    const [, first, second, year] = slashDateMatch;
+    const firstNumber = Number(first);
+    const secondNumber = Number(second);
+
+    // DMT-filen visar datum som M/D/YYYY, t.ex. 7/1/2026 = 2026-07-01.
+    // Om första talet är större än 12 tolkar vi det som D/M/YYYY.
+    const month = firstNumber > 12 ? secondNumber : firstNumber;
+    const day = firstNumber > 12 ? firstNumber : secondNumber;
+
+    return buildIsoDate(Number(year), month, day);
+  }
+
+  const dottedOrDashedDateMatch = text.match(/\b(\d{1,2})[-.](\d{1,2})[-.](20\d{2})\b/);
+  if (dottedOrDashedDateMatch) {
+    const [, day, month, year] = dottedOrDashedDateMatch;
+    return buildIsoDate(Number(year), Number(month), Number(day));
+  }
+
+  const compactMatch = text.match(/\b(20\d{2})(\d{2})(\d{2})\b/);
+  if (compactMatch) {
+    const [, year, month, day] = compactMatch;
+    return buildIsoDate(Number(year), Number(month), Number(day));
+  }
+
+  return null;
+}
+
+function markerMatches(value: unknown, markers: string[]): boolean {
+  const normalized = normalizeLabel(value);
+
+  return markers.some((marker) => normalized.includes(normalizeLabel(marker)));
+}
+
+function findDateByMarker(rows: Matrix, markers: string[]): string | null {
+  for (const row of rows) {
+    for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
+      const cell = row[colIndex];
+
+      if (!markerMatches(cell, markers)) continue;
+
+      const dateInSameCell = parseDateCell(cell);
+      if (dateInSameCell) return dateInSameCell;
+
+      // Den uppladdade DMT-filen har datumet två kolumner till höger om DATE.FROM/DATE.TO.
+      // Fallbacks finns kvar så importer inte faller om filen exporteras med något annan spacing.
+      for (const offset of [2, 1, 3, 4, 5]) {
+        const date = parseDateCell(row[colIndex + offset]);
+        if (date) return date;
+      }
+    }
+  }
+
+  return null;
+}
+
+function parsePercentageCell(value: unknown): number | null {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return value > 0 && value <= 1 ? value * 100 : value;
+  }
+
+  const rawText = String(value ?? "").trim();
+  if (!rawText) return null;
+
+  const hasPercentSign = rawText.includes("%");
+  const normalized = rawText
+    .replace(/\s+/g, "")
+    .replace("%", "")
+    .replace(/,/g, ".");
+
+  const match = normalized.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+
+  const numericValue = Number(match[0]);
+  if (!Number.isFinite(numericValue)) return null;
+
+  if (hasPercentSign) return numericValue;
+
+  return numericValue > 0 && numericValue <= 1 ? numericValue * 100 : numericValue;
+}
+
+function findPercentageNextTo(row: unknown[], labelColumnIndex: number): number | null {
+  // I DMT-filen ligger procentsatsen direkt bredvid intervallet/rubriken.
+  const directValue = parsePercentageCell(row[labelColumnIndex + 1]);
+  if (directValue !== null) return directValue;
+
+  // Fallback för tomma mellan-celler från exporterade Excel-filer.
+  for (let offset = 2; offset <= 4; offset += 1) {
+    const candidate = row[labelColumnIndex + offset];
+    if (isEmptyCell(candidate)) continue;
+
+    const parsed = parsePercentageCell(candidate);
+    if (parsed !== null) return parsed;
+
+    break;
+  }
+
+  return null;
+}
+
+function parseKmIntervalLabel(value: unknown): { kmFrom: number; kmTo: number | null; ruleKey: string } | null {
+  const text = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[–—−]/g, "-")
+    .toUpperCase()
+    .replace(/KM/g, "")
+    .trim();
+
+  const match = text.match(/^(\d{1,4})\s*-\s*(\d{0,4})$/);
+  if (!match) return null;
+
+  const kmFrom = Number(match[1]);
+  const kmTo = match[2] ? Number(match[2]) : null;
+
+  if (!Number.isInteger(kmFrom) || kmFrom < 0) return null;
+  if (kmTo !== null && (!Number.isInteger(kmTo) || kmTo < kmFrom)) return null;
+
+  return {
+    kmFrom,
+    kmTo,
+    ruleKey: `${kmFrom}-${kmTo ?? ""}`,
+  };
+}
+
+function isFjarrPaketLabel(value: unknown): boolean {
+  const normalized = normalizeRuleKey(value);
+
+  return normalized === "FJARR_PAKET"
+    || normalized === "FJARRPAKET"
+    || normalized === "PAKETBUR_FJARR"
+    || normalized === "PAKETBUR_FJARR_PAKET";
+}
+
+function collectRulesFromRows(rows: Matrix, validFrom: string, validTo: string): DmtParsedRule[] {
+  const rules: DmtParsedRule[] = [];
+
+  for (const row of rows) {
+    for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
+      const cell = row[colIndex];
+      if (isEmptyCell(cell)) continue;
+
+      if (isFjarrPaketLabel(cell)) {
+        const percentage = findPercentageNextTo(row, colIndex);
+
+        if (percentage === null) continue;
+
+        rules.push({
+          valid_from: validFrom,
+          valid_to: validTo,
+          rule_type: "fjarr_paket",
+          rule_key: "FJARR_PAKET",
+          km_from: null,
+          km_to: null,
+          percentage,
+        });
+        continue;
+      }
+
+      const interval = parseKmIntervalLabel(cell);
+      if (!interval) continue;
+
+      const percentage = findPercentageNextTo(row, colIndex);
+      if (percentage === null) continue;
+
+      rules.push({
+        valid_from: validFrom,
+        valid_to: validTo,
+        rule_type: "km_interval",
+        rule_key: interval.ruleKey,
+        km_from: interval.kmFrom,
+        km_to: interval.kmTo,
+        percentage,
+      });
+    }
+  }
+
+  return rules;
+}
+
+function getRuleIdentity(rule: DmtParsedRule): string {
+  return [
+    rule.valid_from,
+    rule.valid_to,
+    rule.rule_type,
+    rule.rule_key,
+    rule.km_from ?? "NULL",
+    rule.km_to ?? "NULL",
+  ].join("|");
+}
+
+function deduplicateParsedRules(rules: DmtParsedRule[]): { rules: DmtParsedRule[]; skipped: number } {
+  const byIdentity = new Map<string, DmtParsedRule>();
+  let skipped = 0;
+
+  for (const rule of rules) {
+    const identity = getRuleIdentity(rule);
+
+    if (byIdentity.has(identity)) {
+      skipped += 1;
+    }
+
+    byIdentity.set(identity, rule);
+  }
+
+  return {
+    rules: [...byIdentity.values()],
+    skipped,
+  };
+}
+
+function parseDmtMatrices(sheetMatrices: Matrix[]): { rules: DmtParsedRule[]; skipped: number } {
+  const parsedRules: DmtParsedRule[] = [];
+  let skipped = 0;
+
+  for (const rows of sheetMatrices) {
+    const validFrom = findDateByMarker(rows, DATE_FROM_MARKERS);
+    const validTo = findDateByMarker(rows, DATE_TO_MARKERS);
+
+    if (!validFrom || !validTo) {
+      skipped += 1;
+      continue;
+    }
+
+    const rules = collectRulesFromRows(rows, validFrom, validTo);
+    parsedRules.push(...rules);
+  }
+
+  const deduplicated = deduplicateParsedRules(parsedRules);
+
+  return {
+    rules: deduplicated.rules,
+    skipped: skipped + deduplicated.skipped,
+  };
+}
+
+function parsePastedTextToMatrix(text: string): Matrix {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== "")
+    .map((line) => line.split("\t"));
+}
+
+async function parseXlsxFileToMatrices(file: File): Promise<Matrix[]> {
+  const XLSX = await import("xlsx");
+  const workbook = XLSX.read(await file.arrayBuffer(), {
+    type: "array",
+    cellDates: false,
+  });
+
+  return (workbook.SheetNames as string[]).map((sheetName: string): Matrix => {
+    const sheet = workbook.Sheets[sheetName];
+
+    return XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: true,
+      defval: null,
+    }) as Matrix;
+  });
+}
+
+function toDmtSettings(rows: DmtRow[]) {
+  const sortedRows = [...rows].sort((a, b) => {
+    if (a.valid_from !== b.valid_from) return b.valid_from.localeCompare(a.valid_from);
+    if (a.valid_to !== b.valid_to) return b.valid_to.localeCompare(a.valid_to);
+    return a.rule_key.localeCompare(b.rule_key);
+  });
+
+  if (sortedRows.length === 0) {
+    return {
+      validFrom: "",
+      validTo: "",
+      rules: [],
+    };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const activeRows = sortedRows.filter(
+    (row) => row.valid_from <= today && row.valid_to >= today,
+  );
+  const periodSource = activeRows.length > 0 ? activeRows : sortedRows;
+  const selected = periodSource[0];
+  const selectedRows = sortedRows.filter(
+    (row) => row.valid_from === selected.valid_from && row.valid_to === selected.valid_to,
+  );
+
+  return {
+    validFrom: selected.valid_from,
+    validTo: selected.valid_to,
+    rules: selectedRows.map((row) => ({
+      id: row.id,
+      ruleType: row.rule_type,
+      ruleKey: row.rule_key,
+      kmFrom: row.km_from,
+      kmTo: row.km_to,
+      percentage: row.percentage,
+    })),
+  };
+}
+
+async function loadDmtSettings() {
   const supabase = await getSupabaseServerClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from("addon_dmt")
+    .select("id, valid_from, valid_to, rule_type, rule_key, km_from, km_to, percentage")
+    .order("valid_from", { ascending: false })
+    .order("valid_to", { ascending: false })
+    .order("rule_type", { ascending: true })
+    .order("km_from", { ascending: true });
 
-  if (authError || !user) {
-    return {
-      supabase,
-      userId: null,
-      error: NextResponse.json(
-        { status: false, message: "Ej autentiserad" },
-        { status: 401 },
-      ),
-    };
+  if (error) {
+    throw new Error(error.message);
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("User")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (profileError) {
-    return {
-      supabase,
-      userId: user.id,
-      error: NextResponse.json(
-        {
-          status: false,
-          message:
-            "Kunde inte kontrollera adminbehörighet: " + profileError.message,
-        },
-        { status: 500 },
-      ),
-    };
-  }
-
-  if (profile?.role !== "admin") {
-    return {
-      supabase,
-      userId: user.id,
-      error: NextResponse.json(
-        { status: false, message: "Saknar behörighet" },
-        { status: 403 },
-      ),
-    };
-  }
-
-  return { supabase, userId: user.id, error: null };
+  return toDmtSettings((data ?? []) as DmtRow[]);
 }
 
-function getAddonDmtTable(supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>) {
-  return (supabase.from as unknown as (table: string) => {
-    select: (columns: string) => {
-      order: (
-        column: string,
-        options?: { ascending?: boolean },
-      ) => {
-        limit: (count: number) => Promise<{ data: unknown; error: SupabaseError | null }>;
-      };
-    };
-    delete: () => {
-      eq: (column: string, value: string) => {
-        eq: (column: string, value: string) => {
-          in: (
-            column: string,
-            values: string[],
-          ) => Promise<{ error: SupabaseError | null }>;
-        };
-      };
-    };
-    insert: (rows: DmtInsertRow[]) => Promise<{ error: SupabaseError | null }>;
-  })("addon_dmt");
+async function findExistingDmtRows(rule: DmtParsedRule): Promise<DmtRow[]> {
+  const supabase = await getSupabaseServerClient();
+  let query = supabase
+    .from("addon_dmt")
+    .select("id, valid_from, valid_to, rule_type, rule_key, km_from, km_to, percentage")
+    .eq("valid_from", rule.valid_from)
+    .eq("valid_to", rule.valid_to)
+    .eq("rule_type", rule.rule_type)
+    .eq("rule_key", rule.rule_key);
+
+  query = rule.km_from === null || rule.km_from === undefined
+    ? query.is("km_from", null)
+    : query.eq("km_from", rule.km_from);
+
+  query = rule.km_to === null || rule.km_to === undefined
+    ? query.is("km_to", null)
+    : query.eq("km_to", rule.km_to);
+
+  const { data, error } = await query.order("id", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as DmtRow[];
+}
+
+async function saveDmtRules(rules: DmtParsedRule[], initialSkipped: number, sheets: number): Promise<DmtImportSummary> {
+  const supabase = await getSupabaseServerClient();
+  let inserted = 0;
+  let updated = 0;
+  let deletedDuplicates = 0;
+
+  for (const rule of rules) {
+    const existingRows = await findExistingDmtRows(rule);
+    const [primaryRow, ...duplicateRows] = existingRows;
+
+    if (duplicateRows.length > 0) {
+      const duplicateIds = duplicateRows.map((row) => row.id);
+      const { error: deleteError } = await supabase
+        .from("addon_dmt")
+        .delete()
+        .in("id", duplicateIds);
+
+      if (deleteError) {
+        throw new Error(deleteError.message);
+      }
+
+      deletedDuplicates += duplicateRows.length;
+    }
+
+    if (primaryRow) {
+      const { error: updateError } = await supabase
+        .from("addon_dmt")
+        .update({
+          percentage: rule.percentage,
+          km_from: rule.km_from,
+          km_to: rule.km_to,
+        })
+        .eq("id", primaryRow.id);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      updated += 1;
+    } else {
+      const { error: insertError } = await supabase
+        .from("addon_dmt")
+        .insert(rule);
+
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      inserted += 1;
+    }
+  }
+
+  const periods = new Set(rules.map((rule) => `${rule.valid_from}|${rule.valid_to}`)).size;
+
+  return {
+    inserted,
+    updated,
+    skipped: initialSkipped,
+    deletedDuplicates,
+    periods,
+    sheets,
+  };
+}
+
+async function importDmtMatrices(sheetMatrices: Matrix[]) {
+  const parsed = parseDmtMatrices(sheetMatrices);
+
+  if (parsed.rules.length === 0) {
+    throw new Error(
+      "Inga DMT-rader hittades. Kontrollera att filen innehåller DATE.FROM, DATE.TO, km-intervall, FJÄRR PAKET och procent direkt bredvid.",
+    );
+  }
+
+  const summary = await saveDmtRules(
+    parsed.rules,
+    parsed.skipped,
+    sheetMatrices.length,
+  );
+  const settings = await loadDmtSettings();
+
+  return {
+    summary,
+    settings,
+  };
 }
 
 export async function GET() {
-  const { supabase, error } = await requireAdmin();
-  if (error) return error;
+  try {
+    const settings = await loadDmtSettings();
 
-  const addonDmt = getAddonDmtTable(supabase!);
+    return jsonResponse(true, "DMT-inställning hämtad.", settings);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
 
-  const { data, error: fetchError } = await addonDmt
-    .select("id, valid_from, valid_to, rule_type, rule_key, km_from, km_to, percentage")
-    .order("valid_from", { ascending: false })
-    .limit(200);
-
-  if (fetchError) {
-    return NextResponse.json(
-      {
-        status: false,
-        message: "Kunde inte hämta DMT-inställning: " + fetchError.message,
-      },
-      { status: 500 },
-    );
+    return jsonResponse(false, `Kunde inte hämta DMT-inställning: ${message}`, null, 500);
   }
-
-  const rows = Array.isArray(data) ? (data as DmtRow[]) : [];
-  const firstRow = rows[0];
-
-  if (!firstRow) {
-    return NextResponse.json({
-      status: true,
-      data: {
-        validFrom: "",
-        validTo: "",
-        rules: [],
-      },
-    });
-  }
-
-  const latestRows = rows.filter(
-    (row) =>
-      row.valid_from === firstRow.valid_from && row.valid_to === firstRow.valid_to,
-  );
-
-  return NextResponse.json({
-    status: true,
-    data: {
-      validFrom: firstRow.valid_from,
-      validTo: firstRow.valid_to,
-      rules: latestRows.map((row) => ({
-        ruleType: row.rule_type,
-        ruleKey: row.rule_key,
-        kmFrom: row.km_from,
-        kmTo: row.km_to,
-        percentage: Number(row.percentage),
-      })),
-    },
-  });
 }
 
-export async function PATCH(req: NextRequest) {
-  const { supabase, error } = await requireAdmin();
-  if (error) return error;
+export async function POST(request: Request) {
+  try {
+    const contentType = request.headers.get("content-type") ?? "";
 
-  const body = await req.json().catch(() => null);
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      const file = formData.get("file");
 
-  if (!isPlainObject(body)) {
-    return NextResponse.json(
-      { status: false, message: "Ogiltig DMT-payload." },
-      { status: 400 },
-    );
+      if (!(file instanceof File)) {
+        return jsonResponse(false, "Ingen DMT-fil skickades med requesten.", null, 400);
+      }
+
+      if (!file.name.toLowerCase().endsWith(".xlsx")) {
+        return jsonResponse(false, "DMT-importen stödjer bara .xlsx-filer.", null, 400);
+      }
+
+      const matrices = await parseXlsxFileToMatrices(file);
+      const result = await importDmtMatrices(matrices);
+
+      return jsonResponse(true, "DMT-filen importerades.", result);
+    }
+
+    if (contentType.includes("application/json")) {
+      const body = await request.json() as { pastedText?: unknown };
+      const pastedText = typeof body.pastedText === "string" ? body.pastedText : "";
+
+      if (!pastedText.trim()) {
+        return jsonResponse(false, "Ingen inklistrad DMT-data skickades med requesten.", null, 400);
+      }
+
+      const matrix = parsePastedTextToMatrix(pastedText);
+      const result = await importDmtMatrices([matrix]);
+
+      return jsonResponse(true, "Inklistrad DMT-data importerades.", result);
+    }
+
+    return jsonResponse(false, "Requesten måste vara multipart/form-data eller application/json.", null, 415);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    return jsonResponse(false, `Kunde inte importera DMT-data: ${message}`, null, 500);
   }
-
-  const validFrom = body.validFrom;
-  const validTo = body.validTo;
-  const rules = parseDmtRules(body.rules);
-
-  if (!isValidIsoDate(validFrom) || !isValidIsoDate(validTo)) {
-    return NextResponse.json(
-      {
-        status: false,
-        message: "Valid from och valid to måste anges i formatet YYYY-MM-DD.",
-      },
-      { status: 400 },
-    );
-  }
-
-  if (new Date(validTo) < new Date(validFrom)) {
-    return NextResponse.json(
-      { status: false, message: "Valid to måste vara efter eller samma som valid from." },
-      { status: 400 },
-    );
-  }
-
-  if (!rules) {
-    return NextResponse.json(
-      {
-        status: false,
-        message: "Alla DMT-rader måste skickas med en procentsats större än eller lika med 0.",
-      },
-      { status: 400 },
-    );
-  }
-
-  const rows: DmtInsertRow[] = rules.map((rule) => ({
-    valid_from: validFrom,
-    valid_to: validTo,
-    rule_type: rule.ruleType,
-    rule_key: rule.ruleKey,
-    km_from: rule.kmFrom,
-    km_to: rule.kmTo,
-    percentage: rule.percentage,
-  }));
-
-  const addonDmt = getAddonDmtTable(supabase!);
-
-  const { error: deleteError } = await addonDmt
-    .delete()
-    .eq("valid_from", validFrom)
-    .eq("valid_to", validTo)
-    .in("rule_key", [...DMT_RULE_KEYS]);
-
-  if (deleteError) {
-    return NextResponse.json(
-      {
-        status: false,
-        message: "Kunde inte ersätta tidigare DMT-rader: " + deleteError.message,
-      },
-      { status: 500 },
-    );
-  }
-
-  const { error: insertError } = await addonDmt.insert(rows);
-
-  if (insertError) {
-    return NextResponse.json(
-      {
-        status: false,
-        message: "Kunde inte spara DMT-rader: " + insertError.message,
-      },
-      { status: 500 },
-    );
-  }
-
-  return NextResponse.json({
-    status: true,
-    message: "DMT-inställning sparad",
-    data: {
-      validFrom,
-      validTo,
-      insertedRows: rows.length,
-    },
-  });
 }
