@@ -1,8 +1,13 @@
 "use client";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { useState, useEffect, useRef } from "react";
-import { addMessage, signUpProcedure, getIlogEquipages, getIlogConsignments, getCurrentlySignedInUser } from "@/lib/api";
+import { useState, useEffect, useRef, type RefObject, type FormEvent } from "react";
+import {
+  addMessage,
+  signUpProcedure,
+  getIlogEquipages,
+  getIlogConsignments,
+} from "@/lib/api";
 import { Enums, Constants, TablesUpdate } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 import { useHistoricalImport } from "./useHistoricalImport";
@@ -11,6 +16,8 @@ import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
 import PasswordInput from "../../components/PasswordInput";
 import { ConsignmentListItem, EquipageItem } from "@/lib/ilogTypes";
 import { StorageError } from "@supabase/storage-js";
+import { DEFAULT_HVO_PERCENTAGE } from "@/lib/constants";
+import { PriceAdjustmentsPopup } from "@/components/PriceAdjustmentsPopup";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 
@@ -20,7 +27,6 @@ type TrafficLeader = {
   last_name: string | null;
   email: string | null;
   role: string | null;
-  // add any other fields your User table has
 };
 
 const formatRole = (role: string | null) => {
@@ -28,6 +34,154 @@ const formatRole = (role: string | null) => {
   if (role === "traffic_leader") return "Trafikledare";
   return role ?? "—";
 };
+
+function parseHvoPercentageValue(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+
+  return DEFAULT_HVO_PERCENTAGE;
+}
+
+const DMT_RULES = [
+  {
+    key: "0-150",
+    label: "0–150 km",
+    ruleType: "km_interval",
+    kmFrom: 0,
+    kmTo: 150,
+  },
+  {
+    key: "151-250",
+    label: "151–250 km",
+    ruleType: "km_interval",
+    kmFrom: 151,
+    kmTo: 250,
+  },
+  {
+    key: "251-350",
+    label: "251–350 km",
+    ruleType: "km_interval",
+    kmFrom: 251,
+    kmTo: 350,
+  },
+  {
+    key: "351-450",
+    label: "351–450 km",
+    ruleType: "km_interval",
+    kmFrom: 351,
+    kmTo: 450,
+  },
+  {
+    key: "451-550",
+    label: "451–550 km",
+    ruleType: "km_interval",
+    kmFrom: 451,
+    kmTo: 550,
+  },
+  {
+    key: "551-650",
+    label: "551–650 km",
+    ruleType: "km_interval",
+    kmFrom: 551,
+    kmTo: 650,
+  },
+  {
+    key: "651-750",
+    label: "651–750 km",
+    ruleType: "km_interval",
+    kmFrom: 651,
+    kmTo: 750,
+  },
+  {
+    key: "751-900",
+    label: "751–900 km",
+    ruleType: "km_interval",
+    kmFrom: 751,
+    kmTo: 900,
+  },
+  {
+    key: "901-1100",
+    label: "901–1100 km",
+    ruleType: "km_interval",
+    kmFrom: 901,
+    kmTo: 1100,
+  },
+  {
+    key: "1101-",
+    label: "1101– km",
+    ruleType: "km_interval",
+    kmFrom: 1101,
+    kmTo: null,
+  },
+  {
+    key: "FJARR_PAKET",
+    label: "Fjärrpaket",
+    ruleType: "fjarr_paket",
+    kmFrom: null,
+    kmTo: null,
+  },
+] as const;
+
+type DmtRuleKey = (typeof DMT_RULES)[number]["key"];
+type DmtPercentageState = Record<DmtRuleKey, number | "">;
+
+type DmtApiRule = {
+  ruleKey?: unknown;
+  percentage?: unknown;
+};
+
+function createEmptyDmtPercentages(): DmtPercentageState {
+  return Object.fromEntries(
+    DMT_RULES.map((rule) => [rule.key, ""]),
+  ) as DmtPercentageState;
+}
+
+function isDmtRuleKey(value: unknown): value is DmtRuleKey {
+  return DMT_RULES.some((rule) => rule.key === value);
+}
+
+function formatDmtDate(value: string): string {
+  if (!value) return "Ej valt";
+
+  return new Date(value).toLocaleDateString("sv-SE");
+}
+
+function DateInputWithCalendar({
+  id,
+  label,
+  value,
+  min,
+  max,
+  inputRef,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  min?: string;
+  max?: string;
+  inputRef: RefObject<HTMLInputElement | null>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-sm font-semibold">
+        {label}
+      </label>
+      <input
+        ref={inputRef}
+        id={id}
+        type="date"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-lg border-2 border-gray-200 bg-[var(--input-text)] px-3 py-3 text-[var(--text-primary)] outline-none transition focus:border-[#75C07A] focus:ring-2 focus:ring-[#75C07A]/30"
+      />
+    </div>
+  );
+}
 
 export default function Admin() {
   const [trafficLeaders, setTrafficLeaders] = useState<TrafficLeader[]>([]);
@@ -45,6 +199,78 @@ export default function Admin() {
   const normalize = (str: string) =>
     str.toLowerCase().replace(/\s+/g, " ").trim();
 
+  const [hvoPercentage, setHvoPercentage] = useState<number | "">(
+    DEFAULT_HVO_PERCENTAGE,
+  );
+  const [isLoadingHvoPercentage, setIsLoadingHvoPercentage] = useState(true);
+  const [isSavingHvoPercentage, setIsSavingHvoPercentage] = useState(false);
+  const [hvoPercentageStatus, setHvoPercentageStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const [isDmtFormOpen, setIsDmtFormOpen] = useState(false);
+  const [dmtValidFrom, setDmtValidFrom] = useState("");
+  const [dmtValidTo, setDmtValidTo] = useState("");
+  const [dmtPercentages, setDmtPercentages] = useState<DmtPercentageState>(
+    createEmptyDmtPercentages,
+  );
+  const [isLoadingDmt, setIsLoadingDmt] = useState(true);
+  const [isSavingDmt, setIsSavingDmt] = useState(false);
+  const [dmtStatus, setDmtStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+  const dmtValidFromInputRef = useRef<HTMLInputElement>(null);
+  const dmtValidToInputRef = useRef<HTMLInputElement>(null);
+
+  async function fetchDmtSettings() {
+    setIsLoadingDmt(true);
+
+    try {
+      const response = await fetch("/api/dmt");
+      const json = await response.json();
+
+      if (!response.ok || !json.status) {
+        throw new Error(json.message || "Kunde inte hämta DMT-inställning.");
+      }
+
+      const nextPercentages = createEmptyDmtPercentages();
+      const rules = Array.isArray(json.data?.rules)
+        ? (json.data.rules as DmtApiRule[])
+        : [];
+
+      for (const rule of rules) {
+        if (!isDmtRuleKey(rule.ruleKey)) continue;
+
+        const percentage = Number(rule.percentage);
+        nextPercentages[rule.ruleKey] = Number.isFinite(percentage)
+          ? percentage
+          : "";
+      }
+
+      setDmtValidFrom(
+        typeof json.data?.validFrom === "string" ? json.data.validFrom : "",
+      );
+      setDmtValidTo(
+        typeof json.data?.validTo === "string" ? json.data.validTo : "",
+      );
+      setDmtPercentages(nextPercentages);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setDmtStatus({
+        type: "error",
+        message: `Kunde inte hämta DMT-inställning: ${message}`,
+      });
+    } finally {
+      setIsLoadingDmt(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchDmtSettings();
+  }, []);
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -60,6 +286,35 @@ export default function Admin() {
     };
 
     fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    const fetchHvoPercentage = async () => {
+      setIsLoadingHvoPercentage(true);
+      setHvoPercentageStatus(null);
+
+      try {
+        const response = await fetch("/api/hvo");
+        const json = await response.json();
+
+        if (!response.ok || !json.status) {
+          throw new Error(json.message || "Kunde inte hämta HVO-inställning.");
+        }
+
+        setHvoPercentage(parseHvoPercentageValue(json.data?.hvoPercentage));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setHvoPercentageStatus({
+          type: "error",
+          message: `Kunde inte hämta HVO-inställning: ${message}`,
+        });
+        setHvoPercentage(DEFAULT_HVO_PERCENTAGE);
+      } finally {
+        setIsLoadingHvoPercentage(false);
+      }
+    };
+
+    fetchHvoPercentage();
   }, []);
 
   const [lastImport, setLastImport] = useState<string | null>(null);
@@ -103,6 +358,7 @@ export default function Admin() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isMessagePopupOpen, setIsMessagePopupOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<TrafficLeader | null>(null);
+  const [isPriceAdjustmentsOpen, setIsPriceAdjustmentsOpen] = useState(false);
 
   const [adminMessage, setAdminMessage] = useState("");
   const [adminResponse, setAdminResponse] = useState("");
@@ -131,15 +387,22 @@ export default function Admin() {
   } = useHistoricalImport();
 
   // Temporary stuff for name translation matching
-  const [isNameTranslationPopupOpen, setIsNameTranslationPopupOpen] = useState(false);
+  const [isNameTranslationPopupOpen, setIsNameTranslationPopupOpen] =
+    useState(false);
   const [translationStartDate, setTranslationStartDate] = useState("");
   const [translationEndDate, setTranslationEndDate] = useState("");
   const [loadingTranslation, setLoadingTranslation] = useState(false);
 
   // Mellan dessa datum har vi redan gjort namnöversättning
-  const [oldestTranslationDate, setOldestTranslationDate] = useState<string | null>(null);
-  const [newestTranslationDate, setNewestTranslationDate] = useState<string | null>(null);
-  const [totalNameTranslations, setTotalNameTranslations] = useState<number | null>(null);
+  const [oldestTranslationDate, setOldestTranslationDate] = useState<
+    string | null
+  >(null);
+  const [newestTranslationDate, setNewestTranslationDate] = useState<
+    string | null
+  >(null);
+  const [totalNameTranslations, setTotalNameTranslations] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     getSupabaseBrowserClient()
@@ -148,7 +411,9 @@ export default function Admin() {
       .order("upload_date", { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data }) => { setNewestTranslationDate(data?.upload_date ?? null) });
+      .then(({ data }) => {
+        setNewestTranslationDate(data?.upload_date ?? null);
+      });
   }, []);
 
   useEffect(() => {
@@ -173,14 +438,14 @@ export default function Admin() {
   const [logs, setLogs] = useState<{ message: string; color: LogColor }[]>([]);
 
   function addLog(message: string, color: LogColor = "green") {
-    setLogs(prev => [...prev, { message, color }]);
+    setLogs((prev) => [...prev, { message, color }]);
   }
 
   const colorClass: Record<LogColor, string> = {
-  yellow: "text-yellow-400",
-  red: "text-red-400",
-  green: "text-green-400"
-};
+    yellow: "text-yellow-400",
+    red: "text-red-400",
+    green: "text-green-400",
+  };
 
   const logBottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -190,7 +455,6 @@ export default function Admin() {
   }, [logs]);
 
   async function handleReadTranslation() {
-
     if (!translationStartDate || !translationEndDate) {
       addLog(`Angiva datum saknas`, "red");
       return;
@@ -215,91 +479,103 @@ export default function Admin() {
 
       // 2. Fetch all days in batches
       const CONCURRENCY = 5;
-      const ilogData: { date: string; consignments: ConsignmentListItem[] }[] = [];
+      const ilogData: { date: string; consignments: ConsignmentListItem[] }[] =
+        [];
       const startTime = Date.now();
       let completedDays = 0;
 
       for (let i = 0; i < days.length; i += CONCURRENCY) {
         const batch = days.slice(i, i + CONCURRENCY);
-        addLog(`Arbetar med dagar ${batch}`)
+        addLog(`Arbetar med dagar ${batch}`);
         const batchResults = await Promise.all(
           batch.map(async (day) => {
             const equipageResults = await Promise.all(
               equipages.map(async (equipage) => {
                 try {
-                  const res = await getIlogConsignments(day, equipage.id, signal);
+                  const res = await getIlogConsignments(
+                    day,
+                    equipage.id,
+                    signal,
+                  );
 
                   if (res.data !== undefined && res.data.length > 0) {
                     const waybill = res.data[0].waybillnumber;
                     const asNumber = Number(waybill);
                     if (isNaN(asNumber)) {
-                      throw new Error(`Waybillnumber "${waybill}" är inte ett nummer`);
+                      throw new Error(
+                        `Waybillnumber "${waybill}" är inte ett nummer`,
+                      );
                     }
-                    if (res.data[0].customerName.includes("*") || res.data[0].senderName.includes("*") || res.data[0].receiverName.includes("*")) {
-                      addLog(`${res.data[0].customerName} :: ${res.data[0].senderName} :: ${res.data[0].receiverName} `);
+                    if (
+                      res.data[0].customerName.includes("*") ||
+                      res.data[0].senderName.includes("*") ||
+                      res.data[0].receiverName.includes("*")
+                    ) {
+                      addLog(
+                        `${res.data[0].customerName} :: ${res.data[0].senderName} :: ${res.data[0].receiverName} `,
+                      );
                     }
                   }
                   return res.data ?? [];
                 } catch (error) {
                   if ((error as Error).name === "AbortError") throw error;
-                  const msg = error instanceof Error ? error.message : String(error);
-                  addLog(`Fel för ekipage ${equipage.id} dag ${day}: ${msg}. Hoppar över.`, "red");
+                  const msg =
+                    error instanceof Error ? error.message : String(error);
+                  addLog(
+                    `Fel för ekipage ${equipage.id} dag ${day}: ${msg}. Hoppar över.`,
+                    "red",
+                  );
                   return [];
                 }
-              })
+              }),
             );
 
             // Flatten and filter out empty equipages
-            const consignments = equipageResults.flat().filter(c => c !== null);
-            addLog(`Hämtade alla sändelser för dag ${day}. Lägger in i databas`)
+            const consignments = equipageResults
+              .flat()
+              .filter((c) => c !== null);
+            addLog(
+              `Hämtade alla sändelser för dag ${day}. Lägger in i databas`,
+            );
 
             // Call RPC immediately with this day's data
-            const { data, error } = await supabase.rpc("fill_name_translation_from_consignments", {
-              in_data: consignments,
-              in_date: day,
-            });
+            const { data, error } = await supabase.rpc(
+              "fill_name_translation_from_consignments",
+              {
+                in_data: consignments,
+                in_date: day,
+              },
+            );
             if (error) throw error;
 
-            addLog(`Dag ${day} hittade ${data[0].inserted} översättningar och ignorerade ${data[0].skipped}`, "yellow");
+            addLog(
+              `Dag ${day} hittade ${data[0].inserted} översättningar och ignorerade ${data[0].skipped}`,
+              "yellow",
+            );
 
             completedDays++;
             const elapsed = (Date.now() - startTime) / 1000;
             const avgPerDay = elapsed / completedDays;
-            const remaining = Math.round(avgPerDay * (days.length - completedDays));
-            const remainingStr = remaining > 0 ? `~${remaining}s` : " — snart klar!";
+            const remaining = Math.round(
+              avgPerDay * (days.length - completedDays),
+            );
+            const remainingStr =
+              remaining > 0 ? `~${remaining}s` : " — snart klar!";
             addLog(`Estimerad tid kvar: ${remainingStr}`);
 
             return { date: day, consignments };
-          })
+          }),
         );
 
         ilogData.push(...batchResults);
       }
 
-      // 3. Upload to Supabase Storage
-      addLog("Laddar upp iLog data till Supabase...");
-      const fileName = `ilog_${translationStartDate}_${translationEndDate}_${Date.now()}.json`;
-      const blob = new Blob([JSON.stringify(ilogData)], { type: "application/json" });
-      
-      try {
-        const { error: uploadError } = await supabase.storage
-          .from("ilog-uploads")
-          .upload(fileName, blob);
-        if (uploadError) throw uploadError;
-        addLog("Uppladdning klar");
-      } catch (error) {
-        const msg = error instanceof StorageError ? error.message : String(error);
-        addLog(`Uppladdning misslyckades: ${msg}`);
-        return;
-      }
-
-      // 4. Call RPC (later)
-
     } catch (error) {
       if ((error as Error).name === "AbortError") {
         addLog("Avbruten av användaren");
-      } else { 
-        const msg = error instanceof Error ? error.message : JSON.stringify(error);
+      } else {
+        const msg =
+          error instanceof Error ? error.message : JSON.stringify(error);
         addLog("Okänt fel: " + msg);
       }
     } finally {
@@ -307,16 +583,16 @@ export default function Admin() {
     }
   }
 
-function getDaysBetween(start: string, end: string): string[] {
-  const days = [];
-  const current = new Date(start);
-  const last = new Date(end);
-  while (current <= last) {
-    days.push(current.toISOString().split("T")[0].replace(/-/g, ""));
-    current.setDate(current.getDate() + 1);
+  function getDaysBetween(start: string, end: string): string[] {
+    const days = [];
+    const current = new Date(start);
+    const last = new Date(end);
+    while (current <= last) {
+      days.push(current.toISOString().split("T")[0].replace(/-/g, ""));
+      current.setDate(current.getDate() + 1);
+    }
+    return days;
   }
-  return days;
-}
 
   const handleUpdateUser = async (user: TrafficLeader) => {
     const trimmedPassword = editPassword.trim();
@@ -399,7 +675,7 @@ function getDaysBetween(start: string, end: string): string[] {
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!adminMessage.trim()) return;
     setIsSending(true);
@@ -414,7 +690,7 @@ function getDaysBetween(start: string, end: string): string[] {
     }
   };
 
-  const handleSignup = async (e: React.FormEvent) => {
+  const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
 
     // Validate all fields are filled
@@ -463,6 +739,10 @@ function getDaysBetween(start: string, end: string): string[] {
       const defaultFilters = {
         areas: DEFAULT_AREAS,
         theme: "light",
+        hvoPercentage:
+          typeof hvoPercentage === "number"
+            ? hvoPercentage
+            : DEFAULT_HVO_PERCENTAGE,
       };
 
       // Update user profile with role, name, and preferences
@@ -498,6 +778,117 @@ function getDaysBetween(start: string, end: string): string[] {
       setIsSigningUp(false);
     }
   };
+  const handleSaveHvoPercentage = async () => {
+    const validHvoPercentage =
+      hvoPercentage === "" || hvoPercentage < 0
+        ? DEFAULT_HVO_PERCENTAGE
+        : hvoPercentage;
+
+    setIsSavingHvoPercentage(true);
+    setHvoPercentageStatus(null);
+
+    try {
+      const response = await fetch("/api/hvo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hvoPercentage: validHvoPercentage }),
+      });
+      const json = await response.json();
+
+      if (!response.ok || !json.status) {
+        throw new Error(json.message || "Kunde inte spara HVO-tillägg.");
+      }
+
+      setHvoPercentage(validHvoPercentage);
+      setHvoPercentageStatus({
+        type: "success",
+        message: "HVO-tillägg sparat för alla användare.",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setHvoPercentageStatus({
+        type: "error",
+        message: `Kunde inte spara HVO-tillägg: ${message}`,
+      });
+    } finally {
+      setIsSavingHvoPercentage(false);
+    }
+  };
+
+
+  const handleSaveDmt = async () => {
+    if (!dmtValidFrom || !dmtValidTo) {
+      setDmtStatus({
+        type: "error",
+        message: "Välj både valid from och valid to.",
+      });
+      return;
+    }
+
+    if (new Date(dmtValidTo) < new Date(dmtValidFrom)) {
+      setDmtStatus({
+        type: "error",
+        message: "Valid to måste vara samma datum eller senare än valid from.",
+      });
+      return;
+    }
+
+    const missingRule = DMT_RULES.find(
+      (rule) => dmtPercentages[rule.key] === "",
+    );
+
+    if (missingRule) {
+      setDmtStatus({
+        type: "error",
+        message: `Ange DMT-procent för ${missingRule.label}.`,
+      });
+      return;
+    }
+
+    const rules = DMT_RULES.map((rule) => ({
+      ruleType: rule.ruleType,
+      ruleKey: rule.key,
+      kmFrom: rule.kmFrom,
+      kmTo: rule.kmTo,
+      percentage: Number(dmtPercentages[rule.key]),
+    }));
+
+    setIsSavingDmt(true);
+    setDmtStatus(null);
+
+    try {
+      const response = await fetch("/api/dmt", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          validFrom: dmtValidFrom,
+          validTo: dmtValidTo,
+          rules,
+        }),
+      });
+      const json = await response.json();
+
+      if (!response.ok || !json.status) {
+        throw new Error(json.message || "Kunde inte spara DMT-tillägg.");
+      }
+
+      setDmtStatus({
+        type: "success",
+        message: "DMT-tabellen har uppdaterats.",
+      });
+      setIsDmtFormOpen(false);
+      await fetchDmtSettings();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setDmtStatus({
+        type: "error",
+        message: `Kunde inte spara DMT-tillägg: ${message}`,
+      });
+    } finally {
+      setIsSavingDmt(false);
+    }
+  };
+
   const filteredUsers = trafficLeaders.filter((u) => {
     const query = normalize(userSearch);
 
@@ -556,6 +947,12 @@ function getDaysBetween(start: string, end: string): string[] {
                 Ladda upp historisk data
               </button>
               <button
+                onClick={() => setIsPriceAdjustmentsOpen(true)}
+                className="px-4 py-2 border-2 border-[#446E30] text-[#446E30] hover:bg-[#e8f1e9] font-semibold rounded transition-colors"
+              >
+                Uppdatera prishöjningar
+              </button>
+              <button
                 onClick={() => setIsAddUserOpen(true)}
                 data-testid="signup-button"
                 className="px-4 py-2 bg-[#75C07A] hover:bg-green-800 text-[var(--text-primary)] font-semibold rounded shadow transition-colors duration-300"
@@ -575,6 +972,121 @@ function getDaysBetween(start: string, end: string): string[] {
                 Läs in namn
               </button>
             </div>
+          </div>
+
+          {/* HVO OCH DMT */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+            <section className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md h-full">
+              <div className="flex items-start justify-between gap-4 mb-4 border-b-2 border-green-500 pb-2">
+                <div>
+                  <h3 className="font-bold text-lg">HVO-tillägg</h3>
+                  <p className="text-sm text-[var(--text-secondary)] mt-1">
+                    Procentsats som läggs på kundnettot för HVO-kunder.
+                  </p>
+                </div>
+                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                  Kundstyrt
+                </span>
+              </div>
+
+              <div className="rounded-xl bg-[var(--secondary-element)] p-4 space-y-4">
+                <div>
+                  <label
+                    htmlFor="hvoPercentage"
+                    className="block text-sm font-medium mb-2"
+                  >
+                    HVO-procent (%)
+                  </label>
+                  <input
+                    id="hvoPercentage"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={hvoPercentage}
+                    disabled={isLoadingHvoPercentage || isSavingHvoPercentage}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setHvoPercentage(value === "" ? "" : Number(value));
+                      setHvoPercentageStatus(null);
+                    }}
+                    className="w-full p-3 border-2 border-gray-300 rounded-lg bg-[var(--input-text)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveHvoPercentage}
+                    disabled={isLoadingHvoPercentage || isSavingHvoPercentage}
+                    className="px-4 py-2 bg-[#446E30] hover:bg-[#365926] text-[var(--text-primary)] font-semibold rounded-lg shadow transition-colors duration-300 disabled:opacity-50"
+                  >
+                    {isSavingHvoPercentage ? "Sparar..." : "Spara HVO-tillägg"}
+                  </button>
+
+                  {hvoPercentageStatus && (
+                    <span
+                      className={`text-sm font-medium ${hvoPercentageStatus.type === "success" ? "text-green-700" : "text-red-700"}`}
+                    >
+                      {hvoPercentageStatus.message}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="bg-[var(--primary-element)] p-6 rounded-xl shadow-md h-full">
+              <div className="flex items-start justify-between gap-4 mb-4 border-b-2 border-green-500 pb-2">
+                <div>
+                  <h3 className="font-bold text-lg">DMT-tillägg</h3>
+                </div>
+                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                  Månadsvis
+                </span>
+              </div>
+
+              <div className="rounded-xl bg-[var(--secondary-element)] p-4 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-[var(--primary-element)] p-3">
+                    <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">
+                      Valid from
+                    </p>
+                    <p className="font-semibold mt-1">
+                      {isLoadingDmt ? "Laddar..." : formatDmtDate(dmtValidFrom)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-[var(--primary-element)] p-3">
+                    <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">
+                      Valid to
+                    </p>
+                    <p className="font-semibold mt-1">
+                      {isLoadingDmt ? "Laddar..." : formatDmtDate(dmtValidTo)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDmtStatus(null);
+                      setIsDmtFormOpen(true);
+                    }}
+                    disabled={isLoadingDmt}
+                    className="px-4 py-2 bg-[#446E30] hover:bg-[#365926] text-[var(--text-primary)] font-semibold rounded-lg shadow transition-colors duration-300 disabled:opacity-50"
+                  >
+                    Ändra DMT
+                  </button>
+                </div>
+
+                {dmtStatus && (
+                  <p
+                    className={`text-sm font-medium ${dmtStatus.type === "success" ? "text-green-700" : "text-red-700"}`}
+                  >
+                    {dmtStatus.message}
+                  </p>
+                )}
+              </div>
+            </section>
           </div>
 
           {/* TRAFIKLEDARLISTA */}
@@ -692,6 +1204,120 @@ function getDaysBetween(start: string, end: string): string[] {
         </div>
       </main>
 
+      {/* POPUP: ÄNDRA DMT */}
+      {isDmtFormOpen && (
+        <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
+          <div className="bg-[var(--primary-element)] rounded-2xl shadow-2xl w-full max-w-5xl max-h-[calc(100vh-2rem)] overflow-hidden text-[var(--text-primary)] flex flex-col">
+            <div className="shrink-0 flex items-start justify-between gap-4 border-b border-gray-200 p-6">
+              <div>
+                <h3 className="text-xl font-bold">Ändra DMT-tillägg</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDmtFormOpen(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--secondary-element)] hover:text-[var(--text-primary)]"
+                aria-label="Stäng DMT-formulär"
+              >
+                ✖
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <DateInputWithCalendar
+                  id="dmtValidFrom"
+                  label="Valid from"
+                  value={dmtValidFrom}
+                  max={dmtValidTo || undefined}
+                  inputRef={dmtValidFromInputRef}
+                  onChange={(value) => {
+                    setDmtValidFrom(value);
+                    setDmtStatus(null);
+                  }}
+                />
+                <DateInputWithCalendar
+                  id="dmtValidTo"
+                  label="Valid to"
+                  value={dmtValidTo}
+                  min={dmtValidFrom || undefined}
+                  inputRef={dmtValidToInputRef}
+                  onChange={(value) => {
+                    setDmtValidTo(value);
+                    setDmtStatus(null);
+                  }}
+                />
+              </div>
+
+              <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="grid grid-cols-12 bg-[var(--secondary-element)] px-4 py-3 text-sm font-bold">
+                  <div className="col-span-7 md:col-span-8">Regel</div>
+                  <div className="col-span-5 md:col-span-4">DMT-procent</div>
+                </div>
+
+                <div className="divide-y divide-gray-200">
+                  {DMT_RULES.map((rule) => (
+                    <div
+                      key={rule.key}
+                      className="grid grid-cols-12 items-center gap-3 px-4 py-3"
+                    >
+                      <div className="col-span-7 md:col-span-8">
+                        <p className="font-semibold">{rule.label}</p>
+                      </div>
+                      <div className="col-span-5 md:col-span-4 relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={dmtPercentages[rule.key]}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setDmtPercentages((current) => ({
+                              ...current,
+                              [rule.key]: value === "" ? "" : Number(value),
+                            }));
+                            setDmtStatus(null);
+                          }}
+                          className="w-full rounded-lg border-2 border-gray-200 bg-[var(--input-text)] p-3 pr-9 text-[var(--text-primary)] outline-none transition focus:border-[#75C07A] focus:ring-2 focus:ring-[#75C07A]/30"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--text-secondary)]">
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {dmtStatus && (
+                <p
+                  className={`rounded-lg p-3 text-sm font-medium ${dmtStatus.type === "success" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}
+                >
+                  {dmtStatus.message}
+                </p>
+              )}
+            </div>
+
+            <div className="shrink-0 flex flex-col sm:flex-row sm:justify-end gap-3 border-t border-gray-200 bg-[var(--primary-element)] p-4 sm:p-6">
+              <button
+                type="button"
+                onClick={() => setIsDmtFormOpen(false)}
+                className="px-4 py-2 rounded-lg border border-gray-300 font-semibold hover:bg-[var(--secondary-element)] transition-colors"
+              >
+                Avbryt
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDmt}
+                disabled={isSavingDmt}
+                className="px-5 py-2 rounded-lg bg-[#446E30] hover:bg-[#365926] text-[var(--text-primary)] font-semibold shadow transition-colors disabled:opacity-50"
+              >
+                {isSavingDmt ? "Sparar..." : "Spara DMT"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* POPUP: LÄGG TILL ANVÄNDARE */}
       {isAddUserOpen && (
         <div className="fixed inset-0 z-[120] bg-black/45 flex items-center justify-center p-4">
@@ -806,16 +1432,27 @@ function getDaysBetween(start: string, end: string): string[] {
             <div className="space-y-4">
               <p className="text-sm text-[var(--text-secondary)]">
                 Välj en .csv-fil med historiska kusk-rader. Importen kör en full
-                kontroll, och eventuella fel visas i rutan nedan.
-                Kom ihåg att spara filen med UTF-8 formattering!
+                kontroll, och eventuella fel visas i rutan nedan. Kom ihåg att
+                spara filen med UTF-8 formattering!
               </p>
               <p className="text-sm text-[var(--text-secondary)]">
                 <span>
-                  Senaste importen skedde <b>{lastImport ? new Date(lastImport).toLocaleString("sv-SE") : "Hämtar data..."}</b>
+                  Senaste importen skedde{" "}
+                  <b>
+                    {lastImport
+                      ? new Date(lastImport).toLocaleString("sv-SE")
+                      : "Hämtar data..."}
+                  </b>
                 </span>
-                <br/>
+                <br />
                 <span>
-                  och täcker sändelser med avräkningsdatum fram till <b>{lastUploadDate ? new Date(lastUploadDate).toLocaleString("sv-SE") : "Hämtar data..."}</b>.
+                  och täcker sändelser med avräkningsdatum fram till{" "}
+                  <b>
+                    {lastUploadDate
+                      ? new Date(lastUploadDate).toLocaleString("sv-SE")
+                      : "Hämtar data..."}
+                  </b>
+                  .
                 </span>
               </p>
 
@@ -1136,28 +1773,39 @@ function getDaysBetween(start: string, end: string): string[] {
             <p className="mb-1">
               KUSK-data i databasen täcker avräkningsdatumen{" "}
               <b>
-                {oldestUploadDate ? new Date(oldestUploadDate).toLocaleDateString("sv-SE") : "Hämtar data..."} </b>till{" "}
+                {oldestUploadDate
+                  ? new Date(oldestUploadDate).toLocaleDateString("sv-SE")
+                  : "Hämtar data..."}{" "}
+              </b>
+              till{" "}
               <b>
-                {lastUploadDate ? new Date(lastUploadDate).toLocaleDateString("sv-SE") : "Hämtar data..."}
+                {lastUploadDate
+                  ? new Date(lastUploadDate).toLocaleDateString("sv-SE")
+                  : "Hämtar data..."}
               </b>
             </p>
 
             <p className="mb-1">
               Namnöversättning har redan gjorts på datumen{" "}
               <b>
-                {oldestTranslationDate ? new Date(oldestTranslationDate).toLocaleDateString("sv-SE") : "Hämtar data..."} </b>till{" "}
+                {oldestTranslationDate
+                  ? new Date(oldestTranslationDate).toLocaleDateString("sv-SE")
+                  : "Hämtar data..."}{" "}
+              </b>
+              till{" "}
               <b>
-                {newestTranslationDate ? new Date(newestTranslationDate).toLocaleDateString("sv-SE") : "Hämtar data..."}
+                {newestTranslationDate
+                  ? new Date(newestTranslationDate).toLocaleDateString("sv-SE")
+                  : "Hämtar data..."}
               </b>
             </p>
 
             <p className="mb-2">
-              Det finns totalt <b>{totalNameTranslations}</b> översättningar mellan iLog och KUSK namn
+              Det finns totalt <b>{totalNameTranslations}</b> översättningar
+              mellan iLog och KUSK namn
             </p>
 
-            <p>
-              Ange datum som namnöversättningen ska ske mellan
-            </p>
+            <p>Ange datum som namnöversättningen ska ske mellan</p>
 
             <div className="grid grid-cols-2 gap-3 mb-2">
               <div className="space-y-1">
@@ -1197,7 +1845,9 @@ function getDaysBetween(start: string, end: string): string[] {
 
             <div className="mt-4">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-m text-[var(--text-secondary)]">Logg</span>
+                <span className="text-m text-[var(--text-secondary)]">
+                  Logg
+                </span>
                 <div className="flex gap-2">
                   {loadingTranslation && (
                     <button
@@ -1216,14 +1866,18 @@ function getDaysBetween(start: string, end: string): string[] {
                 </div>
               </div>
               <div className="w-full h-60 overflow-y-auto rounded-lg bg-gray-900 text-green-400 text-sm font-mono p-3 flex flex-col gap-1">
-                {logs.length === 0 
-                  ? <span className="text-gray-500">Väntar...</span>
-                  : logs.map((log, i) => (
-                    <span key={i} className={`whitespace-pre ${colorClass[log.color]}`}>
+                {logs.length === 0 ? (
+                  <span className="text-gray-500">Väntar...</span>
+                ) : (
+                  logs.map((log, i) => (
+                    <span
+                      key={i}
+                      className={`whitespace-pre ${colorClass[log.color]}`}
+                    >
                       {log.message}
                     </span>
                   ))
-                }
+                )}
                 <div ref={logBottomRef} />
               </div>
             </div>
@@ -1237,6 +1891,11 @@ function getDaysBetween(start: string, end: string): string[] {
           </div>
         </div>
       )}
+
+      <PriceAdjustmentsPopup
+        isOpen={isPriceAdjustmentsOpen}
+        onClose={() => setIsPriceAdjustmentsOpen(false)}
+      />
 
       <Footer />
     </div>

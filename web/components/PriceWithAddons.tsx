@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import type {
   ProfitabilityAddon,
 } from "../lib/api";
+import type { NavResult } from "../profitability/types";
 
 type PriceBreakdownValue = {
   step_used?: number | null;
@@ -20,6 +21,7 @@ type PriceBreakdownValue = {
   addon_total?: number | null;
   addons?: ProfitabilityAddon[] | null;
   detail?: string | null;
+  nav_ers_exklusive_tillägg?: NavResult | null;
 };
 
 type PriceWithAddonsProps = {
@@ -108,6 +110,22 @@ function getAddonLabel(
       : "Balanstillägg";
   }
 
+  if (addon.type === "tidtillagg") {
+    return "Tidstillägg";
+  }
+
+  if (addon.type === "hvotillagg") {
+    return addon.name || "HVO-tillägg";
+  }
+
+  if (addon.type === "dmttillagg") {
+    return addon.name || "DMT-tillägg";
+  }
+
+  if (addon.type === "styckegodstillagg") {
+    return addon.name || "Styckegodstillägg";
+  }
+
   return addon.name;
 }
 
@@ -160,6 +178,29 @@ export default function PriceWithAddons({
 
   const hasAddons =
     addonTotal > 0 || addons.length > 0;
+
+  const navEntries = [
+    {
+      label: "Avg. term ERS",
+      value: toNumber(
+        value.nav_ers_exklusive_tillägg?.avg_term_ers,
+      ),
+    },
+    {
+      label: "Ank. term ERS",
+      value: toNumber(
+        value.nav_ers_exklusive_tillägg?.ank_term_ers,
+      ),
+    },
+    {
+      label: "Fjärr ERS",
+      value: toNumber(
+        value.nav_ers_exklusive_tillägg?.fjarr_ers,
+      ),
+    },
+  ].filter((entry) => entry.value > 0);
+
+  const hasNavValues = navEntries.length > 0;
 
   function updateTooltipPosition() {
     const button = buttonRef.current;
@@ -334,6 +375,35 @@ export default function PriceWithAddons({
             </div>
 
             <div className="my-2 border-t border-[var(--border-primary)]" />
+
+            {hasNavValues && (
+              <>
+                <div className="mb-2 flex items-center justify-between gap-5">
+                  <span className="font-medium">
+                    NAV-fördelning
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {navEntries.map((entry) => (
+                    <div
+                      key={entry.label}
+                      className="flex items-start justify-between gap-5"
+                    >
+                      <span className="leading-5">
+                        {entry.label}
+                      </span>
+
+                      <span className="shrink-0 font-medium leading-5">
+                        {formatSek(entry.value)} kr
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="my-2 border-t border-[var(--border-primary)]" />
+              </>
+            )}
 
             <div className="space-y-1.5">
               {addons.length > 0 ? (

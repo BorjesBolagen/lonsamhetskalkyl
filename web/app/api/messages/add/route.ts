@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { getCurrentUser } from "@/lib/backend/utils";
 import { User } from "@/lib/databaseTypes";
-import { MAX_NUMBER_OF_CHARACTERS_PER_MESSAGE } from "@/lib/backend/constants";
+import { MAX_NUMBER_OF_CHARACTERS_PER_MESSAGE } from "@/lib/constants";
 import { requireAdmin } from "@/lib/authHelpers";
 
 type AddMessagePayload = {

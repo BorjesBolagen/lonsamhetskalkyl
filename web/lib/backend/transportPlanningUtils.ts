@@ -17,10 +17,8 @@ import {
   normalizeText,
   parseAreaState,
 } from "../areaLineConfig";
-import {
-  DEFAULT_MILE_COST,
-  DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-} from "./constants";
+import { DEFAULT_PROFITABILITY_REFERENCE_VALUE } from "../constants";
+import { DEFAULT_MILE_COST } from "../constants";
 
 // Linjer kompletteras med kluster för att kunna filtreras mot användarens områdesval.
 export type LineWithCluster = LineItem & {

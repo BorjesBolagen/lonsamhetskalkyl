@@ -15,7 +15,7 @@ export function InfoTooltip({
   };
 
   return (
-    <span className="relative group inline-flex items-center cursor-help">
+    <span className="relative z-[10000] isolate group inline-flex items-center cursor-help overflow-visible">
       {/* Icon */}
       <span className="text-[var(--text-secondary)] opacity-40 hover:opacity-70 transition-opacity">
         <svg
@@ -46,7 +46,7 @@ export function InfoTooltip({
           px-3 py-2
           opacity-0 group-hover:opacity-100
           transition-opacity duration-150
-          pointer-events-none z-50
+          pointer-events-none z-[10000]
           normal-case font-normal
           whitespace-pre-line
         `}

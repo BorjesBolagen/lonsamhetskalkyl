@@ -18,10 +18,8 @@ import {
 import type { EquipageItem, LineItem } from "../../lib/ilogTypes";
 import { Json } from "../../lib/supabaseServerSchema";
 import { useEffect, useMemo, useState } from "react";
-import {
-  DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-  DEFAULT_MILE_COST,
-} from "../../lib/backend/constants";
+import { DEFAULT_PROFITABILITY_REFERENCE_VALUE } from "@/lib/constants";
+import { DEFAULT_MILE_COST } from "@/lib/constants";
 import { parseMileCostReferenceValue } from "../../lib/backend/transportPlanningUtils";
 import { validatePassword } from "@/lib/validation";
 

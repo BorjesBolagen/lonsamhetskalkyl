@@ -192,13 +192,10 @@ export default function Home() {
     const id = consignment.consignmentId;
     setLoadingRows(prev => ({ ...prev, [id]: true }));
     try {
-      // Use the entire name for translation and jaro sources, but not for base
-      const useEntireName = source === "translation" || source === "jaro";
       const profitabilityValue = await calculateConsignmentProfitabilityPrice({
           ...consignment,
           customerName: chosenName,
-        },
-        useEntireName
+        }
       );
       updateEquipageInState(selectedEquipage!.id, (current) => {
         const updatedConsignments = current.consignments.map(c => {
@@ -526,12 +523,14 @@ export default function Home() {
                         ) : (
                           consignment.profitabilityValue
                             ? consignment.profitabilityValue.step_used === 0 
-                              // Om step är 0 kollar vi om vilken tabell som används
+                              // Om step är 0 kollar vi vilken tabell som används
                               ? consignment.profitabilityValue.detail?.includes("Sune")
                                 ? "Sune"
                                 : consignment.profitabilityValue.detail?.includes("Paketbur")
                                   ? "Paketbur"
-                                  : "Egen"
+                                  : consignment.profitabilityValue.detail?.includes("Styckegods")
+                                    ? "Styckegods"
+                                    : "Egenfakturerat"
                               : consignment.profitabilityValue.step_used === -1
                                 ? "-"
                                 : `${consignment.profitabilityValue.step_used}`

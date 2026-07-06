@@ -4,6 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import type {
   AddonCalculationResult,
   AddonLocationLookup,
+  CalculatedAddon,
   ProfitabilityInput,
 } from "./types";
 
@@ -21,6 +22,25 @@ type UntypedSupabaseRpc = (
   args: Record<string, unknown>,
 ) => Promise<UntypedRpcResult>;
 
+type UntypedSelectResult = {
+  data: unknown;
+  error: UntypedRpcError | null;
+};
+
+type UntypedSupabaseFrom = (
+  tableName: string,
+) => {
+  select: (columns: string) => Promise<UntypedSelectResult>;
+};
+
+type AddonTidRow = {
+  name: string | null;
+  linjerel: string | null;
+  carriers_share: number | null;
+};
+
+const TIME_ADDON_AMOUNT = 828;
+
 function normalizeOptionalText(
   value: string | null | undefined,
 ): string | null {
@@ -32,6 +52,24 @@ function normalizeOptionalText(
   return normalized.length > 0 ? normalized : null;
 }
 
+function normalizeNameKey(
+  value: string | null | undefined,
+): string {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
+
+function normalizeLineRelationKey(
+  value: string | null | undefined,
+): string {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^0-9A-ZÅÄÖ]/g, "");
+}
+
 function toFiniteNumber(
   value: unknown,
   fallback = 0,
@@ -40,6 +78,24 @@ function toFiniteNumber(
   return Number.isFinite(numericValue)
     ? numericValue
     : fallback;
+}
+
+function isAddonTidRow(
+  value: unknown,
+): value is AddonTidRow {
+  if (
+    value === null
+    || typeof value !== "object"
+    || Array.isArray(value)
+  ) {
+    return false;
+  }
+
+  return (
+    "name" in value
+    && "linjerel" in value
+    && "carriers_share" in value
+  );
 }
 
 function emptyLocationLookup(): AddonLocationLookup {
@@ -139,6 +195,67 @@ function normalizeResult(
   };
 }
 
+async function resolveTimeAddon(
+  supabase: unknown,
+  customerName: string | null,
+  lineRelation: string | null,
+): Promise<CalculatedAddon | null> {
+  const normalizedCustomerName = normalizeNameKey(customerName);
+  const normalizedLineRelation = normalizeLineRelationKey(lineRelation);
+
+  if (!normalizedCustomerName || !normalizedLineRelation) {
+    return null;
+  }
+
+  const from = (
+    supabase as { from: UntypedSupabaseFrom }
+  ).from.bind(supabase);
+
+  const { data, error } = await from("addon_tid")
+    .select("name, linjerel, carriers_share");
+
+  if (error) {
+    throw new Error(
+      `Tidstilläggen kunde inte hämtas: ${error.message}`,
+    );
+  }
+
+  const rows = Array.isArray(data)
+    ? data.filter(isAddonTidRow)
+    : [];
+
+  const match = rows.find((row) => (
+    normalizeNameKey(row.name) === normalizedCustomerName
+    && normalizeLineRelationKey(row.linjerel) === normalizedLineRelation
+  ));
+
+  if (!match) {
+    return null;
+  }
+
+  const configuredAmount = toFiniteNumber(
+    match.carriers_share,
+    TIME_ADDON_AMOUNT,
+  );
+
+  const amount = configuredAmount > 0
+    ? configuredAmount
+    : TIME_ADDON_AMOUNT;
+
+  return {
+    id: -10_000,
+    type: "tidtillagg",
+    direction: "route",
+    name: "Tidstillägg",
+    amount,
+    class: null,
+    region: null,
+    lookupSource: "name_linjerel",
+    matchedTaxPoint: null,
+    matchedCity: null,
+  };
+}
+
 /**
  * Beräknar:
  *
@@ -146,6 +263,7 @@ function normalizeResult(
  * - orttillägg till mottagaren
  * - storstadstillägg till mottagaren
  * - balanstillägg till mottagaren
+ * - tidstillägg utifrån kundnamn + linjerelation i addon_tid
  *
  * Taxepunkt används först. Postort används om taxepunkten inte hittas.
  */
@@ -172,11 +290,17 @@ export async function calculateApplicableAddons(
     normalizeOptionalText(input.receiverTaxPoint)
     ?? relationParts.receiverTaxPoint;
 
+  const customerName = normalizeOptionalText(
+    input.kundnamn,
+  );
+
+  const lineRelation = normalizeOptionalText(
+    input.linjerel,
+  );
+
   const supabase =
     await getSupabaseServerClient();
 
-  // De genererade Supabase-typerna känner inte till nya SQL-funktioner
-  // förrän databastyperna har regenererats. Därför görs just detta RPC-anrop otypat.
   const rpc =
     supabase.rpc.bind(
       supabase,
@@ -206,6 +330,12 @@ export async function calculateApplicableAddons(
 
       p_chargeable_weight:
         weight,
+
+      p_customer_name:
+        customerName,
+
+      p_linjerel:
+        lineRelation,
     },
   );
 
@@ -225,7 +355,53 @@ export async function calculateApplicableAddons(
     );
   }
 
-  return normalizeResult(
+  const normalizedResult = normalizeResult(
     data as unknown as AddonCalculationResult,
   );
+
+  const alreadyHasTimeAddon = normalizedResult.addons.some(
+    (addon) => addon.type === "tidtillagg",
+  );
+
+  if (alreadyHasTimeAddon) {
+    return normalizedResult;
+  }
+
+  let timeAddon: CalculatedAddon | null = null;
+
+  try {
+    timeAddon = await resolveTimeAddon(
+      supabase,
+      customerName,
+      lineRelation,
+    );
+  } catch (error) {
+    return {
+      ...normalizedResult,
+      warnings: [
+        ...normalizedResult.warnings,
+        {
+          code: "TIME_ADDON_LOOKUP_FAILED",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Tidstillägget kunde inte beräknas.",
+        },
+      ],
+    };
+  }
+
+  if (!timeAddon) {
+    return normalizedResult;
+  }
+
+  return {
+    ...normalizedResult,
+    addonTotal:
+      normalizedResult.addonTotal + timeAddon.amount,
+    addons: [
+      ...normalizedResult.addons,
+      timeAddon,
+    ],
+  };
 }

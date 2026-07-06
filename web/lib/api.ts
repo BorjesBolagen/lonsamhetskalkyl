@@ -4,13 +4,13 @@ import type {
 	EquipageItem,
 	LineItem,
 } from "@/lib/ilogTypes";
-import type { User, Message } from "@/lib/databaseTypes";
+import type { User } from "@/lib/databaseTypes";
 import type {
 	BasicResponse,
 	IlogResponse,
 	MessageResponse,
-	TokenResponse,
 } from "@/lib/returnTypes";
+import type { NavResult } from "@/profitability/types";
 import { Json } from "./supabaseServerSchema";
 
 type HistoricalImportResponse = {
@@ -19,6 +19,7 @@ type HistoricalImportResponse = {
 	insertedRows: number;
 	filteredOutRows: number;
 	replacedRows: number;
+	paketburRowsUpdated?: number;
 };
 
 // ============================================================
@@ -277,9 +278,9 @@ export type ProfitabilityValue = {
 
   detail?: string;
 
-  // Befintliga Jaro-fält som används i Home.
-  best_score?: number;
-  best_name?: string;
+  /////////////////// NAV beräkning
+  nav_error?: string;
+  nav_ers_exklusive_tillägg?: NavResult;
 };
 
 export type ProfitabilityResponse = {
@@ -317,11 +318,16 @@ export type ProfitabilityAddon = {
   type:
     | "orttillagg"
     | "storstadstillagg"
-    | "balanstillagg";
+    | "balanstillagg"
+    | "tidtillagg"
+    | "hvotillagg"
+    | "dmttillagg"
+    | "styckegodstillagg";
 
   direction:
     | "from"
-    | "to";
+    | "to"
+    | "route";
 
   name: string;
   amount: number;
@@ -335,6 +341,9 @@ export type ProfitabilityAddon = {
   lookupSource:
     | "taxepunkt"
     | "postort"
+    | "name"
+    | "name_linjerel"
+    | "dmt_rule"
     | "none";
 
   matchedTaxPoint: string | null;
@@ -343,8 +352,24 @@ export type ProfitabilityAddon = {
 
 
 export const calculateProfitability = async (
-    consignment: ConsignmentListItem,
+  consignment: ConsignmentListItem,
+  useEntireName = false,
 ): Promise<ProfitabilityResponse> => {
+
+    const consignmentWithLineRelation = consignment as ConsignmentListItem & {
+        linjerel?: string | null;
+        linjeRel?: string | null;
+        lineRelation?: string | null;
+        line_relation?: string | null;
+    };
+
+    const lineRelation =
+        consignmentWithLineRelation.linjerel
+        || consignmentWithLineRelation.linjeRel
+        || consignmentWithLineRelation.lineRelation
+        || consignmentWithLineRelation.line_relation
+        || consignment.zoneName
+        || "";
 
     const params = new URLSearchParams({
         consignmentId: String(consignment.consignmentId || 0),
@@ -356,6 +381,7 @@ export const calculateProfitability = async (
         destinationLocationName: consignment.destinationLocationName || "",
         weight: String(consignment.weight || 0),
         zoneName: consignment.zoneName || "",
+        linjerel: lineRelation,
         consignmentProperties: consignment.consignmentProperties || "",
         pickupLocationCity: consignment.pickupLocationCity || "",
         taxPointRelation: consignment.taxPointRelation || "",
@@ -364,6 +390,7 @@ export const calculateProfitability = async (
 		invoiceStatus: consignment.invoiceStatus || "",
         internalPrice: String(consignment.internalPrice || 0),
 		paketburar: String(consignment.paketburar || 0),
+		useEntireName: String(useEntireName),
     });
 
     const url = `/api/profitability?${params.toString()}`;

@@ -3,6 +3,7 @@ import type { Database } from '@/lib/supabaseServerSchema';
 
 // Typ för en rad som ska kunna sparas i Historical_shipment.
 export type HistoricalInsert = Database['public']['Tables']['Historical_shipment']['Insert'];
+export type PaketburPriceUpsert = Database['public']['Tables']['paketbur_prices']['Insert'];
 
 // Resultatet av CSV-parsning: en header-rad + alla data-rader.
 type ParsedCSV = {
@@ -10,7 +11,7 @@ type ParsedCSV = {
     rows: string[][];
 };
 
-// Kolumner som MÅSTE finnas i CSV för att importen ska godkännas.
+// Kolumner som MÅSTE finnas i CSV för att importen ska godkännas för trappsteg.
 const REQUIRED_HEADERS = [
     'avbgsp_id',
     'Fraktsedelsnr',
@@ -48,6 +49,7 @@ export type ImportResult = {
     rowsFound: number;
     insertedRows: number;
     filteredOutRows: number;
+    paketburRowsUpdated?: number;
 };
 
 type WeightClassInterval = {
@@ -187,10 +189,7 @@ export function normalizeNumber(value: string | undefined): number | null {
  */
 export function normalizeInteger(value: string | undefined): number | null {
     const n = normalizeNumber(value);
-    if (n === null) {
-        return null;
-    }
-
+    if (n === null) return null;
     return Number.isInteger(n) ? n : Math.round(n);
 }
 
@@ -279,6 +278,10 @@ export function parseCSV(content: string): ParsedCSV {
     return { header, rows };
 }
 
+function roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 /**
  * Processerar CSV-innehål: parsing, validering, och insert.
  * Returnerar antal rader som lästs in.
@@ -318,9 +321,21 @@ export async function processHistoricalCSV(
     }
 
     const supabaseAdmin = getSupabaseAdminClient();
-    const weightClassIntervals = await loadWeightClassIntervals(supabaseAdmin);
+    
+    const [weightClassIntervals, taxPointsResult] = await Promise.all([
+        loadWeightClassIntervals(supabaseAdmin),
+        supabaseAdmin.from('tax_point_lookup').select('postnummer, kontorsforkortning')
+    ]);
+
+    const taxPointMap = new Map<number, string>();
+    taxPointsResult.data?.forEach((tp) => {
+        if (tp.postnummer && tp.kontorsforkortning) {
+            taxPointMap.set(tp.postnummer, tp.kontorsforkortning.trim().toUpperCase());
+        }
+    });
 
     const rowsToInsert: HistoricalInsert[] = [];
+    const paketburRowsToUpsert: PaketburPriceUpsert[] = [];
     const rowErrors: string[] = [];
     const importedAt = new Date().toISOString();
     const totalRows = parsed.rows.length;
@@ -394,6 +409,31 @@ export async function processHistoricalCSV(
                 continue;
             }
 
+            // Paketburar (Kundnr: 98610009)
+            if (customerId === 98610009) {
+                const kolliRaw = getCell(row, 'Kolli');
+                const kolli = kolliRaw ? normalizeInteger(kolliRaw) : 1;
+
+                // Försök läsa 'Linjerel' direkt, annars bygg den via postnummerkartan
+                let relation = getCell(row, 'Linjerel').trim().toUpperCase();
+                if (!relation) {
+                    const fromAbbr = taxPointMap.get(senderZip);
+                    const toAbbr = taxPointMap.get(receiverZip);
+                    if (fromAbbr && toAbbr) {
+                        relation = `${fromAbbr}-${toAbbr}`;
+                    }
+                }
+
+                if (relation && kolli && kolli > 0) {
+                    const aPris = roundMoney(compExclAddon / kolli);
+                    paketburRowsToUpsert.push({
+                        relation: relation,
+                        antal_burar: kolli,
+                        pris: aPris
+                    });
+                }
+            }
+
             if (weightClass <= 20) {
                 filteredOutRows += 1;
                 continue;
@@ -455,6 +495,7 @@ export async function processHistoricalCSV(
 
     const rowsToWrite = Array.from(latestRowsByAvbgspId.values());
 
+    // Historical_shipment
     const batchSize = 500;
     const totalInsertRows = rowsToWrite.length;
     let insertedRows = 0;
@@ -468,7 +509,7 @@ export async function processHistoricalCSV(
         if (insertError) {
             throw new ImportHttpError(
                 500,
-                `Import misslyckades vid databasskrivning: ${insertError.message}`,
+                `Import misslyckades vid databasskrivning (Historical): ${insertError.message}`,
             );
         }
 
@@ -484,10 +525,33 @@ export async function processHistoricalCSV(
         }
     }
 
+    // paketbur_prices
+    if (paketburRowsToUpsert.length > 0) {
+        // Sortera ut sista raden per unik kombination av relation+antal_burar i filen
+        const latestPaketburMap = new Map<string, PaketburPriceUpsert>();
+        for (const pRow of paketburRowsToUpsert) {
+            const key = `${pRow.relation}_${pRow.antal_burar}`;
+            latestPaketburMap.set(key, pRow);
+        }
+        const paketburToWrite = Array.from(latestPaketburMap.values());
+
+        const { error: paketburError } = await supabaseAdmin
+            .from('paketbur_prices')
+            .upsert(paketburToWrite, { onConflict: 'relation,antal_burar' });
+
+        if (paketburError) {
+            throw new ImportHttpError(
+                500,
+                `Import misslyckades vid uppdatering av paketbur_prices: ${paketburError.message}`,
+            );
+        }
+    }
+
     return {
         columnsFound: parsed.header.length,
         rowsFound: parsed.rows.length,
         insertedRows,
         filteredOutRows,
+        paketburRowsUpdated: paketburRowsToUpsert.length
     };
 }

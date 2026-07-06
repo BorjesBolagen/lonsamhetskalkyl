@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { routeConsignment } from "@/profitability/service";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import type { ProfitabilityInput } from "@/profitability/types";
+
+function parseBooleanParam(value: string | null): boolean {
+  return value === "true" || value === "1";
+}
 import { requireUser } from "@/lib/authHelpers";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/supabaseServerSchema";
@@ -88,6 +93,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
 
+    const useEntireName = parseBooleanParam(searchParams.get("useEntireName"));
+
     const consignment = {
       consignmentId: Number(searchParams.get("consignmentId")) || 0,
       customerName: searchParams.get("customerName") || "",
@@ -108,6 +115,12 @@ export async function GET(req: NextRequest) {
       internalPrice: Number(searchParams.get("internalPrice")) || 0,
       paketburar: Number(searchParams.get("paketburar")) || 0,
     } as ConsignmentListItem;
+
+    const lineRelation =
+      searchParams.get("linjerel")
+      || searchParams.get("lineRelation")
+      || consignment.zoneName
+      || null;
 
     const supabase = await getSupabaseServerClient();
 
@@ -155,10 +168,11 @@ export async function GET(req: NextRequest) {
     };
 
 
-    const input = {
+    const input: ProfitabilityInput = {
       kundnamn: enrichedConsignment.customerName,
       taxPointRelation: finalTaxPointRelation,
       chargeable_weight: enrichedConsignment.weight ?? 0,
+      useEntireName,
 
       // Tilläggslogiken använder enskilda taxepunkter.
       senderTaxPoint,
@@ -167,6 +181,9 @@ export async function GET(req: NextRequest) {
       // Fallback i addons_postal om taxepunkt inte hittas.
       pickupCity: enrichedConsignment.pickupLocationCity || null,
       destinationCity: enrichedConsignment.destinationCity || null,
+
+      // Används av tidstillägg mot addon_tid.
+      linjerel: lineRelation,
     };
 
     const result = await routeConsignment(

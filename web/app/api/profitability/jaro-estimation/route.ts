@@ -13,6 +13,14 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const name = searchParams.get("name") || "";
 
+    if (!name.trim()) {
+        return NextResponse.json({
+            status: false,
+            message: "No name provided",
+            data: null
+        }, { status: 400 });
+    }
+
     const supabase = await getSupabaseServerClient();
     const { data, error } = await supabase.rpc("find_best_name_match", {
         input_name: name
@@ -23,20 +31,23 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: false, message: error.message }, { status: 500 });
     }
 
-    if (!data) {
+    if (!data || data.length === 0) {
         console.error("Jaro-estimation gave empty response");
         return NextResponse.json({
             status: false,
-            message: "No match found"
+            message: "No match found",
+            data: null
         }, { status: 404 });
     }
+
+    const bestMatch = data[0];
 
     return NextResponse.json({
         status: true,
         message: "Found best name match",
         data: {
-            best_name: data[0].best_name,
-            best_score: data[0].best_score
+            best_name: bestMatch.best_name,
+            best_score: bestMatch.best_score
         }
     });
 }
