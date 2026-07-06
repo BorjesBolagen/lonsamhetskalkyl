@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { requireUser } from "@/lib/authHelpers";
-import { DEFAULT_HVO_PERCENTAGE } from "@/lib/backend/constants";
+import { DEFAULT_HVO_PERCENTAGE } from "@/lib/constants";
 import type { Json } from "@/lib/supabaseServerSchema";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

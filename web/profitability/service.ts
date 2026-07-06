@@ -4,7 +4,7 @@ import type { AddonWarning, CalculatedAddon, ProfitabilityInput, ProfitabilityRe
 import { try_steg_1, try_steg_2, try_steg_3, try_steg_4, try_steg_5 } from "./trappsteg_steg";
 import { calculateApplicableAddons } from "./addonEngine";
 import { roundUpWeight } from "@/lib/backend/utils";
-import { DEFAULT_HVO_PERCENTAGE } from "@/lib/backend/constants";
+import { DEFAULT_HVO_PERCENTAGE } from "@/lib/constants";
 import { ConsignmentListItem } from "@/lib/ilogTypes";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { try_sune_lookup } from "./trappsteg_steg";

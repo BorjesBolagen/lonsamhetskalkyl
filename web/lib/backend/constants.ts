@@ -11,4 +11,3 @@ export const DEFAULT_MILE_COST = 100;
 
 // Profitability calculation
 export const DEFAULT_NAME_SIMILARITY_THRESHOLD = 0.9;
-export const DEFAULT_HVO_PERCENTAGE = 20;

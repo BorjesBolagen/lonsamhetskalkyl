@@ -16,7 +16,7 @@ import { DEFAULT_AREAS } from "@/lib/areaLineConfig";
 import PasswordInput from "../../components/PasswordInput";
 import { ConsignmentListItem, EquipageItem } from "@/lib/ilogTypes";
 import { StorageError } from "@supabase/storage-js";
-import { DEFAULT_HVO_PERCENTAGE } from "@/lib/backend/constants";
+import { DEFAULT_HVO_PERCENTAGE } from "@/lib/constants";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 
