@@ -34,12 +34,6 @@ export async function GET(req: NextRequest) {
       paketburar: Number(searchParams.get("paketburar")) || 0,
     } as ConsignmentListItem;
 
-    const lineRelation =
-      searchParams.get("linjerel")
-      || searchParams.get("lineRelation")
-      || consignment.zoneName
-      || null;
-
     const supabase = await getSupabaseServerClient();
 
     // Berikning (taxepunkter) + input-bygge delas med nattliga prognosjobbet.
