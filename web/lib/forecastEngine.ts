@@ -27,7 +27,7 @@ import {
   getSupabaseAdminClient,
   runWithSupabaseAdminContext,
 } from "@/lib/supabaseServer";
-import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/backend/constants";
+import { DEFAULT_NAME_SIMILARITY_THRESHOLD } from "@/lib/constants";
 import type { ConsignmentListItem, EquipageItem } from "@/lib/ilogTypes";
 
 export type DailyForecastRunSummary = {
