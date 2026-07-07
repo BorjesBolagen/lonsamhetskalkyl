@@ -140,13 +140,23 @@ export default function Navigation({
             </GuardedLink>
 
             {userRole === "admin" && (
-              <GuardedLink
-                href="/admin"
-                className={getLinkClasses(currentPage === "admin")}
-                hasUnsavedChanges={hasUnsavedChanges}
-              >
-                Admin
-              </GuardedLink>
+              <>
+                <GuardedLink
+                  href="/analytics"
+                  className={getLinkClasses(currentPage === "analytics")}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                >
+                  Analys
+                </GuardedLink>
+
+                <GuardedLink
+                  href="/admin"
+                  className={getLinkClasses(currentPage === "admin")}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                >
+                  Admin
+                </GuardedLink>
+              </>
             )}
           </div>
 
