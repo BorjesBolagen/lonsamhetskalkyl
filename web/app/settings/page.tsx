@@ -210,7 +210,40 @@ export default function Settings() {
 
       setSelectedLineIds(new Set());
     }
+    setHasUnsavedChanges(true);
+  };
 
+  const handleSelectAllVisible = () => {
+    if (vehicleSelectorMode === "equipages") {
+      setSelectedEquipageIds((current) => {
+        const next = new Set(current);
+        visibleEquipages.forEach((eq) => next.add(eq.id));
+        return next;
+      });
+    } else {
+      setSelectedLineIds((current) => {
+        const next = new Set(current);
+        visibleLines.forEach((line) => next.add(line.id));
+        return next;
+      });
+    }
+    setHasUnsavedChanges(true);
+  };
+
+  const handleDeselectAllVisible = () => {
+    if (vehicleSelectorMode === "equipages") {
+      setSelectedEquipageIds((current) => {
+        const next = new Set(current);
+        visibleEquipages.forEach((eq) => next.delete(eq.id));
+        return next;
+      });
+    } else {
+      setSelectedLineIds((current) => {
+        const next = new Set(current);
+        visibleLines.forEach((line) => next.delete(line.id));
+        return next;
+      });
+    }
     setHasUnsavedChanges(true);
   };
 
@@ -722,6 +755,22 @@ export default function Settings() {
                           placeholder="Sök lastbil eller linje..."
                           className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                         />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSelectAllVisible}
+                            className="text-sm px-3 py-1.5 rounded bg-[var(--secondary-element)] text-[var(--text-primary)] border border-[var(--border-primary)] font-bold hover:bg-[var(--text-hover)] transition-colors shadow-sm"
+                          >
+                            Markera alla
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleDeselectAllVisible}
+                            className="text-sm px-3 py-1.5 rounded bg-[var(--secondary-element)] text-[var(--text-primary)] border border-[var(--border-primary)] font-bold hover:bg-[var(--text-hover)] transition-colors shadow-sm"
+                          >
+                            Avmarkera alla
+                          </button>
+                        </div>
                         <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2 max-h-[480px] overflow-y-auto">
                           {visibleEquipages.map((equipage) => (
                             <label
@@ -775,6 +824,22 @@ export default function Settings() {
                           placeholder="Sök linje..."
                           className="w-full p-3 border-2 border-[var(--input-border)] rounded focus:outline-none focus:ring-2 focus:ring-[#7ec58a]"
                         />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSelectAllVisible}
+                            className="text-sm px-3 py-1.5 rounded bg-[var(--secondary-element)] text-[var(--text-primary)] border border-[var(--border-primary)] font-bold hover:bg-[var(--text-hover)] transition-colors shadow-sm"
+                          >
+                            Markera alla
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleDeselectAllVisible}
+                            className="text-sm px-3 py-1.5 rounded bg-[var(--secondary-element)] text-[var(--text-primary)] border border-[var(--border-primary)] font-bold hover:bg-[var(--text-hover)] transition-colors shadow-sm"
+                          >
+                            Avmarkera alla
+                          </button>
+                        </div>
                         <div className="bg-[var(--secondary-element)] rounded-lg p-4 space-y-2 max-h-[480px] overflow-y-auto">
                           {visibleLines.map((line) => (
                             <label
