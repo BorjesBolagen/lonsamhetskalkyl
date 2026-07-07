@@ -429,7 +429,8 @@ export async function processHistoricalCSV(
                     paketburRowsToUpsert.push({
                         relation: relation,
                         antal_burar: kolli,
-                        pris: aPris
+                        pris: aPris,
+                        datum: dateCompleted
                     });
                 }
             }
