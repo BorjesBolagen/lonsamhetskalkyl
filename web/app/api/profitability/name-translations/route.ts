@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const name = searchParams.get("name") || "";
 
-    if (!name) {
+    if (!name.trim()) {
         return NextResponse.json({
             status: true,
             message: "No name provided",

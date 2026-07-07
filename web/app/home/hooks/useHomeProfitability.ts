@@ -63,53 +63,42 @@ export function useHomeProfitability({
                   try {
 
                     // Fetch best name match and name translations in parallel
-                    const [bestNameResponse, translationsResponse] = await Promise.all([
-                      getBestNameMatch(consignment.customerName),
-                      getNameTranslations(consignment.customerName)
-                    ]);
-
-                    if (!bestNameResponse.status || !bestNameResponse.data) {
-                      console.warn(bestNameResponse.message);
-                      const translations =
-                        translationsResponse.status && translationsResponse.data
-                          ? translationsResponse.data.translations
-                          : [];
-
-                      const selectedNameSource: "translation" | "base" =
-                        translations.length > 0 ? "translation" : "base";
-
-                      return {
-                        ...consignment,
-                        profitabilityValue: null,
-                        translationOptions: translations,
-                        selectedNameForProfitability:
-                          translations.length > 0 ? translations[0] : consignment.customerName,
-                        selectedNameSource,
-                      };
-                    }
-
-                    const { best_name, best_score } = bestNameResponse.data!;
-                    const translations = translationsResponse.status && translationsResponse.data ? translationsResponse.data.translations : [];
                     
-                    // Determine which name to use for initial profitability calculation
-                    // Priority: 1. Translation name, 2. Jaro if over threshold, 3. Original
+                    const translationsResponse = await getNameTranslations(consignment.customerName);
+                    console.log("translationsResponse ", translationsResponse);
+                    const bestNameResponse = await getBestNameMatch(consignment.customerName);
+                    console.log("test ", bestNameResponse, translationsResponse);
+
+                    const translations =
+                      translationsResponse.status && translationsResponse.data
+                        ? translationsResponse.data.translations
+                        : [];
+
                     let selectedNameForProfitability = consignment.customerName;
                     let selectedNameSource: "translation" | "jaro" | "base" = "base";
+                    let best_name: string | undefined;
+                    let best_score: number | undefined;
 
                     if (translations.length > 0) {
-                      // Use first translation name
                       selectedNameForProfitability = translations[0];
                       selectedNameSource = "translation";
-                    } else if (best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD) {
-                      // Use jaro name if it meets threshold
-                      selectedNameForProfitability = best_name;
-                      selectedNameSource = "jaro";
                     }
-                    // Otherwise use original name (already set as default)
+
+                    if (bestNameResponse.status && bestNameResponse.data) {
+                      best_name = bestNameResponse.data.best_name;
+                      best_score = bestNameResponse.data.best_score;
+
+                      if (selectedNameSource === "base" && best_score >= DEFAULT_NAME_SIMILARITY_THRESHOLD) {
+                        selectedNameForProfitability = best_name;
+                        selectedNameSource = "jaro";
+                      }
+                    } else {
+                      console.warn(bestNameResponse.message);
+                    }
 
                     const resolvedConsignment = {
                       ...consignment,
-                      customerName: selectedNameForProfitability
+                      customerName: selectedNameForProfitability,
                     };
 
                     const profitabilityValue =
@@ -118,13 +107,14 @@ export function useHomeProfitability({
                     return {
                       ...consignment,
                       profitabilityValue,
-                      best_name: bestNameResponse.data.best_name,
-                      best_score: bestNameResponse.data.best_score,
+                      best_name,
+                      best_score,
                       translationOptions: translations,
                       selectedNameForProfitability,
                       selectedNameSource,
                     };
-                  } catch {
+                  } catch (error) {
+                    console.log("gets in here ", error);
                     return {
                       ...consignment,
                       profitabilityValue: null,

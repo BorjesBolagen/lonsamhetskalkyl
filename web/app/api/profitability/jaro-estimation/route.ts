@@ -15,10 +15,10 @@ export async function GET(req: NextRequest) {
 
     if (!name.trim()) {
         return NextResponse.json({
-            status: false,
+            status: true,
             message: "No name provided",
             data: null
-        }, { status: 400 });
+        });
     }
 
     const supabase = await getSupabaseServerClient();
