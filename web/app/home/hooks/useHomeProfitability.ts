@@ -64,10 +64,10 @@ export function useHomeProfitability({
 
                     // Fetch best name match and name translations in parallel
                     
-                    const translationsResponse = await getNameTranslations(consignment.customerName);
-                    console.log("translationsResponse ", translationsResponse);
-                    const bestNameResponse = await getBestNameMatch(consignment.customerName);
-                    console.log("test ", bestNameResponse, translationsResponse);
+                    const [bestNameResponse, translationsResponse] = await Promise.all([
+                      getBestNameMatch(consignment.customerName),
+                      getNameTranslations(consignment.customerName),
+                    ]);
 
                     const translations =
                       translationsResponse.status && translationsResponse.data
