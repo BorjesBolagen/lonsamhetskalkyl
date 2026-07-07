@@ -18,6 +18,7 @@ type PriceBreakdownValue = {
   step_used?: number | null;
   estimated_revenue?: number | null;
   base_revenue?: number | null;
+  customer_net_revenue?: number | null;
   addon_total?: number | null;
   addons?: ProfitabilityAddon[] | null;
   detail?: string | null;
@@ -32,6 +33,8 @@ type PriceWithAddonsProps = {
 type TooltipPosition = {
   left: number;
   top: number;
+  width: number;
+  maxHeight: number;
 };
 
 const TOOLTIP_WIDTH = 320;
@@ -142,6 +145,9 @@ export default function PriceWithAddons({
   const buttonRef =
     useRef<HTMLButtonElement | null>(null);
 
+  const closeTimerRef =
+    useRef<number | null>(null);
+
   const [isTooltipOpen, setIsTooltipOpen] =
     useState(false);
 
@@ -149,6 +155,8 @@ export default function PriceWithAddons({
     useState<TooltipPosition>({
       left: 0,
       top: 0,
+      width: TOOLTIP_WIDTH,
+      maxHeight: 320,
     });
 
   const estimatedRevenue =
@@ -181,19 +189,19 @@ export default function PriceWithAddons({
 
   const navEntries = [
     {
-      label: "Avg. term ERS",
+      label: "Avgående terminal",
       value: toNumber(
         value.nav_ers_exklusive_tillägg?.avg_term_ers,
       ),
     },
     {
-      label: "Ank. term ERS",
+      label: "Ankommande terminal",
       value: toNumber(
         value.nav_ers_exklusive_tillägg?.ank_term_ers,
       ),
     },
     {
-      label: "Fjärr ERS",
+      label: "Direktlastat Fjärr",
       value: toNumber(
         value.nav_ers_exklusive_tillägg?.fjarr_ers,
       ),
@@ -201,6 +209,36 @@ export default function PriceWithAddons({
   ].filter((entry) => entry.value > 0);
 
   const hasNavValues = navEntries.length > 0;
+
+  const customerNetRevenue =
+    value.customer_net_revenue !== undefined
+    && value.customer_net_revenue !== null
+      ? toNumber(value.customer_net_revenue)
+      : hasNavValues
+        ? navEntries.reduce(
+          (sum, entry) => sum + entry.value,
+          0,
+        )
+        : baseRevenue;
+
+  const firstRowRevenue = hasNavValues
+    ? customerNetRevenue
+    : baseRevenue;
+
+  const baseRevenueLabel = hasNavValues
+    ? "Kundnetto exkl. tillägg"
+    : "Pris utan tillägg";
+
+  const totalRevenueLabel = hasNavValues
+    ? "Summa totala intäkter"
+    : "Pris inklusive tillägg";
+
+  function clearCloseTimer() {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
 
   function updateTooltipPosition() {
     const button = buttonRef.current;
@@ -212,36 +250,56 @@ export default function PriceWithAddons({
     const rect =
       button.getBoundingClientRect();
 
+    const width = Math.min(
+      TOOLTIP_WIDTH,
+      window.innerWidth - TOOLTIP_MARGIN * 2,
+    );
+
     let left =
       rect.right + TOOLTIP_MARGIN;
 
     if (
-      left + TOOLTIP_WIDTH
+      left + width
       > window.innerWidth - TOOLTIP_MARGIN
     ) {
       left =
         rect.left
-        - TOOLTIP_WIDTH
+        - width
         - TOOLTIP_MARGIN;
     }
 
     left = Math.max(
       TOOLTIP_MARGIN,
-      left,
+      Math.min(
+        left,
+        window.innerWidth - width - TOOLTIP_MARGIN,
+      ),
     );
 
     const estimatedHeight =
-      140 + Math.max(addons.length, 1) * 28;
+      150
+      + (hasNavValues ? navEntries.length * 28 + 48 : 0)
+      + Math.max(addons.length, 1) * 28;
+
+    const viewportMaxHeight = Math.max(
+      160,
+      window.innerHeight - TOOLTIP_MARGIN * 2,
+    );
+
+    const renderedHeight = Math.min(
+      estimatedHeight,
+      viewportMaxHeight,
+    );
 
     let top = rect.top;
 
     if (
-      top + estimatedHeight
+      top + renderedHeight
       > window.innerHeight - TOOLTIP_MARGIN
     ) {
       top =
         window.innerHeight
-        - estimatedHeight
+        - renderedHeight
         - TOOLTIP_MARGIN;
     }
 
@@ -250,20 +308,48 @@ export default function PriceWithAddons({
       top,
     );
 
+    const maxHeight = Math.max(
+      160,
+      window.innerHeight - top - TOOLTIP_MARGIN,
+    );
+
     setTooltipPosition({
       left,
       top,
+      width,
+      maxHeight,
     });
   }
 
   function openTooltip() {
+    clearCloseTimer();
     updateTooltipPosition();
     setIsTooltipOpen(true);
   }
 
   function closeTooltip() {
+    clearCloseTimer();
     setIsTooltipOpen(false);
   }
+
+  function scheduleCloseTooltip() {
+    clearCloseTimer();
+
+    closeTimerRef.current = window.setTimeout(
+      () => {
+        setIsTooltipOpen(false);
+        closeTimerRef.current = null;
+      },
+      120,
+    );
+  }
+
+
+  useEffect(() => {
+    return () => {
+      clearCloseTimer();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isTooltipOpen) {
@@ -320,7 +406,7 @@ export default function PriceWithAddons({
             : undefined
         }
         onMouseEnter={openTooltip}
-        onMouseLeave={closeTooltip}
+        onMouseLeave={scheduleCloseTooltip}
         onFocus={openTooltip}
         onBlur={closeTooltip}
         className="
@@ -350,10 +436,11 @@ export default function PriceWithAddons({
             style={{
               left: tooltipPosition.left,
               top: tooltipPosition.top,
-              width: TOOLTIP_WIDTH,
+              width: tooltipPosition.width,
+              maxHeight: tooltipPosition.maxHeight,
             }}
             className="
-              pointer-events-none
+              pointer-events-auto
               fixed z-[9999]
               rounded-xl
               border border-[var(--border-primary)]
@@ -362,15 +449,19 @@ export default function PriceWithAddons({
               text-left text-xs
               text-[var(--text-primary)]
               shadow-xl
+              overflow-y-auto
+              overscroll-contain
             "
+            onMouseEnter={openTooltip}
+            onMouseLeave={scheduleCloseTooltip}
           >
             <div className="flex items-center justify-between gap-5">
               <span className="font-medium">
-                Pris utan tillägg
+                {baseRevenueLabel}
               </span>
 
               <span className="shrink-0 font-semibold">
-                {formatSek(baseRevenue)} kr
+                {formatSek(firstRowRevenue)} kr
               </span>
             </div>
 
@@ -449,7 +540,7 @@ export default function PriceWithAddons({
 
             <div className="flex items-center justify-between gap-5">
               <span className="font-semibold">
-                Pris inklusive tillägg
+                {totalRevenueLabel}
               </span>
 
               <span className="shrink-0 font-bold">

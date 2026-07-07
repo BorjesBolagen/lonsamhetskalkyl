@@ -4,13 +4,13 @@ import type {
 	EquipageItem,
 	LineItem,
 } from "@/lib/ilogTypes";
-import type { User } from "@/lib/databaseTypes";
+import type { User, Message } from "@/lib/databaseTypes";
 import type {
 	BasicResponse,
 	IlogResponse,
 	MessageResponse,
+	TokenResponse,
 } from "@/lib/returnTypes";
-import type { NavResult } from "@/profitability/types";
 import { Json } from "./supabaseServerSchema";
 
 type HistoricalImportResponse = {
@@ -278,9 +278,9 @@ export type ProfitabilityValue = {
 
   detail?: string;
 
-  /////////////////// NAV beräkning
-  nav_error?: string;
-  nav_ers_exklusive_tillägg?: NavResult;
+  // Befintliga Jaro-fält som används i Home.
+  best_score?: number;
+  best_name?: string;
 };
 
 export type ProfitabilityResponse = {
@@ -424,6 +424,99 @@ export const getBestNameMatch = async (name: string): Promise<BasicResponse<Name
 
 	return (await response.json()) as BasicResponse<NameMatchResponse>;
 }
+
+
+// ============================================================
+// DMT settings
+// ============================================================
+
+export type DmtSettingsRule = {
+  id?: number | null;
+  ruleType: string;
+  ruleKey: string;
+  kmFrom: number | null;
+  kmTo: number | null;
+  percentage: number;
+};
+
+export type DmtSettingsData = {
+  validFrom: string;
+  validTo: string;
+  rules: DmtSettingsRule[];
+};
+
+export type DmtImportSummary = {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  deletedDuplicates?: number;
+  periods: number;
+  sheets: number;
+};
+
+export type DmtImportResult = {
+  summary: DmtImportSummary;
+  settings: DmtSettingsData;
+};
+
+function getDmtErrorMessage(json: unknown, fallback: string): string {
+  if (
+    json
+    && typeof json === "object"
+    && "message" in json
+    && typeof (json as { message?: unknown }).message === "string"
+  ) {
+    return (json as { message: string }).message;
+  }
+
+  return fallback;
+}
+
+export const getDmtSettings = async (): Promise<DmtSettingsData> => {
+  const response = await fetch("/api/dmt", {
+    method: "GET",
+    cache: "no-store",
+  });
+  const json = await response.json();
+
+  if (!response.ok || !json.status) {
+    throw new Error(getDmtErrorMessage(json, "Kunde inte hämta DMT-inställning."));
+  }
+
+  return json.data as DmtSettingsData;
+};
+
+export const uploadDmtSettingsFile = async (file: File): Promise<DmtImportResult> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch("/api/dmt", {
+    method: "POST",
+    body: formData,
+  });
+  const json = await response.json();
+
+  if (!response.ok || !json.status) {
+    throw new Error(getDmtErrorMessage(json, "Kunde inte importera DMT-filen."));
+  }
+
+  return json.data as DmtImportResult;
+};
+
+export const importDmtSettingsText = async (pastedText: string): Promise<DmtImportResult> => {
+  const response = await fetch("/api/dmt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pastedText }),
+  });
+  const json = await response.json();
+
+  if (!response.ok || !json.status) {
+    throw new Error(getDmtErrorMessage(json, "Kunde inte importera inklistrad DMT-data."));
+  }
+
+  return json.data as DmtImportResult;
+};
 
 // ============================================================
 // Historical import

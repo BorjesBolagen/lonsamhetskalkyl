@@ -545,16 +545,19 @@ export type Database = {
           antal_burar: number
           pris: number | null
           relation: string
+          datum: string | null
         }
         Insert: {
           antal_burar: number
           pris?: number | null
           relation: string
+          datum?: string | null
         }
         Update: {
           antal_burar?: number
           pris?: number | null
           relation?: string
+          datum?: string | null
         }
         Relationships: []
       }

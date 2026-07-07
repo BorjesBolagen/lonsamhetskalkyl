@@ -337,6 +337,10 @@ function formatPercentage(value: number): string {
   ).format(value);
 }
 
+function getBaseRevenueValue(result: ProfitabilityResult): number {
+  return roundMoney(result.base_revenue ?? result.estimated_revenue);
+}
+
 
 type DmtMode = "distance" | "fjarr_paket" | "none";
 
@@ -344,6 +348,9 @@ type AddonApplicationOptions = {
   includeLocationAndCustomerAddons?: boolean;
   includeHvoAddon?: boolean;
   dmtMode?: DmtMode;
+  addonBaseRevenue?: number;
+  dmtBaseRevenue?: number;
+  resultBaseRevenue?: number;
 };
 
 type CalculateProfitabilityOptions = {
@@ -628,7 +635,7 @@ async function resolveDmtAddon(
     .from("addon_dmt" as any)
     .select("id, valid_from, valid_to, rule_type, rule_key, km_from, km_to, percentage")
     .order("valid_from", { ascending: false })
-    .limit(200);
+    .limit(1_000);
 
   if (error) {
     throw new Error(`DMT-inställningen kunde inte hämtas: ${error.message}`);
@@ -783,8 +790,15 @@ async function applyAddons(
   baseResult: ProfitabilityResult,
   options: AddonApplicationOptions = {},
 ): Promise<ProfitabilityResult> {
-  const baseRevenue = roundMoney(
-    baseResult.base_revenue ?? baseResult.estimated_revenue,
+  const sourceBaseRevenue = getBaseRevenueValue(baseResult);
+  const addonBaseRevenue = roundMoney(
+    options.addonBaseRevenue ?? sourceBaseRevenue,
+  );
+  const dmtBaseRevenue = roundMoney(
+    options.dmtBaseRevenue ?? addonBaseRevenue,
+  );
+  const resultBaseRevenue = roundMoney(
+    options.resultBaseRevenue ?? sourceBaseRevenue,
   );
 
   const addons: CalculatedAddon[] = Array.isArray(baseResult.addons)
@@ -830,7 +844,7 @@ async function applyAddons(
       const hasHvoAddon = addons.some((addon) => addon.type === "hvotillagg");
       const hvoAddon = hasHvoAddon
         ? null
-        : await resolveHvoAddon(input, baseRevenue);
+        : await resolveHvoAddon(input, addonBaseRevenue);
 
       if (hvoAddon) {
         addons.push(hvoAddon);
@@ -856,7 +870,7 @@ async function applyAddons(
       const hasDmtAddon = addons.some((addon) => addon.type === "dmttillagg");
       const dmtAddon = hasDmtAddon
         ? null
-        : await resolveDmtAddon(input, baseRevenue, dmtMode);
+        : await resolveDmtAddon(input, dmtBaseRevenue, dmtMode);
 
       if (dmtAddon) {
         addons.push(dmtAddon);
@@ -886,9 +900,9 @@ async function applyAddons(
 
   return {
     ...baseResult,
-    base_revenue: baseRevenue,
+    base_revenue: resultBaseRevenue,
     addon_total: addonTotal,
-    estimated_revenue: roundMoney(baseRevenue + addonTotal),
+    estimated_revenue: roundMoney(resultBaseRevenue + addonTotal),
     addons,
     addon_warnings: addonWarnings,
   };
@@ -981,13 +995,22 @@ async function applyNavAdjustments(
   const sum_justerad = justerad_avg_term + justerad_ank_term + justerad_fjarr;
   const sum_generell = generell_avg_term + generell_ank_term + generell_fjarr;
 
+  if (!Number.isFinite(sum_generell) || sum_generell <= 0) {
+    return {
+      ...currentResult,
+      nav_error: "NAV-fördelningen kunde inte beräknas eftersom generell summa är 0.",
+      nav_ers_exklusive_tillägg: undefined
+    };
+  }
+
   const andel_avg_term = generell_avg_term / sum_generell;
   const andel_ank_term = generell_ank_term / sum_generell;
   const andel_fjarr = generell_fjarr / sum_generell;
 
   // Räkna ut fördelningsnetto:
     // Skillnad mellan sum(justerad) och total kundnetto fördelas enligt andel ovan
-  const gap = (currentResult.addon_warnings ? currentResult.estimated_revenue : currentResult.base_revenue!) - sum_justerad;
+  const baseRevenue = getBaseRevenueValue(currentResult);
+  const gap = baseRevenue - sum_justerad;
   const fordelningsnetto_avg_term = gap * andel_avg_term;
   const fordelningsnetto_ank_term = gap * andel_ank_term;
   const fordelningsnetto_fjarr = gap * andel_fjarr;
@@ -1086,9 +1109,35 @@ export async function calculateProfitability(
     return baseResult;
   }
 
-  const addonResult = await applyAddons(input, baseResult);
-  const navResults = await applyNavAdjustments(input, addonResult, weight_plus_one);
-  return navResults;
+  const customerNetRevenue = getBaseRevenueValue(baseResult);
+  const baseResultWithCustomerNet: ProfitabilityResult = {
+    ...baseResult,
+    base_revenue: customerNetRevenue,
+    estimated_revenue: customerNetRevenue,
+  };
+
+  const navResult = await applyNavAdjustments(
+    input,
+    baseResultWithCustomerNet,
+    weight_plus_one,
+  );
+
+  const directLoadedFjarrRevenue = navResult.nav_ers_exklusive_tillägg?.fjarr_ers
+    ?? customerNetRevenue;
+
+  return await applyAddons(
+    input,
+    {
+      ...navResult,
+      customer_net_revenue: customerNetRevenue,
+    },
+    {
+      ...addonOptions,
+      addonBaseRevenue: customerNetRevenue,
+      dmtBaseRevenue: directLoadedFjarrRevenue,
+      resultBaseRevenue: directLoadedFjarrRevenue,
+    },
+  );
 }
 
 export function normalizeText(value: string): string {

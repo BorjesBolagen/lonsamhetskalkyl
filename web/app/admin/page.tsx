@@ -1,12 +1,16 @@
 "use client";
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { useState, useEffect, useRef, type RefObject, type FormEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent, type FormEvent } from "react";
 import {
   addMessage,
   signUpProcedure,
   getIlogEquipages,
   getIlogConsignments,
+  getDmtSettings,
+  uploadDmtSettingsFile,
+  importDmtSettingsText,
+  type DmtImportSummary,
 } from "@/lib/api";
 import { Enums, Constants, TablesUpdate } from "@/lib/supabaseServerSchema";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
@@ -43,144 +47,10 @@ function parseHvoPercentageValue(value: unknown): number {
   return DEFAULT_HVO_PERCENTAGE;
 }
 
-const DMT_RULES = [
-  {
-    key: "0-150",
-    label: "0–150 km",
-    ruleType: "km_interval",
-    kmFrom: 0,
-    kmTo: 150,
-  },
-  {
-    key: "151-250",
-    label: "151–250 km",
-    ruleType: "km_interval",
-    kmFrom: 151,
-    kmTo: 250,
-  },
-  {
-    key: "251-350",
-    label: "251–350 km",
-    ruleType: "km_interval",
-    kmFrom: 251,
-    kmTo: 350,
-  },
-  {
-    key: "351-450",
-    label: "351–450 km",
-    ruleType: "km_interval",
-    kmFrom: 351,
-    kmTo: 450,
-  },
-  {
-    key: "451-550",
-    label: "451–550 km",
-    ruleType: "km_interval",
-    kmFrom: 451,
-    kmTo: 550,
-  },
-  {
-    key: "551-650",
-    label: "551–650 km",
-    ruleType: "km_interval",
-    kmFrom: 551,
-    kmTo: 650,
-  },
-  {
-    key: "651-750",
-    label: "651–750 km",
-    ruleType: "km_interval",
-    kmFrom: 651,
-    kmTo: 750,
-  },
-  {
-    key: "751-900",
-    label: "751–900 km",
-    ruleType: "km_interval",
-    kmFrom: 751,
-    kmTo: 900,
-  },
-  {
-    key: "901-1100",
-    label: "901–1100 km",
-    ruleType: "km_interval",
-    kmFrom: 901,
-    kmTo: 1100,
-  },
-  {
-    key: "1101-",
-    label: "1101– km",
-    ruleType: "km_interval",
-    kmFrom: 1101,
-    kmTo: null,
-  },
-  {
-    key: "FJARR_PAKET",
-    label: "Fjärrpaket",
-    ruleType: "fjarr_paket",
-    kmFrom: null,
-    kmTo: null,
-  },
-] as const;
-
-type DmtRuleKey = (typeof DMT_RULES)[number]["key"];
-type DmtPercentageState = Record<DmtRuleKey, number | "">;
-
-type DmtApiRule = {
-  ruleKey?: unknown;
-  percentage?: unknown;
-};
-
-function createEmptyDmtPercentages(): DmtPercentageState {
-  return Object.fromEntries(
-    DMT_RULES.map((rule) => [rule.key, ""]),
-  ) as DmtPercentageState;
-}
-
-function isDmtRuleKey(value: unknown): value is DmtRuleKey {
-  return DMT_RULES.some((rule) => rule.key === value);
-}
-
 function formatDmtDate(value: string): string {
   if (!value) return "Ej valt";
 
   return new Date(value).toLocaleDateString("sv-SE");
-}
-
-function DateInputWithCalendar({
-  id,
-  label,
-  value,
-  min,
-  max,
-  inputRef,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  min?: string;
-  max?: string;
-  inputRef: RefObject<HTMLInputElement | null>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-sm font-semibold">
-        {label}
-      </label>
-      <input
-        ref={inputRef}
-        id={id}
-        type="date"
-        value={value}
-        min={min}
-        max={max}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-lg border-2 border-gray-200 bg-[var(--input-text)] px-3 py-3 text-[var(--text-primary)] outline-none transition focus:border-[#75C07A] focus:ring-2 focus:ring-[#75C07A]/30"
-      />
-    </div>
-  );
 }
 
 export default function Admin() {
@@ -212,50 +82,26 @@ export default function Admin() {
   const [isDmtFormOpen, setIsDmtFormOpen] = useState(false);
   const [dmtValidFrom, setDmtValidFrom] = useState("");
   const [dmtValidTo, setDmtValidTo] = useState("");
-  const [dmtPercentages, setDmtPercentages] = useState<DmtPercentageState>(
-    createEmptyDmtPercentages,
-  );
   const [isLoadingDmt, setIsLoadingDmt] = useState(true);
-  const [isSavingDmt, setIsSavingDmt] = useState(false);
   const [dmtStatus, setDmtStatus] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
-  const dmtValidFromInputRef = useRef<HTMLInputElement>(null);
-  const dmtValidToInputRef = useRef<HTMLInputElement>(null);
+  const [dmtUploadFile, setDmtUploadFile] = useState<File | null>(null);
+  const [dmtPastedText, setDmtPastedText] = useState("");
+  const [dmtUploadSummary, setDmtUploadSummary] = useState<DmtImportSummary | null>(null);
+  const [isUploadingDmtFile, setIsUploadingDmtFile] = useState(false);
+  const [isImportingDmtText, setIsImportingDmtText] = useState(false);
+  const dmtFileInputRef = useRef<HTMLInputElement>(null);
 
   async function fetchDmtSettings() {
     setIsLoadingDmt(true);
 
     try {
-      const response = await fetch("/api/dmt");
-      const json = await response.json();
+      const settings = await getDmtSettings();
 
-      if (!response.ok || !json.status) {
-        throw new Error(json.message || "Kunde inte hämta DMT-inställning.");
-      }
-
-      const nextPercentages = createEmptyDmtPercentages();
-      const rules = Array.isArray(json.data?.rules)
-        ? (json.data.rules as DmtApiRule[])
-        : [];
-
-      for (const rule of rules) {
-        if (!isDmtRuleKey(rule.ruleKey)) continue;
-
-        const percentage = Number(rule.percentage);
-        nextPercentages[rule.ruleKey] = Number.isFinite(percentage)
-          ? percentage
-          : "";
-      }
-
-      setDmtValidFrom(
-        typeof json.data?.validFrom === "string" ? json.data.validFrom : "",
-      );
-      setDmtValidTo(
-        typeof json.data?.validTo === "string" ? json.data.validTo : "",
-      );
-      setDmtPercentages(nextPercentages);
+      setDmtValidFrom(settings.validFrom || "");
+      setDmtValidTo(settings.validTo || "");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setDmtStatus({
@@ -266,6 +112,7 @@ export default function Admin() {
       setIsLoadingDmt(false);
     }
   }
+
 
   useEffect(() => {
     fetchDmtSettings();
@@ -815,79 +662,104 @@ export default function Admin() {
     }
   };
 
+  const clearDmtFileInput = () => {
+    setDmtUploadFile(null);
 
-  const handleSaveDmt = async () => {
-    if (!dmtValidFrom || !dmtValidTo) {
-      setDmtStatus({
-        type: "error",
-        message: "Välj både valid from och valid to.",
-      });
-      return;
+    if (dmtFileInputRef.current) {
+      dmtFileInputRef.current.value = "";
     }
+  };
 
-    if (new Date(dmtValidTo) < new Date(dmtValidFrom)) {
-      setDmtStatus({
-        type: "error",
-        message: "Valid to måste vara samma datum eller senare än valid from.",
-      });
-      return;
-    }
+  const handleDmtFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
 
-    const missingRule = DMT_RULES.find(
-      (rule) => dmtPercentages[rule.key] === "",
-    );
-
-    if (missingRule) {
-      setDmtStatus({
-        type: "error",
-        message: `Ange DMT-procent för ${missingRule.label}.`,
-      });
-      return;
-    }
-
-    const rules = DMT_RULES.map((rule) => ({
-      ruleType: rule.ruleType,
-      ruleKey: rule.key,
-      kmFrom: rule.kmFrom,
-      kmTo: rule.kmTo,
-      percentage: Number(dmtPercentages[rule.key]),
-    }));
-
-    setIsSavingDmt(true);
+    setDmtUploadFile(file);
+    setDmtUploadSummary(null);
     setDmtStatus(null);
+  };
+
+  const handleUploadDmtFile = async () => {
+    if (!dmtUploadFile) {
+      setDmtStatus({
+        type: "error",
+        message: "Välj en DMT-fil i .xlsx-format först.",
+      });
+      return;
+    }
+
+    if (!dmtUploadFile.name.toLowerCase().endsWith(".xlsx")) {
+      setDmtStatus({
+        type: "error",
+        message: "DMT-importen stödjer bara .xlsx-filer.",
+      });
+      return;
+    }
+
+    setIsUploadingDmtFile(true);
+    setDmtStatus(null);
+    setDmtUploadSummary(null);
 
     try {
-      const response = await fetch("/api/dmt", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          validFrom: dmtValidFrom,
-          validTo: dmtValidTo,
-          rules,
-        }),
-      });
-      const json = await response.json();
+      const result = await uploadDmtSettingsFile(dmtUploadFile);
+      const summary = result.summary ?? null;
 
-      if (!response.ok || !json.status) {
-        throw new Error(json.message || "Kunde inte spara DMT-tillägg.");
-      }
-
+      setDmtUploadSummary(summary);
       setDmtStatus({
         type: "success",
-        message: "DMT-tabellen har uppdaterats.",
+        message: "DMT-importen är klar.",
       });
-      setIsDmtFormOpen(false);
+      clearDmtFileInput();
+      setDmtPastedText("");
+
       await fetchDmtSettings();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setDmtStatus({
         type: "error",
-        message: `Kunde inte spara DMT-tillägg: ${message}`,
+        message: `Kunde inte importera DMT-filen: ${message}`,
       });
     } finally {
-      setIsSavingDmt(false);
+      setIsUploadingDmtFile(false);
     }
   };
+
+  const handleImportPastedDmtText = async () => {
+    if (!dmtPastedText.trim()) {
+      setDmtStatus({
+        type: "error",
+        message: "Klistra in DMT-data från Excel först.",
+      });
+      return;
+    }
+
+    setIsImportingDmtText(true);
+    setDmtStatus(null);
+    setDmtUploadSummary(null);
+
+    try {
+      const result = await importDmtSettingsText(dmtPastedText);
+      const summary = result.summary ?? null;
+
+      setDmtUploadSummary(summary);
+      setDmtStatus({
+        type: "success",
+        message: "DMT-importen är klar.",
+      });
+      setDmtPastedText("");
+      clearDmtFileInput();
+
+      await fetchDmtSettings();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setDmtStatus({
+        type: "error",
+        message: `Kunde inte importera inklistrad DMT-data: ${message}`,
+      });
+    } finally {
+      setIsImportingDmtText(false);
+    }
+  };
+
 
   const filteredUsers = trafficLeaders.filter((u) => {
     const query = normalize(userSearch);
@@ -1048,7 +920,7 @@ export default function Admin() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="rounded-lg bg-[var(--primary-element)] p-3">
                     <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">
-                      Valid from
+                      Giltig från
                     </p>
                     <p className="font-semibold mt-1">
                       {isLoadingDmt ? "Laddar..." : formatDmtDate(dmtValidFrom)}
@@ -1056,7 +928,7 @@ export default function Admin() {
                   </div>
                   <div className="rounded-lg bg-[var(--primary-element)] p-3">
                     <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">
-                      Valid to
+                      Giltig till
                     </p>
                     <p className="font-semibold mt-1">
                       {isLoadingDmt ? "Laddar..." : formatDmtDate(dmtValidTo)}
@@ -1069,12 +941,15 @@ export default function Admin() {
                     type="button"
                     onClick={() => {
                       setDmtStatus(null);
+                      setDmtUploadSummary(null);
+                      setDmtPastedText("");
+                      clearDmtFileInput();
                       setIsDmtFormOpen(true);
                     }}
                     disabled={isLoadingDmt}
                     className="px-4 py-2 bg-[#446E30] hover:bg-[#365926] text-[var(--text-primary)] font-semibold rounded-lg shadow transition-colors duration-300 disabled:opacity-50"
                   >
-                    Ändra DMT
+                    Importera DMT
                   </button>
                 </div>
 
@@ -1210,7 +1085,7 @@ export default function Admin() {
           <div className="bg-[var(--primary-element)] rounded-2xl shadow-2xl w-full max-w-5xl max-h-[calc(100vh-2rem)] overflow-hidden text-[var(--text-primary)] flex flex-col">
             <div className="shrink-0 flex items-start justify-between gap-4 border-b border-gray-200 p-6">
               <div>
-                <h3 className="text-xl font-bold">Ändra DMT-tillägg</h3>
+                <h3 className="text-xl font-bold">Importera DMT-tillägg</h3>
               </div>
               <button
                 type="button"
@@ -1223,70 +1098,96 @@ export default function Admin() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <DateInputWithCalendar
-                  id="dmtValidFrom"
-                  label="Valid from"
-                  value={dmtValidFrom}
-                  max={dmtValidTo || undefined}
-                  inputRef={dmtValidFromInputRef}
-                  onChange={(value) => {
-                    setDmtValidFrom(value);
-                    setDmtStatus(null);
-                  }}
-                />
-                <DateInputWithCalendar
-                  id="dmtValidTo"
-                  label="Valid to"
-                  value={dmtValidTo}
-                  min={dmtValidFrom || undefined}
-                  inputRef={dmtValidToInputRef}
-                  onChange={(value) => {
-                    setDmtValidTo(value);
-                    setDmtStatus(null);
-                  }}
-                />
-              </div>
-
-              <div className="rounded-xl border border-gray-200 overflow-hidden">
-                <div className="grid grid-cols-12 bg-[var(--secondary-element)] px-4 py-3 text-sm font-bold">
-                  <div className="col-span-7 md:col-span-8">Regel</div>
-                  <div className="col-span-5 md:col-span-4">DMT-procent</div>
+              <div className="rounded-xl border border-gray-200 bg-[var(--secondary-element)] p-4 space-y-4">
+                <div>
+                  <p className="font-semibold">Ladda upp DMT-fil</p>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                    Importera en .xlsx-fil.
+                    Rader med samma period och regel uppdateras automatiskt i stället för att dupliceras.
+                  </p>
                 </div>
 
-                <div className="divide-y divide-gray-200">
-                  {DMT_RULES.map((rule) => (
-                    <div
-                      key={rule.key}
-                      className="grid grid-cols-12 items-center gap-3 px-4 py-3"
-                    >
-                      <div className="col-span-7 md:col-span-8">
-                        <p className="font-semibold">{rule.label}</p>
-                      </div>
-                      <div className="col-span-5 md:col-span-4 relative">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={dmtPercentages[rule.key]}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setDmtPercentages((current) => ({
-                              ...current,
-                              [rule.key]: value === "" ? "" : Number(value),
-                            }));
-                            setDmtStatus(null);
-                          }}
-                          className="w-full rounded-lg border-2 border-gray-200 bg-[var(--input-text)] p-3 pr-9 text-[var(--text-primary)] outline-none transition focus:border-[#75C07A] focus:ring-2 focus:ring-[#75C07A]/30"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--text-secondary)]">
-                          %
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <input
+                    ref={dmtFileInputRef}
+                    type="file"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={handleDmtFileChange}
+                    disabled={isUploadingDmtFile || isImportingDmtText}
+                    className="w-full rounded-lg border-2 border-gray-200 bg-[var(--input-text)] p-3 text-sm text-[var(--text-primary)] outline-none transition file:mr-3 file:rounded-md file:border-0 file:bg-[#446E30] file:px-3 file:py-2 file:font-semibold file:text-white hover:file:bg-[#365926] focus:border-[#75C07A] focus:ring-2 focus:ring-[#75C07A]/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleUploadDmtFile}
+                    disabled={isUploadingDmtFile || isImportingDmtText || !dmtUploadFile}
+                    className="shrink-0 rounded-lg bg-[#446E30] px-4 py-3 font-semibold text-white shadow transition-colors hover:bg-[#365926] disabled:opacity-50"
+                  >
+                    {isUploadingDmtFile ? "Importerar..." : "Importera fil"}
+                  </button>
                 </div>
+
+                {dmtUploadFile && (
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Vald fil: {dmtUploadFile.name}
+                  </p>
+                )}
               </div>
+
+              <div className="rounded-xl border border-gray-200 bg-[var(--secondary-element)] p-4 space-y-4">
+                <div>
+                  <p className="font-semibold">Klistra in från Excel</p>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                    Kopiera cellerna från DMT-filen och klistra in dem här.
+                  </p>
+                </div>
+
+                <textarea
+                  value={dmtPastedText}
+                  onChange={(event) => {
+                    setDmtPastedText(event.target.value);
+                    setDmtStatus(null);
+                    setDmtUploadSummary(null);
+                  }}
+                  disabled={isUploadingDmtFile || isImportingDmtText}
+                  rows={8}
+                  placeholder="Klistra in DMT-tabellen här..."
+                  className="w-full rounded-lg border-2 border-gray-200 bg-[var(--input-text)] p-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[#75C07A] focus:ring-2 focus:ring-[#75C07A]/30"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleImportPastedDmtText}
+                  disabled={isUploadingDmtFile || isImportingDmtText || !dmtPastedText.trim()}
+                  className="rounded-lg bg-[#446E30] px-4 py-3 font-semibold text-white shadow transition-colors hover:bg-[#365926] disabled:opacity-50"
+                >
+                  {isImportingDmtText ? "Importerar..." : "Importera inklistrad data"}
+                </button>
+              </div>
+
+              {dmtUploadSummary && (
+                <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+                  <div className="rounded-lg bg-[var(--secondary-element)] p-3">
+                    <p className="text-[var(--text-secondary)]">Perioder</p>
+                    <p className="font-bold">{dmtUploadSummary.periods}</p>
+                  </div>
+                  <div className="rounded-lg bg-[var(--secondary-element)] p-3">
+                    <p className="text-[var(--text-secondary)]">Nya rader</p>
+                    <p className="font-bold">{dmtUploadSummary.inserted}</p>
+                  </div>
+                  <div className="rounded-lg bg-[var(--secondary-element)] p-3">
+                    <p className="text-[var(--text-secondary)]">Uppdaterade</p>
+                    <p className="font-bold">{dmtUploadSummary.updated}</p>
+                  </div>
+                  <div className="rounded-lg bg-[var(--secondary-element)] p-3">
+                    <p className="text-[var(--text-secondary)]">Hoppade över</p>
+                    <p className="font-bold">{dmtUploadSummary.skipped}</p>
+                  </div>
+                  <div className="rounded-lg bg-[var(--secondary-element)] p-3">
+                    <p className="text-[var(--text-secondary)]">Dubbletter borttagna</p>
+                    <p className="font-bold">{dmtUploadSummary.deletedDuplicates ?? 0}</p>
+                  </div>
+                </div>
+              )}
 
               {dmtStatus && (
                 <p
@@ -1301,17 +1202,10 @@ export default function Admin() {
               <button
                 type="button"
                 onClick={() => setIsDmtFormOpen(false)}
-                className="px-4 py-2 rounded-lg border border-gray-300 font-semibold hover:bg-[var(--secondary-element)] transition-colors"
+                disabled={isUploadingDmtFile || isImportingDmtText}
+                className="px-4 py-2 rounded-lg border border-gray-300 font-semibold hover:bg-[var(--secondary-element)] transition-colors disabled:opacity-50"
               >
-                Avbryt
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveDmt}
-                disabled={isSavingDmt}
-                className="px-5 py-2 rounded-lg bg-[#446E30] hover:bg-[#365926] text-[var(--text-primary)] font-semibold shadow transition-colors disabled:opacity-50"
-              >
-                {isSavingDmt ? "Sparar..." : "Spara DMT"}
+                Stäng
               </button>
             </div>
           </div>
