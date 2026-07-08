@@ -22,6 +22,7 @@ import { ConsignmentListItem, EquipageItem } from "@/lib/ilogTypes";
 import { StorageError } from "@supabase/storage-js";
 import { DEFAULT_HVO_PERCENTAGE } from "@/lib/constants";
 import { PriceAdjustmentsPopup } from "@/components/PriceAdjustmentsPopup";
+import { TriangleAlert } from "lucide-react";
 
 // Mock data uppdaterad med "arbetsvolym" istället för status
 
@@ -1664,6 +1665,17 @@ export default function Admin() {
             <h3 className="font-bold text-xl mb-6 border-b-2 border-green-500 pb-2">
               Uppdatera tabell för kundnamnsöversättning
             </h3>
+            <div
+              className="mb-4 ml-2 mr-2 flex items-center gap-2 rounded p-4 text-sm text-yellow-800 bg-yellow-100 border-2 border-yellow-300"
+              role="alert"
+            >
+              <TriangleAlert className="h-5 w-5 flex-shrink-0 text-yellow-800" />
+              <div>
+                <span className="font-bold">Varning!</span> Detta belastar iLog och kan ta några minuter.
+                <br />
+                <span className="font-bold">OBS!</span> Rekommenderat att köras när systemet är minst belastat.
+              </div>
+            </div>
             <p className="mb-1">
               KUSK-data i databasen täcker avräkningsdatumen{" "}
               <b>
