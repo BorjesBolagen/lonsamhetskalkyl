@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import type { Tables, TablesInsert } from "@/lib/supabaseServerSchema";
+import { Buffer } from "node:buffer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -373,22 +374,78 @@ function parsePastedTextToMatrix(text: string): Matrix {
     .map((line) => line.split("\t"));
 }
 
+function normalizeExcelCellValue(value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value !== "object") return value;
+
+  const cellObject = value as {
+    result?: unknown;
+    text?: unknown;
+    richText?: Array<{ text?: unknown }>;
+    hyperlink?: unknown;
+  };
+
+  if (cellObject.result !== undefined) {
+    return normalizeExcelCellValue(cellObject.result);
+  }
+
+  if (typeof cellObject.text === "string") {
+    return cellObject.text;
+  }
+
+  if (Array.isArray(cellObject.richText)) {
+    return cellObject.richText
+      .map((part) => String(part?.text ?? ""))
+      .join("");
+  }
+
+  if (typeof cellObject.hyperlink === "string" && typeof cellObject.text === "string") {
+    return cellObject.text;
+  }
+
+  return String(value);
+}
+
 async function parseXlsxFileToMatrices(file: File): Promise<Matrix[]> {
-  const XLSX = await import("xlsx");
-  const workbook = XLSX.read(await file.arrayBuffer(), {
-    type: "array",
-    cellDates: false,
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("DMT-filen är för stor. Maxstorlek är 5 MB.");
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const signature = Buffer.from(arrayBuffer.slice(0, 4)).toString("hex");
+
+  if (!signature.startsWith("504b")) {
+    throw new Error("DMT-filen verkar inte vara en giltig .xlsx-fil.");
+  }
+
+  const { Workbook } = await import("exceljs");
+  const workbook = new Workbook();
+  const workbookBuffer = Buffer.from(arrayBuffer) as unknown as Parameters<typeof workbook.xlsx.load>[0];
+  await workbook.xlsx.load(workbookBuffer);
+
+  const matrices: Matrix[] = [];
+
+  workbook.worksheets.forEach((worksheet) => {
+    const rows: Matrix = [];
+
+    worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+      const matrixRow: unknown[] = [];
+
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        matrixRow[colNumber - 1] = normalizeExcelCellValue(cell.value);
+      });
+
+      rows[rowNumber - 1] = matrixRow;
+    });
+
+    matrices.push(rows);
   });
 
-  return (workbook.SheetNames as string[]).map((sheetName: string): Matrix => {
-    const sheet = workbook.Sheets[sheetName];
-
-    return XLSX.utils.sheet_to_json(sheet, {
-      header: 1,
-      raw: true,
-      defval: null,
-    }) as Matrix;
-  });
+  return matrices;
 }
 
 function toDmtSettings(rows: DmtRow[]) {
