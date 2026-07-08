@@ -26,7 +26,7 @@ export default function EquipageCard({
   return (
     <div className="bg-[var(--secondary-element)] rounded-xl shadow-sm p-2 w-36 flex flex-col items-center hover:shadow-md transition">
       {/* Titel */}
-      <div className="bg-[var(--card-titel)] text-[var(--text-primary)] text-sm font-bold px-3 py-2 rounded-md mb-3 w-full text-center flex items-center justify-center gap-1">
+      <div className="bg-[var(--card-titel)] text-black text-sm font-bold px-3 py-2 rounded-md mb-3 w-full text-center flex items-center justify-center gap-1">
         <span className="truncate">{title}</span>
         {titleAddon && <span className="shrink-0 leading-none">{titleAddon}</span>}
       </div>
