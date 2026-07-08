@@ -66,7 +66,7 @@ export function useHomeProfitability({
                     
                     const [bestNameResponse, translationsResponse] = await Promise.all([
                       getBestNameMatch(consignment.customerName),
-                      getNameTranslations(consignment.customerName),
+                      getNameTranslations(consignment.senderName, consignment.receiverName),
                     ]);
 
                     const translations =

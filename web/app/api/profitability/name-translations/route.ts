@@ -12,9 +12,10 @@ export async function GET(req: NextRequest) {
     if (userError) return userError;
 
     const { searchParams } = new URL(req.url);
-    const name = searchParams.get("name") || "";
+    const senderName = searchParams.get("senderName") || "";
+    const receiverName = searchParams.get("receiverName") || "";
 
-    if (!name.trim()) {
+    if (!senderName.trim() && !receiverName.trim()) {
         return NextResponse.json({
             status: true,
             message: "No name provided",
@@ -23,33 +24,55 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = await getSupabaseServerClient();
-    
-    try {
-        const { data, error } = await supabase
-            .from("name_translation")
-            .select("kusk_name")
-            .eq("ilog_name", name)
-            .order("kusk_name", { ascending: true });
 
-        if (error) {
-            console.error("Error fetching name translations:", error);
-            return NextResponse.json({
-                status: false,
-                message: error.message
-            }, { status: 500 });
+    const lookupNames = [senderName.trim(), receiverName.trim()].filter(Boolean);
+    let lookupError: Error | null = null;
+    let translations: string[] = [];
+
+    try {
+        for (const lookupName of lookupNames) {
+            const { data, error } = await supabase
+                .from("name_translation")
+                .select("kusk_name")
+                .eq("ilog_name", lookupName)
+                .order("kusk_name", { ascending: true });
+
+            if (error) {
+                lookupError = error;
+                continue;
+            }
+
+            const currentTranslations = data
+                ? [...new Set(data.map((row) => row.kusk_name))].filter(
+                    (name) => name && name.trim().length > 0,
+                )
+                : [];
+
+            if (currentTranslations.length > 0) {
+                translations = currentTranslations;
+                break;
+            }
+
+            // If first lookup returned no results, continue to the next one.
         }
 
-        // Extract unique kusk_name values
-        const translations = data
-            ? [...new Set(data.map(row => row.kusk_name))].filter(name => name && name.trim().length > 0)
-            : [];
-
+        if (translations.length === 0 && lookupError) {
+            console.error("Error fetching name translations:", lookupError);
+            return NextResponse.json(
+                {
+                    status: false,
+                    message: lookupError.message,
+                },
+                { status: 500 },
+            );
+        }
+        console.log("Translations found for:", senderName, receiverName, translations);
         return NextResponse.json({
             status: true,
-            message: "Found name translations",
+            message: translations.length > 0 ? "Found name translations" : "No translations found",
             data: {
-                translations
-            }
+                translations,
+            },
         });
     } catch (error) {
         console.error("Unexpected error fetching name translations:", error);
