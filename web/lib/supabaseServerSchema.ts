@@ -200,6 +200,39 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_equipage_forecast: {
+        Row: {
+          consignment_count: number
+          equipage_id: number
+          equipage_name: string
+          forecast_date: string
+          total_estimated_revenue: number
+          total_flm: number
+          total_weight_kg: number
+          updated_at: string
+        }
+        Insert: {
+          consignment_count: number
+          equipage_id: number
+          equipage_name: string
+          forecast_date: string
+          total_estimated_revenue: number
+          total_flm: number
+          total_weight_kg: number
+          updated_at: string
+        }
+        Update: {
+          consignment_count?: number
+          equipage_id?: number
+          equipage_name?: string
+          forecast_date?: string
+          total_estimated_revenue?: number
+          total_flm?: number
+          total_weight_kg?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       distance_map: {
         Row: {
           distance: number
@@ -543,21 +576,21 @@ export type Database = {
       paketbur_prices: {
         Row: {
           antal_burar: number
+          datum: string | null
           pris: number | null
           relation: string
-          datum: string | null
         }
         Insert: {
           antal_burar: number
+          datum?: string | null
           pris?: number | null
           relation: string
-          datum?: string | null
         }
         Update: {
           antal_burar?: number
+          datum?: string | null
           pris?: number | null
           relation?: string
-          datum?: string | null
         }
         Relationships: []
       }

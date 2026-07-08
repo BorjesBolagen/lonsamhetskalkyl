@@ -3,7 +3,7 @@ import { updateSession } from "./lib/proxy"
 import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_ROUTES = ["/login", "/forgot-password", "/reset-password"];
-const PROTECTED_ROUTES = ["/home", "/settings", "/admin", "/notifications", "/simulator"];
+const PROTECTED_ROUTES = ["/home", "/settings", "/admin", "/notifications", "/simulator", "/analytics"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -77,8 +77,8 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Only allow admins to access the admin panel
-  if (pathname.startsWith('/admin')) {
+  // Only allow admins to access the admin panel and the analytics view
+  if (pathname.startsWith('/admin') || pathname.startsWith('/analytics')) {
     // needs its own client since cookies() from next/headers isn't available here
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

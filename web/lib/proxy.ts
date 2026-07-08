@@ -6,7 +6,8 @@ import { COOKIE_MAX_AGE } from './constants';
 const PUBLIC_ROUTES = ["/login", "/forgot-password", "/reset-password"];
 
 // API routes accessible without authentication
-const PUBLIC_ROUTE_PREFIXES = ["/api/login", "/api/signup", "/api/auth/forgot-password"];
+// (/api/cron skyddas av CRON_SECRET i själva routen, inte av en session)
+const PUBLIC_ROUTE_PREFIXES = ["/api/login", "/api/signup", "/api/auth/forgot-password", "/api/cron/"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
