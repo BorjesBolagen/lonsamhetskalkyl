@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
                 { status: 500 },
             );
         }
-        console.log("Translations found for:", senderName, receiverName, translations);
+
         return NextResponse.json({
             status: true,
             message: translations.length > 0 ? "Found name translations" : "No translations found",
