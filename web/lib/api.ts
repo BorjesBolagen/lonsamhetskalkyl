@@ -519,6 +519,79 @@ export const importDmtSettingsText = async (pastedText: string): Promise<DmtImpo
 };
 
 // ============================================================
+// Analys (sparade nattprognoser)
+// ============================================================
+
+export type ForecastAnalyticsRow = {
+	id: number;
+	forecast_date: string;
+	equipage_id: number;
+	equipage_name: string;
+	total_weight_kg: number;
+	total_flm: number;
+	total_estimated_revenue: number;
+	consignment_count: number;
+	created_at: string;
+	updated_at: string;
+};
+
+export type ForecastEquipageOption = {
+	id: number;
+	name: string;
+};
+
+const buildForecastParams = (
+	from: string,
+	to: string,
+	equipageIds?: number[],
+): URLSearchParams => {
+	const params = new URLSearchParams({ from, to });
+	if (equipageIds && equipageIds.length > 0) {
+		params.set("equipageIds", equipageIds.join(","));
+	}
+	return params;
+};
+
+/**
+ * Hämtar ekipage som förekommer i sparad prognosdata. Endast admin.
+ */
+export const getForecastEquipages = async (): Promise<BasicResponse<ForecastEquipageOption[]>> => {
+	const response = await fetch("/api/analytics/equipages", { method: "GET" });
+
+	if (!response.ok) throw new Error((await response.json()).message);
+	return (await response.json()) as BasicResponse<ForecastEquipageOption[]>;
+};
+
+/**
+ * Hämtar sparade nattprognoser för ett datumintervall. Endast admin.
+ */
+export const getForecastAnalytics = async (
+	from: string,
+	to: string,
+	equipageIds?: number[],
+): Promise<BasicResponse<ForecastAnalyticsRow[]>> => {
+	const params = buildForecastParams(from, to, equipageIds);
+	const response = await fetch(`/api/analytics/forecasts?${params.toString()}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+	return (await response.json()) as BasicResponse<ForecastAnalyticsRow[]>;
+};
+
+/**
+ * Bygger nedladdningslänk för Excel-exporten av prognosdata.
+ */
+export const buildForecastExportUrl = (
+	from: string,
+	to: string,
+	equipageIds?: number[],
+): string => {
+	const params = buildForecastParams(from, to, equipageIds);
+	return `/api/analytics/forecasts/export?${params.toString()}`;
+};
+
+// ============================================================
 // Historical import
 // ============================================================
 
