@@ -32,6 +32,7 @@ import {
   type ForecastAnalyticsRow,
   type ForecastEquipageOption,
 } from "@/lib/api";
+import { TriangleAlert } from "lucide-react";
 
 // Kategorisk palett (validerad för CVD + kontrast mot appens ytor i båda
 // teman). Färg följer ekipaget: en vald bil behåller sin färg när andra
@@ -692,12 +693,20 @@ export default function Analytics() {
             <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-xl bg-[var(--primary-element)] shadow-2xl">
               <div className="flex items-center justify-between border-b border-[var(--seperating-gray)] px-4 py-3">
                 <div>
-                  <h2 className="text-lg font-bold text-[var(--text-heading)]">
+                  <h2 className="mb-3 mt-2 ml-2 text-lg font-bold text-[var(--text-heading)]">
                     Manuell prognos
                   </h2>
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    Ange ett datum och starta prognosen. Loggar visas i realtid.
-                  </p>
+                  <div
+                    className="mb-4 ml-2 flex items-center gap-2 rounded p-4 text-sm text-yellow-800 bg-yellow-100 border-2 border-yellow-300"
+                    role="alert"
+                  >
+                    <TriangleAlert className="h-5 w-5 flex-shrink-0 text-yellow-800" />
+                    <div>
+                      <span className="font-bold">Varning!</span> Detta belastar prognosberäkningen och iLog. Kan ta några minuter.
+                      <br />
+                      <span className="font-bold">OBS!</span> Rekommenderat att köras när systemet är minst belastat.
+                    </div>
+                  </div>
                 </div>
                 <button
                   type="button"
