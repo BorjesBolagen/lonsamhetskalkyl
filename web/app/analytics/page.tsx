@@ -13,7 +13,7 @@
 
 import Navigation from "../../components/Navigation";
 import Footer from "../../components/Footer";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   LineChart,
@@ -140,13 +140,19 @@ function ChartTooltip({
     return null;
   }
 
+  const sortedPayload = [...payload].sort((a, b) => {
+    const aValue = Number(a.value ?? 0);
+    const bValue = Number(b.value ?? 0);
+    return bValue - aValue;
+  });
+
   return (
     <div
       className="rounded border border-[var(--seperating-gray)] bg-[var(--primary-element)] px-3 py-2 shadow-md"
       style={{ pointerEvents: "none" }}
     >
       <p className="mb-1 text-xs text-[var(--text-secondary)]">{label}</p>
-      {payload.map((entry) => (
+      {sortedPayload.map((entry) => (
         <p key={String(entry.dataKey)} className="flex items-center gap-2 text-sm">
           <span
             aria-hidden
@@ -279,6 +285,103 @@ export default function Analytics() {
   const [rows, setRows] = useState<ForecastAnalyticsRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isForecastModalOpen, setIsForecastModalOpen] = useState(false);
+  const [forecastDate, setForecastDate] = useState(defaultToDate);
+  const [forecastLogs, setForecastLogs] = useState<ForecastLogEntry[]>([]);
+  const [isForecastRunning, setIsForecastRunning] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const logBottomRef = useRef<HTMLDivElement | null>(null);
+
+  type ForecastLogEntry = {
+    message: string;
+    color: "green" | "yellow" | "red" | "gray";
+  };
+
+  const logColorClass: Record<ForecastLogEntry["color"], string> = {
+    green: "text-green-400",
+    yellow: "text-yellow-300",
+    red: "text-red-400",
+    gray: "text-gray-400",
+  };
+
+  const appendForecastLog = (entry: ForecastLogEntry) => {
+    setForecastLogs((current) => [...current, entry]);
+  };
+
+  const closeForecastModal = () => {
+    setIsForecastRunning(false);
+    setIsForecastModalOpen(false);
+    setForecastLogs([]);
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  };
+
+  const startManualForecast = () => {
+    if (isForecastRunning) return;
+    setForecastLogs([]);
+    setIsForecastRunning(true);
+
+    const url = `/api/cron/manual-daily-forecast-stream?date=${encodeURIComponent(
+      forecastDate,
+    )}`;
+    const eventSource = new EventSource(url);
+    eventSourceRef.current = eventSource;
+
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "log") {
+          appendForecastLog({
+            message: payload.message,
+            color: payload.color ?? "green",
+          });
+        } else if (payload.type === "done") {
+          appendForecastLog({ message: "Prognos klar.", color: "yellow" });
+          setIsForecastRunning(false);
+          eventSource.close();
+          eventSourceRef.current = null;
+        } else if (payload.type === "error") {
+          appendForecastLog({ message: `Fel: ${payload.message}`, color: "red" });
+          setIsForecastRunning(false);
+          eventSource.close();
+          eventSourceRef.current = null;
+        }
+      } catch (parseError) {
+        appendForecastLog({
+          message: `Ogiltigt SSE-meddelande: ${event.data}`,
+          color: "red",
+        });
+      }
+    };
+
+    eventSource.onerror = () => {
+      appendForecastLog({
+        message: "Stream-fel. Kontrollera att du är inloggad som admin.",
+        color: "red",
+      });
+      setIsForecastRunning(false);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  };
+
+  useEffect(() => {
+    if (forecastLogs.length === 0 || !logBottomRef.current) return;
+    logBottomRef.current.scrollIntoView({ behavior: "smooth" });
+  }, [forecastLogs]);
+
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
 
   // Stabil färgtilldelning: valt ekipage behåller sin palettplats tills det
   // väljs bort, även när andra ekipage läggs till eller tas bort.
@@ -308,47 +411,42 @@ export default function Analytics() {
     };
   }, [router]);
 
-  // Ekipagelistan (från sparad prognosdata).
-  useEffect(() => {
+  const refreshForecastData = () => {
     if (isCheckingRole) return;
 
     getForecastEquipages()
-      .then((response) => setEquipages(response.data ?? []))
-      .catch(() =>
-        setError("Kunde inte hämta ekipagelistan från prognosdatabasen."),
-      );
-  }, [isCheckingRole]);
+      .then((response) => {
+        setEquipages(response.data ?? []);
+        setError(null);
+      })
+      .catch(() => {
+        setEquipages([]);
+        setError("Kunde inte hämta ekipage.");
+      });
 
-  // Prognosrader för valt intervall. Ekipagefiltret appliceras client-side
-  // så att val/avval av bilar är omedelbart.
-  useEffect(() => {
-    if (isCheckingRole || !fromDate || !toDate || fromDate > toDate) return;
+    if (!fromDate || !toDate || fromDate > toDate) return;
 
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     setError(null);
 
     getForecastAnalytics(fromDate, toDate)
       .then((response) => {
-        if (cancelled) return;
         setRows(response.data ?? []);
+        setError(null);
       })
-      .catch((fetchError) => {
-        if (cancelled) return;
-        setError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Kunde inte hämta prognosdata.",
-        );
+      .catch(() => {
+        setRows([]);
+        setError("Kunde inte hämta prognosdata för valt intervall.");
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        setIsLoading(false);
       });
+  };
 
-    return () => {
-      cancelled = true;
-    };
+  // Ekipagelistan (från sparad prognosdata).
+  useEffect(() => {
+    if (isCheckingRole) return;
+    refreshForecastData();
   }, [isCheckingRole, fromDate, toDate]);
 
   const toggleEquipage = (id: number) => {
@@ -488,74 +586,98 @@ export default function Analytics() {
         </p>
 
         {/* Filterrad: datumintervall + export */}
-        <div className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-[var(--primary-element)] p-4 shadow-md">
-          <div>
-            <label
-              htmlFor="analytics-from"
-              className="mb-1 block text-sm font-bold"
+        <div className="mb-6 flex items-start justify-between gap-6 rounded-lg bg-[var(--primary-element)] p-4 shadow-md">
+          {/* Vänster sida: datum + snabbval */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-end gap-4">
+              <div>
+                <label
+                  htmlFor="analytics-from"
+                  className="mb-1 block text-sm font-bold"
+                >
+                  Från och med
+                </label>
+                <input
+                  id="analytics-from"
+                  type="date"
+                  value={fromDate}
+                  max={toDate}
+                  onChange={(event) => setFromDate(event.target.value)}
+                  className="rounded border-2 border-[var(--seperating-gray)] bg-[var(--input-text)] p-2"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="analytics-to"
+                  className="mb-1 block text-sm font-bold"
+                >
+                  Till och med
+                </label>
+                <input
+                  id="analytics-to"
+                  type="date"
+                  value={toDate}
+                  onChange={(event) => setToDate(event.target.value)}
+                  className="rounded border-2 border-[var(--seperating-gray)] bg-[var(--input-text)] p-2"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              {[7, 30, 90].map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => {
+                    const to = defaultToDate();
+                    setToDate(to);
+                    setFromDate(daysBefore(to, days - 1));
+                  }}
+                  className="rounded border border-[var(--seperating-gray)] px-3 py-2 text-sm hover:bg-[var(--hover-areas)]"
+                >
+                  {days} dagar
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Höger sida: åtgärdsknappar */}
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={refreshForecastData}
+              disabled={isLoading}
+              className={`rounded px-4 py-2 font-bold text-white shadow-md ${
+                isLoading
+                  ? "cursor-not-allowed bg-[var(--disabled-button)]"
+                  : "bg-[var(--button-fetch)] hover:bg-[var(--button-fetch-hover)]"
+              }`}
             >
-              Från
-            </label>
-            <input
-              id="analytics-from"
-              type="date"
-              value={fromDate}
-              max={toDate}
-              onChange={(event) => setFromDate(event.target.value)}
-              className="rounded border-2 border-[var(--seperating-gray)] bg-[var(--input-text)] p-2"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="analytics-to"
-              className="mb-1 block text-sm font-bold"
+              {isLoading ? "Hämtar..." : "Hämta data"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsForecastModalOpen(true)}
+              className="rounded bg-[var(--button-fetch)] px-4 py-2 font-bold text-white shadow-md hover:bg-[var(--button-fetch-hover)]"
             >
-              Till
-            </label>
-            <input
-              id="analytics-to"
-              type="date"
-              value={toDate}
-              onChange={(event) => setToDate(event.target.value)}
-              className="rounded border-2 border-[var(--seperating-gray)] bg-[var(--input-text)] p-2"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            {[7, 30, 90].map((days) => (
-              <button
-                key={days}
-                type="button"
-                onClick={() => {
-                  const to = defaultToDate();
-                  setToDate(to);
-                  setFromDate(daysBefore(to, days - 1));
-                }}
-                className="rounded border border-[var(--seperating-gray)] px-3 py-2 text-sm hover:bg-[var(--hover-areas)]"
-              >
-                {days} dagar
-              </button>
-            ))}
-          </div>
-
-          <div className="ml-auto">
+              Kör prognos manuellt
+            </button>
             <a
               href={hasValidRange ? exportUrl : undefined}
               aria-disabled={!hasValidRange}
-              className={`inline-block rounded px-4 py-2 font-bold text-white shadow-md ${
+              title={
+                hasValidRange
+                  ? "Exportera vald period som Excel-fil. Om inga ekipage är valda exporteras alla."
+                  : "Välj ett giltigt datumintervall för att exportera"
+              }
+              className={`inline-block rounded px-4 py-2 font-bold text-white shadow-md text-center ${
                 hasValidRange
                   ? "bg-[var(--button-fetch)] hover:bg-[var(--button-fetch-hover)]"
                   : "pointer-events-none bg-[var(--disabled-button)]"
               }`}
             >
-              Ladda ner Excel
+              Exportera som Excel
             </a>
-            <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              {selectedIds.size > 0
-                ? "Exporterar valda ekipage för perioden"
-                : "Exporterar alla ekipage för perioden"}
-            </p>
           </div>
         </div>
 
@@ -565,22 +687,135 @@ export default function Analytics() {
           </p>
         )}
 
+        {isForecastModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-xl bg-[var(--primary-element)] shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[var(--seperating-gray)] px-4 py-3">
+                <div>
+                  <h2 className="text-lg font-bold text-[var(--text-heading)]">
+                    Manuell prognos
+                  </h2>
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Ange ett datum och starta prognosen. Loggar visas i realtid.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeForecastModal}
+                  className="rounded bg-[var(--disabled-button)] px-3 py-2 text-sm font-bold"
+                >
+                  Stäng
+                </button>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <label className="flex flex-col gap-1 text-sm font-bold text-[var(--text-secondary)]">
+                    Datum
+                    <input
+                      type="date"
+                      value={forecastDate}
+                      onChange={(event) => setForecastDate(event.target.value)}
+                      className="rounded border border-[var(--seperating-gray)] bg-[var(--input-text)] p-2"
+                      max={defaultToDate()}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={startManualForecast}
+                    disabled={isForecastRunning}
+                    className={`rounded px-4 py-2 font-bold text-white shadow-md ${
+                      isForecastRunning
+                        ? "bg-[var(--disabled-button)] cursor-not-allowed"
+                        : "bg-[var(--button-fetch)] hover:bg-[var(--button-fetch-hover)]"
+                    }`}
+                  >
+                    {isForecastRunning ? "Körs…" : "Starta prognos"}
+                  </button>
+                </div>
+
+                <div className="rounded border border-[var(--seperating-gray)] bg-[var(--input-text)] p-3 text-sm text-[var(--text-secondary)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-[var(--text-heading)]">Logg</span>
+                    <div className="flex gap-2">
+                      {isForecastRunning && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            eventSourceRef.current?.close();
+                            eventSourceRef.current = null;
+                            setIsForecastRunning(false);
+                            appendForecastLog({
+                              message: "Avbröt prognoskörning.",
+                              color: "yellow",
+                            });
+                          }}
+                          className="px-3 py-1 text-m text-[var(--text-secondary)] hover:text-black cursor-pointer bg-orange-400 rounded-lg"
+                        >
+                          Avbryt
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setForecastLogs([])}
+                        className="px-3 py-1 text-m text-[var(--text-secondary)] hover:text-black cursor-pointer bg-red-400 rounded-lg"
+                      >
+                        Rensa
+                      </button>
+                    </div>
+                  </div>
+                  <div className="w-full h-60 overflow-y-auto rounded-lg bg-gray-900 text-sm font-mono p-3 flex flex-col gap-1">
+                    {forecastLogs.length === 0 ? (
+                      <span className="text-gray-500">Väntar...</span>
+                    ) : (
+                      forecastLogs.map((log, index) => (
+                        <span
+                          key={index}
+                          className={`whitespace-pre ${logColorClass[log.color]}`}
+                        >
+                          {log.message}
+                        </span>
+                      ))
+                    )}
+                    <div ref={logBottomRef} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
           {/* Ekipageval */}
           <aside className="self-start rounded-lg bg-[var(--primary-element)] p-4 shadow-md">
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="font-bold text-lg text-[var(--text-heading)]">
                 Ekipage
               </h2>
-              {selectedIds.size > 0 && (
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  className="text-sm text-[var(--text-secondary)] underline hover:text-[var(--text-heading)]"
-                >
-                  Rensa ({selectedIds.size})
-                </button>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {visibleEquipages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextIds = new Set(selectedIds);
+                      visibleEquipages.forEach((equipage) => nextIds.add(equipage.id));
+                      setSelectedIds(nextIds);
+                    }}
+                    className="text-sm text-[var(--text-secondary)] underline hover:text-[var(--text-heading)]"
+                  >
+                    Välj alla
+                  </button>
+                )}
+                {selectedIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="text-sm text-[var(--text-secondary)] underline hover:text-[var(--text-heading)]"
+                  >
+                    Rensa ({selectedIds.size})
+                  </button>
+                )}
+              </div>
             </div>
 
             <input

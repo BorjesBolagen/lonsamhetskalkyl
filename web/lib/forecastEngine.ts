@@ -39,9 +39,17 @@ export type DailyForecastRunSummary = {
   failures: { equipage: string; reason: string }[];
 };
 
+export type ForecastLogColor = "green" | "yellow" | "red" | "gray";
+export type ForecastLogger = (message: string, color?: ForecastLogColor) => void;
+
+const DEFAULT_LOGGER: ForecastLogger = (message) => {
+  console.log(message);
+};
+
 // Antal ekipage som bearbetas parallellt. Hålls lågt för att inte
 // överbelasta iLog och Supabase (samma tanke som Hem-vyns batchstorlek).
 const EQUIPAGE_CONCURRENCY = 3;
+const CONSIGNMENT_CONCURRENCY = 4;
 
 /** Dagens datum i Europe/Stockholm minus `daysBack` dagar, som YYYY-MM-DD. */
 export function getStockholmDateDaysBack(daysBack: number): string {
@@ -155,16 +163,17 @@ async function forecastEquipage(
   equipage: EquipageItem,
   ilogDate: string,
   nameCache: Map<string, string>,
+  logger: ForecastLogger = DEFAULT_LOGGER,
 ): Promise<EquipageForecast | null> {
   const rawConsignments = await fetchConsignmentsWithRetry(ilogDate, equipage.id);
 
   if (rawConsignments.length === 0) {
+    const message = `Ingen bokning för ekipaget ${equipage.name} (${equipage.id}). Hoppar över.`;
+    logger(message, "gray");
     return null;
   }
 
-  const consignments =
-    await enrichTaxPointRelationFromSupabase(rawConsignments);
-
+  const consignments = await enrichTaxPointRelationFromSupabase(rawConsignments);
   const supabase = getSupabaseAdminClient();
 
   let totalWeightKg = 0;
@@ -174,28 +183,53 @@ async function forecastEquipage(
   for (const consignment of consignments) {
     totalWeightKg += consignment.weight ?? 0;
     totalFlm += consignment.flm ?? 0;
+  }
 
-    try {
-      const resolvedName = await resolveCustomerName(
-        consignment.customerName,
-        nameCache,
-      );
+  logger(
+    `Prognos för ${equipage.name} (${equipage.id}) startar med ${consignments.length} bokningar.`,
+    "green",
+  );
 
-      const { enrichedConsignment, input } = await prepareProfitabilityRequest(
-        supabase,
-        { ...consignment, customerName: resolvedName },
-      );
+  const batches = chunk(consignments, CONSIGNMENT_CONCURRENCY);
+  let processedConsignments = 0;
 
-      const result = await routeConsignment(enrichedConsignment, input);
-      totalEstimatedRevenue += result.estimated_revenue ?? 0;
-    } catch (error) {
-      // Samma beteende som Hem-vyn: en misslyckad beräkning ger 0 kr
-      // för den bokningen men stoppar inte resten av ekipaget.
-      console.error(
-        `Prognos misslyckades för bokning ${consignment.consignmentId} (${equipage.name}):`,
-        error instanceof Error ? error.message : error,
-      );
+  for (const [batchIndex, batch] of batches.entries()) {
+    const results = await Promise.allSettled(
+      batch.map(async (consignment) => {
+        const resolvedName = await resolveCustomerName(
+          consignment.customerName,
+          nameCache,
+        );
+
+        const { enrichedConsignment, input } = await prepareProfitabilityRequest(
+          supabase,
+          { ...consignment, customerName: resolvedName },
+        );
+
+        return await routeConsignment(enrichedConsignment, input);
+      }),
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        totalEstimatedRevenue += result.value.estimated_revenue ?? 0;
+      } else {
+        const error = result.reason;
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        logger(
+          `Prognos misslyckades för en bokning i ${equipage.name} (${equipage.id}): ${errorMessage}`,
+          "red",
+        );
+      }
     }
+
+    processedConsignments += batch.length;
+    logger(
+      `Prognos för ${equipage.name} (${equipage.id}) batch ${batchIndex + 1}/${batches.length} klar: ` +
+        `${processedConsignments}/${consignments.length} bokningar behandlade.`,
+      "green",
+    );
   }
 
   return {
@@ -214,6 +248,7 @@ async function forecastEquipage(
  */
 export async function runDailyEquipageForecast(
   forecastDate: string,
+  logger: ForecastLogger = DEFAULT_LOGGER,
 ): Promise<DailyForecastRunSummary> {
   return runWithSupabaseAdminContext(async () => {
     const ilogDate = toIlogDate(forecastDate);
@@ -227,17 +262,23 @@ export async function runDailyEquipageForecast(
     const forecasts: EquipageForecast[] = [];
     const failures: DailyForecastRunSummary["failures"] = [];
 
+    let completedEquipages = 0;
+    let processedConsignmentCount = 0;
+
     for (const equipageBatch of chunk(equipages, EQUIPAGE_CONCURRENCY)) {
       const results = await Promise.allSettled(
         equipageBatch.map((equipage) =>
-          forecastEquipage(equipage, ilogDate, nameCache),
+          forecastEquipage(equipage, ilogDate, nameCache, logger),
         ),
       );
 
       results.forEach((result, index) => {
+        completedEquipages += 1;
+
         if (result.status === "fulfilled") {
           if (result.value) {
             forecasts.push(result.value);
+            processedConsignmentCount += result.value.consignmentCount;
           }
         } else {
           failures.push({
@@ -249,6 +290,12 @@ export async function runDailyEquipageForecast(
           });
         }
       });
+
+      logger(
+        `Prognosprogress: ${completedEquipages}/${equipages.length} ekipage klara, ` +
+          `${processedConsignmentCount} bokningar behandlade.`,
+        "green"
+      );
     }
 
     let rowsSaved = 0;
