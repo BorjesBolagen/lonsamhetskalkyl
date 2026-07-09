@@ -16,7 +16,16 @@ function cleanTaxPoint(value: string | null | undefined): string {
 }
 
 function normalizeCity(value: string | null | undefined): string {
-  return (value ?? "").trim().toUpperCase();
+  if (!value) return "";
+  
+  const city = value.trim().toUpperCase();
+  
+  const noiseWords = "PP|SENAST|FÖRE|EFTER|OBS|OMEX|PPS";
+  const regex = new RegExp(`(?=\\d)|\\b(?:${noiseWords})\\b`, 'i');
+
+  const parts = city.split(regex);
+  
+  return parts[0].trim();
 }
 
 function splitTaxPointRelation(

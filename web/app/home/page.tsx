@@ -482,11 +482,17 @@ export default function Home() {
                           "-"}
                       </td>
                       <td className="py-2 pr-3">
-                        <NameDropdown
-                          consignment={consignment}
-                          onSelect={(name, source) => handleNameSelect(consignment, name, source)}
-                          loading={loadingRows[consignment.consignmentId] || false}
-                        />
+                        {consignment.profitabilityValue?.step_used === 0 ? (
+                          <span className="text-[var(--text-primary)]">
+                            {consignment.customerName || "-"}
+                          </span>
+                        ) : (
+                          <NameDropdown
+                            consignment={consignment}
+                            onSelect={(name, source) => handleNameSelect(consignment, name, source)}
+                            loading={loadingRows[consignment.consignmentId] || false}
+                          />
+                        )}
                       </td>
                       <td className="py-2 pr-3">
                         {consignment.pickupLocationStreet ||

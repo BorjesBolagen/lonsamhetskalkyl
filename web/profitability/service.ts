@@ -92,15 +92,15 @@ export function determineFlowType(consignment: ConsignmentListItem): FlowType {
   const isUnder1000kg = weight > 0 && weight < 1000;
   
   //Postnummer/postort finns ej
-  const isInvalidInDatabase = (consignment as any)._isDbValidDestination === false;
+  // const isInvalidInDatabase = (consignment as any)._isDbValidDestination === false;
 
   if (
     isStyckegodsCustomer ||
     isSchenkerOrDSV ||
     hasStyckeKeywordsInSender ||
     isMissingDestCity ||
-    isUnder1000kg ||
-    isInvalidInDatabase
+    isUnder1000kg
+    //isInvalidInDatabase
   ) {
     return FlowType.STYCKEGODS;
   }
