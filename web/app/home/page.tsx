@@ -352,7 +352,7 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="text-sm text-[var(--primary-text)]">
+            <div className="text-sm text-[var(--text-primary)]">
               {loadingLines ? null : !areasLoaded ? (
                 <p className="text-[var(--text-primary)]">
                   Vänta tills inställningarna har laddats.
@@ -380,7 +380,7 @@ export default function Home() {
                   )}  
                 </div>
               ) : (
-                <div className="space-y-1">
+                <div className="text-[var(--text-primary)] space-y-1 leading-6">
                   <p>Inga bokningar hittades för dina val.</p>
                   <p>
                     Val: {appliedFilterLabels.length > 0

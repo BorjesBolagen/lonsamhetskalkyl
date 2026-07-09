@@ -299,8 +299,8 @@ export type NameTranslationResponse = {
 	translations: string[];
 }
 
-export const getNameTranslations = async (name: string): Promise<BasicResponse<NameTranslationResponse>> => {
-	const params = new URLSearchParams({ name });
+export const getNameTranslations = async (senderName: string, receiverName: string): Promise<BasicResponse<NameTranslationResponse>> => {
+	const params = new URLSearchParams({ senderName, receiverName });
 	const response = await fetch(`/api/profitability/name-translations?${params.toString()}`, {
 		method: "GET",
 	});

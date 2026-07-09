@@ -23,7 +23,7 @@ import {
 import { IlogHttpError } from "@/lib/ilogClient";
 
 // Prognosen gör många iLog- och databasanrop; höj tidsgränsen (Vercel).
-export const maxDuration = 300;
+export const maxDuration = 1800;
 export const dynamic = "force-dynamic";
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;

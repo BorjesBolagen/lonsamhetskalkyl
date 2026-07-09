@@ -339,7 +339,7 @@ export default function Analytics() {
             color: payload.color ?? "green",
           });
         } else if (payload.type === "done") {
-          appendForecastLog({ message: "Prognos klar.", color: "yellow" });
+          appendForecastLog({ message: "Prognos klar. Klicka på Hämta data för att läsa in nya datan", color: "yellow" });
           setIsForecastRunning(false);
           eventSource.close();
           eventSourceRef.current = null;
