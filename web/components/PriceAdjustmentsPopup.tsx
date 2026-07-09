@@ -224,32 +224,32 @@ export function PriceAdjustmentsPopup({ isOpen, onClose }: PriceAdjustmentsPopup
         ) : priceAdjustmentsWithRunningTotal.length === 0 ? (
           <p className="text-sm text-[var(--text-secondary)]">Inga prishöjningar finns sparade ännu.</p>
         ) : (
-          <div className="overflow-visible">
-            <table className="w-full border-collapse text-left text-sm overflow-visible">
+          <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-200">
+            <table className="w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-300 bg-[var(--secondary-element)]">
-                  <th className="p-3 font-semibold relative z-[1000]">Nr</th>
-                  <th className="p-3 font-semibold relative z-[1000]">Datum fr.o.m</th>
-                  <th className="p-3 font-semibold relative z-[1000]">Generell prisjustering</th>
-                  <th className="p-3 font-semibold relative z-[1000]">
+                <tr className="border-b border-gray-300">
+                  <th className="p-3 font-semibold sticky top-0 bg-[var(--secondary-element)] z-20">Nr</th>
+                  <th className="p-3 font-semibold sticky top-0 bg-[var(--secondary-element)] z-20">Datum fr.o.m</th>
+                  <th className="p-3 font-semibold sticky top-0 bg-[var(--secondary-element)] z-20">Generell prisjustering</th>
+                  <th className="p-3 font-semibold sticky top-0 bg-[var(--secondary-element)] z-20">
                     <span className="flex items-center gap-1">
                       Procent Verkställt
                       <InfoTooltip text={"Procentdel av höjningen som verkställs"} />
                     </span>
                   </th>
-                  <th className="p-3 font-semibold relative z-[1000]">
+                  <th className="p-3 font-semibold sticky top-0 bg-[var(--secondary-element)] z-20">
                     <span className="flex items-center gap-1">
                       Justerat
                       <InfoTooltip text={"Räknat som generell prisjustering * procent verkställt"} />
                     </span>
                   </th>
-                  <th className="p-3 font-semibold">
+                  <th className="p-3 font-semibold sticky top-0 bg-[var(--secondary-element)] z-20">
                     <span className="flex items-center gap-1">
                       Summa tidigare justerat
                       <InfoTooltip text={"Procentsats som sändelser inom detta datum ökas med. Just nu bara på steg 1"} />
                     </span>
                   </th>
-                  <th className="p-3 font-semibold relative z-[1000]">Hantera</th>
+                  <th className="p-3 font-semibold sticky top-0 bg-[var(--secondary-element)] z-20">Hantera</th>
                 </tr>
               </thead>
               <tbody>
