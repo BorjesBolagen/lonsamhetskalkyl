@@ -1,0 +1,580 @@
+================================================================================
+KODANALYSRAPPORT – lonsamhetskalkyl
+Datum: 2026-07-13
+Genererad av: Claude Code (automatisk kodgranskning)
+================================================================================
+
+Föregående rapport: kodanalys_2026-07-06.txt (denna branch,
+claude/quirky-ptolemy-ekQSw). Den gjordes vid main HEAD 6dd79d4 (2026-06-29).
+Sedan dess har main fått en mycket aktiv period: ~36 kodcommits
+(2026-06-30 – 2026-07-09, PR #31–#39), 55 filer ändrade,
+ca +7 900 / -700 rader. Granskningen är gjord vid main HEAD 3dc5792.
+
+OBS: Rapporterna 2026-06-29 – 2026-07-13 ligger fortfarande enbart på denna
+branch; på main är senaste rapporten 2026-06-22. Merga gärna branchen så att
+fynden blir synliga för hela teamet.
+
+
+================================================================================
+1. VAD HAR HÄNT SEDAN SIST (commits 6dd79d4..3dc5792, 2026-06-30 – 2026-07-09)
+================================================================================
+
+NYTT / TILLAGT
+--------------
+* NATTLIG PROGNOS PER EKIPAGE + ANALYS-FLIK (5328930, 2e7fa5f m.fl.)
+  - Ny prognosmotor web/lib/forecastEngine.ts (~340 rader) som hämtar morgon-
+    dagens bokningar per ekipage från iLog, kör lönsamhetsberäkningen server-
+    side och sparar aggregat (vikt, FLM, estimerad intäkt, antal sändningar)
+    i nya tabellen daily_equipage_forecast (migration 20260703000000, med RLS:
+    endast admin får läsa; skrivning via service role).
+  - Tre nya cron-/körroutes: /api/cron/daily-forecast (skyddad med CRON_SECRET,
+    schemalagd 23:00 UTC via ny web/vercel.json), /api/cron/manual-daily-forecast
+    och /api/cron/manual-daily-forecast-stream (SSE-loggström; båda requireAdmin).
+  - Ny Analys-sida web/app/analytics/page.tsx (admin-only) med grafer (recharts),
+    ekipageval och Excel-export via /api/analytics/forecasts/export (exceljs).
+    API-routes: /api/analytics/{equipages,forecasts,forecasts/export}.
+  - Nya lib-filer: forecastAnalytics.ts (filter/paginering av prognosrader),
+    supabaseErrorTranslation.ts (felöversättare – dock ännu oanvänd),
+    profitabilityInput.ts (delad request-förberedelse för lönsamhetsberäkning).
+  - maxDuration för cron-jobbet höjd till 1800 s (80b01bc).
+
+* NYA PRISTILLÄGG I ADDON-MOTORN
+  - Tid-tillägg (4811abc): schablon 828 kr styrt av tabellen addon_tid.
+  - HVO-tillägg (dc6b785): procentpåslag, ny route /api/hvo (admin) som lagrar
+    procenten i alla användares filters; default 20 %.
+  - DMT (58543ba, "Påbörjat DMT"): ny route /api/dmt med xlsx-/textimport av
+    DMT-regler (filstorleksgräns 5 MB + ZIP-magic-byte-kontroll) och
+    DMT-beräkning i prisflödet.
+
+* NAV-BERÄKNING (3b22e38, 6d39589): brytpunktsberäkning per taxa
+  (get_nav_values/get_coefficient-RPC:er) som fördelar kundnettot mellan
+  fjärr/upphämtning/utkörning; värden visas i infobubbla bredvid priset.
+
+* PRISJUSTERING ÖVER TID (8cb323d, 3542fa9): ny tabell prisjusteringar +
+  komponenten PriceAdjustmentsPopup (skrollbar prishöjningslista). Historiska
+  sändningars priser räknas upp med ackumulerad justering i trappsteg 1.
+
+* UTBRUTNA MODULER (9332dea): styckegods- och paketburslogiken flyttad från
+  service.ts till egna filer web/profitability/styckegods.ts och paketbur.ts.
+  Paketburstabellen fick datumkolumn (699e81c); kusk-uppladdningen uppdaterar
+  nu även paketbur_prices (56e96bf).
+
+ÄNDRAT
+------
+* Namnmatchning: useEntireName kopplades till prisberäkningen (e8ca595) men
+  RPC-parametern togs sedan bort igen (5c4be7e) – parametern är i praktiken
+  död igen (se fynd M4). Namnöversättning görs nu på avsändare OCH mottagare
+  (1d7111f). Kundnamnmatchning körs numera endast för fjärrflödet, och
+  _isDbValidDestination-omklassningen kommenterades bort (ac963ab).
+* Hotfix: prognos anropas alltid oavsett jaro-resultat (b2aab22).
+* Filtrering: sändningar som inte finns i lastlistan filtreras bort (65634e2).
+* UI: Markera/Avmarkera alla vid val av lastbilar/linjer (55b5708, ac963ab),
+  tooltips flyttade till portal så de alltid ligger överst (06376c1),
+  dark mode-småfix (d44986a), datum i paketburstabellen (699e81c).
+* Konstanter: web/lib/backend/constants.ts borttagen, konsoliderad till
+  web/lib/constants.ts (67a0ad2).
+* Beroenden (caa5eba, 05549b9, 8086997): sheetJS/xlsx HELT BORTTAGET och
+  ersatt med exceljs 4.4.0 (stänger Prototype Pollution-sårbarheten);
+  recharts och lucide-react tillagda. .env.example fick CRON_SECRET.
+
+BORTTAGET
+---------
+* web/app/admin/nameTranslation.ts (logiken flyttad/omskriven i admin-sidan).
+* web/lib/backend/constants.ts (konsoliderad).
+* xlsx-paketet (ersatt av exceljs).
+* Gamla useEntireName-RPC-parametern (in_use_entire_name) ur steg 1–3.
+
+ÅTGÄRDAT FRÅN TIDIGARE RAPPORTER
+--------------------------------
+* 07-02 L14 (= 06-29 M2): jaro-estimation kraschar inte längre på tomt
+  RPC-svar – vakt för tomt namn (400) och tom array (404) tillagd (ec74bc4
+  "Fix M2 från kodanalys 29/06").
+* 07-02 M19 (delvis): xlsx-paketet borttaget → sheetJS-sårbarheterna borta.
+  npm audit i web/ visar nu 4 moderate (postcss via next, uuid via exceljs),
+  inga höga. ml-backend har dock fortfarande 4 high + 2 moderate (ws, qs) som
+  fixas utan breaking changes med npm audit fix – KÖR DETTA.
+* 07-06 N-L1: den vilseledande loggtexten i steg-loopen är omskriven.
+* 07-06 N-L3 (delvis): flera oanvända importer rensade
+  (DEFAULT_NAME_SIMILARITY_THRESHOLD, roundUpWeight-importen,
+  getCurrentlySignedInUser).
+* 07-06 N-M5a (delvis): admin-batchens slutuppladdning till Storage borttagen,
+  RPC körs per dag. (Obegränsad parallellism kvarstår dock, se status.)
+
+
+================================================================================
+2. NYA FYND – PRIORITERAD LISTA
+================================================================================
+
+--------------------------------------------------------------------------------
+HÖG PRIORITET
+--------------------------------------------------------------------------------
+
+[HÖG] H1. /api/dmt saknar autentisering och admin-kontroll helt
+  Fil: web/app/api/dmt/route.ts:620 (GET), :632 (POST)
+  Till skillnad från /api/hvo (som kör requireAdmin) finns ingen
+  requireUser/requireAdmin alls. POST:en importerar/skriver om/raderar
+  DMT-prisregler i databasen via getSupabaseServerClient(). Middleware
+  skiljer inte admin/icke-admin för API-paths, så varje inloggad användare
+  (t.ex. trafikledare) kan skriva om DMT-procentsatserna som direkt påverkar
+  kundpriser; hur långt en oinloggad kommer beror på RLS för addon_dmt som
+  inte kan verifieras i repot. (Hittades oberoende av tre granskningsspår.)
+  Åtgärd: Lägg requireAdmin() först i båda handlers, som i hvo-routen.
+  Verifiera RLS på addon_dmt oavsett.
+
+[HÖG] H2. applyNavAdjustments kraschar på tomt get_nav_values-svar
+  Fil: web/profitability/service.ts:953
+  const taxaValues = nav_values[0]; – tomt RPC-svar ger undefined och raderna
+  959–966 kastar TypeError. Funktionen anropas utan try/catch (service.ts:1119)
+  → hela lönsamhetsanropet blir 500 i stället för pris, och i nattprognosen
+  loggas bokningen som misslyckad. Alla andra NAV-fel hanteras via nav_error –
+  just tom array gör det inte.
+  Åtgärd: if (!nav_values?.length) → sätt nav_error och returnera fallback.
+
+[HÖG] H3. NAV-fel byter tyst intäktsbas från fjärr-andel till hela kundnettot
+  Fil: web/profitability/service.ts:1125-1126
+  directLoadedFjarrRevenue = navResult.nav_ers_exklusive_tillägg?.fjarr_ers
+  ?? customerNetRevenue. När NAV lyckas är intäkten fjärr-ANDELEN av kund-
+  nettot; vid transient DB-fel i get_distance/get_nav_values/get_coefficient
+  blir basen i stället HELA kundnettot. Samma sändning får alltså kraftigt
+  olika prognos beroende på ett övergående fel, och forecastEngine summerar
+  estimated_revenue utan att titta på nav_error.
+  Åtgärd: Konsekvent fallback – flagga och exkludera, eller markera raden.
+
+[HÖG] H4. get_coefficient = null nollar fjärr-ersättningen tyst
+  Fil: web/profitability/service.ts:991 (jfr :977-980)
+  Koefficienten destruktureras utan null-vakt; saknar relationen koefficient
+  blir justerad_fjarr = generell_fjarr * null = 0 utan fel eller varning.
+  sum_justerad krymper, gap-fördelningen (:1013-1016) blir fel och nollan
+  flödar in i intäktsbasen (se H3).
+  Åtgärd: Null-vakt med nav_error eller koefficient 1 som explicit fallback.
+
+[HÖG] H5. Stream-routen saknar cancel-hantering – stängd klient dödar hela
+  prognoskörningen innan något sparas
+  Fil: web/app/api/cron/manual-daily-forecast-stream/route.ts:25-53
+  ReadableStream har ingen cancel()-hanterare och send() skyddar inte
+  controller.enqueue(). När admin stänger modalen (analytics/page.tsx:312-320
+  kör eventSource.close()) kastar nästa enqueue TypeError inne i logger-
+  anropet, som propagerar genom runDailyEquipageForecast och avbryter
+  körningen FÖRE den enda upserten i slutet (forecastEngine.ts:303-326).
+  Catch-blocket anropar send() (kastar igen) och finally kör controller.close()
+  på stängd stream → unhandled rejection.
+  Åtgärd: cancelled-flagga i cancel(), gör send() till no-op efter cancel,
+  try/catch runt close(); låt körningen löpa klart eller avbryt medvetet.
+
+[HÖG] H6. Prognosjobbets timeout-budget: allt arbete förloras vid avbrott
+  Filer: web/app/api/cron/daily-forecast/route.ts:26 (maxDuration=1800),
+  manual-daily-forecast/route.ts:19 (300), manual-daily-forecast-stream/
+  route.ts (saknar maxDuration helt), web/lib/forecastEngine.ts:303-326
+  All data skrivs i EN upsert allra sist – timeout mitt i = 100 % förlorat
+  arbete. Vercels dokumenterade tak har varit 800 s; verifiera att 1800
+  faktiskt gäller er plan. Manual-routen (300 s) och stream-routen (default)
+  kör samma heljobb som cron-routen fick 1800 s för. Med 3 ekipage i taget,
+  iLog-retries och 5–15 DB-anrop per bokning tar en hel flotta lätt längre
+  än 300–800 s.
+  Åtgärd: Upserta inkrementellt per ekipage-batch; sätt samma verifierade
+  maxDuration i alla tre routes.
+
+[HÖG] H7. Prognosmotorns namnval är i otakt med Hem-vyn – systematiskt
+  avvikande intäktsprognoser
+  Fil: web/lib/forecastEngine.ts:104-151 (resolveCustomerName)
+  Commit 1d7111f ändrade Hem-vyn till att slå upp name_translation på
+  senderName/receiverName, men forecastEngine slår fortfarande upp på
+  customerName (.eq("ilog_name", customerName), rad 120). Bokningar som
+  Hem-vyn översätter via avsändare/mottagare får i nattprognosen original-
+  namnet → annat trappsteg → annan intäkt. Analys-fliken visar därmed andra
+  siffror än användarna ser i Hem, trots att docblocken lovar motsatsen.
+  Åtgärd: Dela namnuppslagslogiken (sender → receiver → jaro) mellan Hem
+  och forecastEngine via en gemensam funktion.
+
+[HÖG] H8. "Välj alla" i Analys-fliken bryter färgtilldelning och seriegräns
+  Fil: web/app/analytics/page.tsx:806-816 (Välj alla) vs :453-471, :520-530
+  "Välj alla" fyller selectedIds utan att tilldela colorSlots (det gör bara
+  toggleEquipage). chartSeries ger då slot 0 för ALLA valda: (1) hela flottan
+  ritas som hundratals identiskt färgade linjer i tre grafer – mycket tung
+  rendering och oläsbara grafer; (2) maxgränsen 8 serier och varningstexten
+  slutar fungera (hiddenSeriesCount blir 0); (3) färgmarkeringarna i ekipage-
+  listan renderas inte.
+  Åtgärd: Tilldela lediga slots i "Välj alla" eller derivera slots ur
+  selectedIds-ordningen.
+
+--------------------------------------------------------------------------------
+MEDEL PRIORITET
+--------------------------------------------------------------------------------
+
+[MEDEL] M1. Interna fel-/DB-meddelanden läcker till klienten i all ny kod –
+  och den nya felöversättaren används aldrig
+  Filer: web/app/api/dmt/route.ts:628,672; web/app/api/hvo/route.ts:75,110,
+  151,177; web/app/api/analytics/equipages/route.ts:63, forecasts/route.ts:48,
+  forecasts/export/route.ts:93; web/lib/forecastAnalytics.ts:86; cron-routes.
+  Rå error.message från Postgres/PostgREST/ExcelJS skickas i JSON-svar och
+  kan avslöja tabellnamn/kolumner/constraints. Samma klass som gamla M4 –
+  återinförd i den nya koden. web/lib/supabaseErrorTranslation.ts skrevs för
+  exakt detta men har noll användningsställen.
+  Åtgärd: Logga detaljer server-side; returnera översatta/generiska
+  meddelanden via den befintliga hjälparen.
+
+[MEDEL] M2. PostgREST-filterinjektionen (gamla M5) har spritts till den nya
+  delade koden – och körs nu med service role i nattjobbet
+  Filer: web/lib/profitabilityInput.ts:74-79, web/lib/taxPointLookup.ts:88,
+  web/profitability/paketbur.ts:69, web/profitability/trappsteg_steg.ts:364,381
+  Användarstyrda ort-/kund-/relationsnamn interpoleras oescapade i
+  .or()/.ilike-filtersträngar; ort med "," eller ")" bryter filtret, %/_
+  fungerar som wildcards. Via forecastEngine körs detta numera även i det
+  nattliga jobbet med service role-klient (RLS kringgås). resolveTaxPoints
+  ignorerar dessutom error (bara data destruktureras) → tyst felklassning.
+  Åtgärd: Bygg filtren med .in()/.eq(), escapa LIKE-wildcards, kontrollera
+  error. En delad, validerande uppslagsfunktion stänger flera fynd samtidigt.
+
+[MEDEL] M3. Prisjusteringslogiken i trappsteg 1 har fyra logikfel
+  Fil: web/profitability/trappsteg_steg.ts:69-101 (ny kod från 8cb323d)
+  (a) Framtidsdaterade höjningar tillämpas redan idag – summeringen saknar
+      övre gräns datum <= idag.
+  (b) Justeringar adderas i stället för att förräntas: två höjningar på 5 %
+      ger 1,10 i stället för 1,1025.
+  (c) return result > 0 ? result : 0 – nettosänkningar (som UI:t tillåter)
+      ignoreras helt.
+  (d) Ogiltigt avräkningsdatum → Invalid Date → hela totala justeringen
+      appliceras på raden i stället för ingen.
+  Dessutom en extra DB-query mot prisjusteringar per beräkning (rad 59-62) –
+  cachea per körning.
+
+[MEDEL] M4. route_profitability.ts är en död tvillingfil – och useEntireName/
+  linjerel tappas i den levande routen
+  Filer: web/app/api/profitability/route_profitability.ts (223 rader, död –
+  Next.js serverar bara route.ts, ingen importerar den), web/lib/api.ts:384,393
+  Klienten skickar useEntireName och linjerel men den levande route.ts +
+  profitabilityInput.ts läser ingen av dem – de parsas bara i den döda filen.
+  Konsekvens: namnvals-knappen i UI:t påverkar inte priset (gamla M16), och
+  linjerel faller alltid tillbaka på zoneName (service.ts:127-137) → Tid-
+  tillägget (828 kr) kan utebli när lineRelation avviker från zoneName.
+  Filen har redan börjat divergera (ac963ab patchade normalizeCity i BÅDA
+  kopiorna). Ta bort filen; flytta parametrarna in i prepareProfitabilityRequest.
+
+[MEDEL] M5. Utgångna/framtida DMT-perioder tillämpas när ingen period gäller
+  Fil: web/profitability/service.ts:418-420
+  candidates = activeRows.length > 0 ? activeRows : rows – finns ingen giltig
+  period idag väljs ändå den senaste (utgången eller ej påbörjad) och DMT-
+  procenten läggs på priset. När DMT-avtalet löpt ut ska tillägget vara 0.
+
+[MEDEL] M6. HVO-procenten är inkonsekvent mellan Hem och nattprognos, och
+  PATCH:en har en race
+  Filer: web/profitability/service.ts:705-709, web/app/api/hvo/route.ts:143-170
+  getConfiguredHvoPercentage läser inloggad användares filters; i cron-
+  kontexten finns ingen användare → alltid default 20 % oavsett admin-
+  inställning. "Global" inställning implementeras som read-modify-write av
+  ALLA användares filters utan lås – parallell settings-sparning kan tappa
+  HVO-värdet, och nya användare får aldrig procenten.
+  Åtgärd: Egen inställningstabell som läses även i cron.
+
+[MEDEL] M7. Styckegods slår upp distance_map i fel nyckelrymd
+  Fil: web/profitability/styckegods.ts:128-137 vs service.ts:533-543
+  Styckegods skickar råa postnummer som sender/receiver medan DMT-flödet
+  använder taxepunktspostnummer ur relationen. Är tabellen nycklad på taxe-
+  punkter missar styckegods-uppslaget alla postnummer som inte själva är
+  taxepunkter → avståndsprissättningen faller tyst bort (fallback trappsteg).
+  Åtgärd: Översätt postnummer → taxepunkt före uppslag (data finns redan).
+
+[MEDEL] M8. applyNavAdjustments parsar taxPointRelation rått – NaN in i
+  NAV-RPC:erna
+  Fil: web/profitability/service.ts:920 (jfr korrekta :482-484)
+  split("-").map(Number) utan sifferrensning/en-dash-hantering – "553 02-111
+  20" eller "GBG–SM" ger NaN → null in i get_distance → NAV uteblir/felar
+  medan tilläggen räknas på korrekt rensade taxepunkter. Gamla M8 (inkonse-
+  kvent parsning) omfattar nu SEX varianter i kodbasen.
+  Åtgärd: EN delad taxepunktsparser.
+
+[MEDEL] M9. Prognosaggregaten är inkonsekventa: vikt/FLM/antal räknar alla
+  bokningar, intäkten bara lyckade
+  Fil: web/lib/forecastEngine.ts:183-186, 213-225, 235-241
+  Failar 10 av 40 bokningar i routeConsignment sparas full vikt men 75 % av
+  intäkten, utan markering. Nyckeltal som kr/kg i Analys-fliken blir
+  systematiskt fel utan att det syns.
+  Åtgärd: Spara failed_consignment_count eller exkludera failade ur vikt/FLM.
+
+[MEDEL] M10. Omkörning av prognosen är inte idempotent, och totalfel
+  rapporteras som lyckad körning
+  Filer: web/lib/forecastEngine.ts:244-248, 303-326,
+  web/app/api/cron/daily-forecast/route.ts:72
+  Upserten skriver bara ekipage som fick prognos; vid omkörning ligger gamla
+  rader kvar för ekipage som failade eller inte längre har bokningar →
+  blandning av gamla och nya rader för samma datum. Cron-svaret är dessutom
+  status:true även när rowsSaved=0 och alla ekipage failade – Vercel ser
+  körningen som lyckad och gör inget omförsök.
+  Åtgärd: Delete-then-insert per datum inom körningen; icke-2xx när allt
+  failade.
+
+[MEDEL] M11. N+1/full-table-scan per bokning i nattjobbet
+  Filer: web/profitability/addonEngine.ts:214-215, web/lib/forecastEngine.ts:117-140
+  resolveTimeAddon hämtar HELA addon_tid per bokning (2 000 bokningar = 2 000
+  tabellscans per natt; trunkeras dessutom tyst vid Supabases 1000-radstak).
+  resolveCustomerName cachear resultat först efter await → samma kund i samma
+  batch slås upp dubbelt; routeConsignment gör 5–15 queries per bokning utan
+  cache av statiska pristabeller (DMT-settings m.m.).
+  Åtgärd: Läs statiska pristabeller EN gång per körning; cachea promise (inte
+  resultat); batcha namnöversättningar med .in().
+
+[MEDEL] M12. Manuella prognoskörningar är GET med sidoeffekter, utan spärr
+  mot dubbelkörning
+  Filer: web/app/api/cron/manual-daily-forecast/route.ts:22,
+  manual-daily-forecast-stream/route.ts:56, web/lib/supabaseServer.ts:41
+  GET som skriver till DB + cookies med sameSite:"lax" → top-level GET-
+  navigering från främmande sida kör jobbet med adminens session (CSRF).
+  Ingen låsning: nattcron + manuell körning kan köra samtidigt för samma
+  datum → dubbel iLog-last och interleavade upserts.
+  Åtgärd: POST för manual-routen; engångstoken eller fetch-stream för SSE;
+  körningslås per datum.
+
+[MEDEL] M13. Analys-sidans datahämtning saknar stale-skydd och delar
+  error-state mellan parallella anrop
+  Fil: web/app/analytics/page.tsx:415-451
+  Ingen loadId/AbortController: varje change-event på datumfälten startar en
+  ny hämtning och ett äldre långsamt svar kan skriva över nyare data medan
+  rubriken visar det nya intervallet. getForecastEquipages och
+  getForecastAnalytics kör parallellt och båda gör setError(null) vid success
+  → det ena anropets fel raderas tyst av det andras success. Ekipagelistan
+  re-hämtas dessutom i onödan vid varje datumändring.
+  Åtgärd: Samma loadId-mönster som home; separata error-states; hämta
+  ekipagelistan en gång.
+
+[MEDEL] M14. analytics/equipages läser hela prognostabellen för att hitta
+  unika ekipage
+  Fil: web/app/api/analytics/equipages/route.ts:26-46
+  Tabellen växer med ~antal ekipage per dag; efter ett år paginerar routen
+  igenom ~37 000 rader (37+ anrop) för att deduplicera till ~100 namn – på
+  varje sidladdning.
+  Åtgärd: RPC med select distinct, eller separat dimensionstabell.
+
+--------------------------------------------------------------------------------
+LÅG PRIORITET
+--------------------------------------------------------------------------------
+
+[LÅG] L1. CRON_SECRET jämförs inte timing-safe; debug-loggar kvar
+  Filer: web/app/api/cron/daily-forecast/route.ts:43 (vanlig !==),
+  manual-daily-forecast/route.ts:23 (console.log("gets in here") FÖRE auth),
+  web/app/home/hooks/useHomeProfitability.ts:117 (console.log("gets in here ")).
+  Åtgärd: crypto.timingSafeEqual; ta bort loggarna.
+
+[LÅG] L2. Datumvalidering är bara regex – ogiltiga datum släpps igenom
+  Filer: cron-routes, web/lib/forecastAnalytics.ts:17,35
+  "2026-13-40" passerar ^\d{4}-\d{2}-\d{2}$ → cron skickar "20261340" till
+  iLog; analytics ger 500 med rått Postgres-fel. Validera med Date-roundtrip
+  i EN delad parser (regexen är idag duplicerad i fyra filer).
+
+[LÅG] L3. fetchForecastRows paginerar utan deterministisk ordning
+  Fil: web/lib/forecastAnalytics.ts:75-77
+  Sortering på forecast_date + equipage_name är inte unik – vid ties över en
+  1000-radersgräns kan rader dubbleras/missas. Lägg .order("id") som tiebreaker.
+
+[LÅG] L4. fetchConsignmentsWithRetry retry:ar blint
+  Fil: web/lib/forecastEngine.ts:92-96
+  Retry på alla fel inkl. 4xx, ingen backoff, första felet sväljs tyst.
+  Retry endast på 5xx/timeout med kort backoff.
+
+[LÅG] L5. Schematypen för daily_equipage_forecast saknar id/created_at
+  Fil: web/lib/supabaseServerSchema.ts:203-235 vs migrationen och klient-
+  typen ForecastAnalyticsRow (som HAR fälten). select("*") returnerar fälten
+  men TS-typen ljuger. Regenerera typerna.
+
+[LÅG] L6. Duplicering/död kod i cron-/prognoskoden
+  - De tre cron-routes duplicerar DATE_REGEX, datumparsning och felsvar;
+    DAYS_BACK är 2 i cron men 7 i båda manuella utan förklaring.
+  - /api/cron/manual-daily-forecast används inte av frontend (Analys-sidan
+    använder bara stream-varianten) – död route.
+  - Inkonsekventa svarsformat: {success,value} / {status,message,summary} /
+    {status,message,data}.
+  - styckegods.ts:144,155 använder from("..." as any) – tabellerna saknas i
+    schematypen.
+  - Kommentarerna "körs 00:00 svensk tid" (vercel.json/migrationen) stämmer
+    bara vintertid – 23:00 UTC är 01:00 svensk sommartid. Datumlogiken i
+    getStockholmDateDaysBack är dock korrekt året runt.
+  - parseForecastFilter tillåter obegränsat datumintervall → hela tabellen
+    som JSON-payload; sätt maxintervall.
+
+[LÅG] L7. Tidstillägg: carriers_share <= 0 tvingas till 828 kr
+  Fil: web/profitability/addonEngine.ts:236-243
+  En rad med carriers_share = 0 (rimlig tolkning: "inget tillägg") ger ändå
+  fullt schablontillägg.
+
+[LÅG] L8. Paketbursimport: filordning vinner och saknad Kolli-kolumn
+  förgiftar 1-burspriset
+  Fil: web/lib/importEngine.ts:530-541, :413-415
+  Sista raden per (relation, antal_burar) vinner oavsett datum – en gammal
+  CSV importerad efter en ny skriver tillbaka gamla priser (datumkolumnen
+  sparas men används inte som vakt). Kolli ingår inte i REQUIRED_HEADERS;
+  saknas kolumnen blir kolli=1 och hela sändningens ersättning sparas som
+  à-pris för antal_burar=1.
+
+[LÅG] L9. DMT-importens procentheuristik misstolkar värden
+  Fil: web/app/api/dmt/route.ts:189-213
+  Värden utan %-tecken i (0,1] multipliceras med 100 – "1" (avsett 1 %) blir
+  100 %, "0.5" blir 50 %. Negativa procent släpps igenom.
+
+[LÅG] L10. Analys-modalens Avbryt/Stäng stoppar bara klienten
+  Fil: web/app/analytics/page.tsx:312-320, 751-765
+  EventSource stängs men serverjobbet fortsätter (jfr H5 – idag dödas det i
+  stället okontrollerat av enqueue-felet); loggen kastas vid stängning.
+  Åtgärd hänger ihop med H5: inför medveten avbrytning via AbortSignal.
+
+[LÅG] L11. chartPoints byggs kvadratiskt
+  Fil: web/app/analytics/page.tsx:533-554
+  För varje datum loopas alla selectedRows (O(datum x rader) x 3 mätvärden).
+  Gruppera raderna per datum en gång.
+
+[LÅG] L12. InfoTooltips align-prop är död och positionen fryser vid scroll
+  Fil: web/components/InformationBubble.tsx:12-15, :59-63
+  Portal-omskrivningen (06376c1) ignorerar align (anropare skickar fortfarande
+  align="right") och positionen sätts vid mouseenter – skrollar man med
+  tooltip öppen hänger den kvar fel.
+
+[LÅG] L13. PriceAdjustmentsPopup: omemoiserad beräkning, laddningsrace och
+  förvirrande kolumnnamn
+  Fil: web/components/PriceAdjustmentsPopup.tsx:41-66, :140-153, :246-251
+  Sortering+map körs om vid varje tangenttryck (lägg i useMemo); snabb
+  stäng/öppna ger två parallella laddningar utan staleness-guard; "Summa
+  tidigare justerat" visar i själva verket summan av NYARE rader. Modalen
+  saknar Escape-/backdropstängning.
+
+[LÅG] L14. Nya API-hjälpare upprepar det sköra .json().message-mönstret
+  Fil: web/lib/api.ts:558-580
+  getForecastEquipages/getForecastAnalytics kraschar med oläsbart fel om
+  servern svarar HTML (502/proxyfel) – samma brist som gamla L15.
+
+[LÅG] L15. Ny duplicering i frontend
+  - Analys-modalens loggpanel duplicerar admin-sidans (logColorClass, append,
+    Avbryt/Rensa, autoscroll) – bryt ut gemensam komponent.
+  - DEFAULT_PROFITABILITY_REFERENCE_VALUE finns i både web/lib/constants.ts:17
+    och web/app/home/hooks/homeTypesAndUtils.ts:9.
+  - Dubbla importrader från samma modul i settings/page.tsx:21-22 och
+    useSimulatorPlanner.ts:31-32.
+
+
+================================================================================
+3. STATUS FÖR TIDIGARE ÖPPNA FYND
+================================================================================
+
+FIXAT
+-----
+* 07-02 L14 / 06-29 M2 (jaro-estimation kraschar på tomt svar) – ec74bc4.
+* 07-02 M19, sheetJS-delen – xlsx borttaget, ersatt med exceljs; DMT-importen
+  har dessutom 5 MB-gräns och ZIP-signaturkontroll.
+* 07-06 N-L1 (vilseledande loggtext i steg-loopen) – texten rättad.
+
+DELVIS ÅTGÄRDAT
+---------------
+* 07-02 M1 (kontoenumeration forgot-password): svarskroppen är nu neutral för
+  okänd/känd e-post, MEN timingskillnaden kvarstår, 429/400 returneras bara
+  när kontot finns (bekräftar konto), och rate limiting saknas fortfarande på
+  login/forgot-password/set-password.
+* 07-02 H4 (DB-fel i resolveTaxPoints): omklassningsvektorn borta
+  (_isDbValidDestination bortkommenterad i ac963ab) – nu blir det i stället
+  tyst "Saknar taxepunktsrelation" (0 kr). Felet sväljs fortfarande och
+  .or()-injektionen kvarstår (se M2).
+* 07-02 L8: steg 2/3 returnerar nu single composite så null-vakterna funkar;
+  kvar: valideraInput tillåter vikt <= 0 medan addonEngine kastar för samma.
+* 07-02 L9: tilläggsapplicering styrs nu explicit per flöde (bra); kvar:
+  toFiniteNumber nollar fortfarande tyst utan AddonWarning.
+* 07-02 M19, beroende-delen: web/ nere på 4 moderate (postcss via next, uuid
+  via exceljs; fixbara endast med breaking --force). ml-backend har 4 HIGH +
+  2 moderate (ws, qs) som fixas UTAN breaking changes – kör npm audit fix.
+* 07-06 N-M2 (bred namnmatchning "PAKET"/"FAST"): matchningen oförändrad, men
+  missar faller nu tillbaka till trappstegsmodellen i stället för 0 kr.
+* 07-06 N-M5a (admin-batch): Storage-slutuppladdningen borta, RPC per dag.
+  Kvar: Promise.all över ALLA ekipage x 5 dagar (obegränsad parallellism) och
+  ilogData ackumuleras fortfarande – nu som ren död kod (+ StorageError-import).
+* 07-06 N-L3 (död kod): flera importer rensade; kvar: TrappstegRow/MedelseRow,
+  normalizeText- och NameSource-importer, setLineCards-param, ternary med
+  identiska grenar (home/page.tsx:263), och nytillkommen död kod (se ovan).
+
+KVARSTÅR (oförändrade – se resp. rapport för detaljer)
+------------------------------------------------------
+* 07-02 H1  Klient-side användarskapande + rollsättning med anon-nyckel
+            (admin/page.tsx:572, :598-608). VERIFIERA RLS på User.role –
+            potentiell privilegieeskalering. Viktigaste öppna säkerhetsfyndet.
+* 07-02 H2  Math.min på tom array → Infinity som intäkt i try_steg_1
+            (trappsteg_steg.ts:110-126); truthiness-vakter kastar giltigt 0-pris.
+* 07-02 H3  Substring-.ilike på paketbursrelation (paketbur.ts:69) – nya
+            styckegods.ts:144 gör däremot rätt (exakt match).
+* 07-02 H5  Kort-refresh under pågående laddning låser home-UI:t
+            (useHomeLoader.ts:514-515 m.fl.).
+* 07-02 H6  Cache-restore av "loading" ger permanenta spinners (useHomeCache.ts).
+* 07-02 M2  Lösenordsbyte utan nuvarande lösenord – recovery-fallbacken
+            (reset-password/page.tsx:121-124, :131) gäller vilken inloggad
+            session som helst. OBS: ec74bc4 "Fix M2" avsåg 06-29-rapportens
+            M2 (jaro), INTE detta fynd.
+* 07-02 M3  Reset-redirect faller tillbaka på request-origin (fail-open).
+* 07-02 M4  Interna fel läcker – förvärrat, se nya M1.
+* 07-02 M5  PostgREST-injektion – spridd, se nya M2.
+* 07-02 M6  Accounts-tabell med klartextlösenord i schemat (supabaseServer-
+            Schema.ts:17-31).
+* 07-02 M7  parseInt utan NaN-vakt + svalda query-fel i paketbur.ts:21,44.
+* 07-02 M8  taxPointRelation parsas olika – nu SEX varianter, se nya M8.
+* 07-02 M9  roundUpWeight -1 – större sprängradie: -1 går nu även in i NAV-
+            brytpunkten (service.ts:966) där negativ fjärr-term vinner
+            Math.min-valet.
+* 07-02 M10 Linjeorientering tyst urkopplad (useHomeLoader.ts:275).
+* 07-02 M11 ensureEquipageTotals räknar aldrig om FLM efter kort-refresh.
+* 07-02 M12 N+1 utan dedup i home-hydreringen (useHomeProfitability.ts:61-105).
+* 07-02 M14 Dubbel omvänd avståndslookup i simulatorn.
+* 07-02 M15 sessionStorage-persistens i setState-updater (useHomeLineState.ts).
+* 07-02 M16 useEntireName död – bekräftat igen: RPC-parametern borttagen i
+            5c4be7e, enda läsaren är döda route_profitability.ts (se nya M4).
+* 07-02 M17 Duplicerad referensvärdesparser med motstridig validering.
+* 07-02 M18 CDN-CSS utan SRI och med @latest (layout.tsx:35).
+* 07-02 L7  /api/test utan auth. Ta bort routen.
+* 07-02 L10-L12, L16-L18 – samtliga oförändrade (Date.now()-loadId, retry
+            utan backoff, tre tooltip-implementationer, settings-buggar,
+            hårdkodat [] i transportPlanningUtils.ts:462-472, simulator-
+            page.tsx fortfarande exakt 1568 rader).
+* 07-02 L13 Supabase .temp-filer – fler committade i denna period
+            (web/supabase/.temp/cli-latest, linked-project.json). Gitignorera.
+* 07-06 N-H1 "use server" i authHelpers.ts:1 och backend/utils.ts:1 – alla
+            NYA lib-filer använder korrekt import "server-only", men de två
+            gamla är oförändrade. Två raders fix.
+* 07-06 N-M1 Vikt 0 → FJÄRR + addonEngine kastar (service.ts:92,
+            addonEngine.ts:276-280).
+* 07-06 N-M3 loadId-guard saknas i catch (useHomeLoader.ts:434-437).
+* 07-06 N-M4 Ingen AbortController i home-laddningen.
+* 07-06 N-M5b setIsSigningUp(true) anropas aldrig – dubbelsubmit möjlig.
+* 07-06 N-M5c handleUpdateUser: try/finally utan catch → unhandled rejection.
+* 07-06 N-L2 Trasiga Tailwind-klasser i admin (exakt samma 13 ställen).
+
+
+================================================================================
+4. SAMMANSTÄLLNING
+================================================================================
+
+Sedan sist:  ~36 kodcommits (2026-06-30 – 2026-07-09), +7 900/-700 rader.
+             Störst: nattlig prognos per ekipage + Analys-flik, nya tillägg
+             (HVO/Tid/DMT), NAV-brytpunkter, prisjustering över tid,
+             utbruten styckegods-/paketburslogik, xlsx → exceljs.
+
+Nya fynd:    8 HÖG, 14 MEDEL, 15 LÅG (avsnitt 2).
+Tidigare:    3 FIXAT, 8 DELVIS, ~35 KVARSTÅR (avsnitt 3).
+
+Rekommenderad åtgärdsordning:
+1. H1 – requireAdmin() på /api/dmt (öppen prisregelmanipulation för alla
+   inloggade; kopiera hvo-routens mönster). Minuters arbete.
+2. 07-02 H1 – verifiera/lås RLS på User.role (privilegieeskalering) och
+   07-06 N-H1 ("use server" → "server-only", två rader).
+3. H2+H3+H4 – null-vakter och konsekvent fallback i NAV-koden; tillsammans
+   med kvarstående 07-02 H2/M9 är detta de fel som ger felaktiga ekonomiska
+   tal i produktion.
+4. H5+H6+M10 – gör prognosjobbet robust: cancel-hantering i stream-routen,
+   inkrementell upsert, idempotent omkörning, ärliga statuskoder. Idag kan
+   en stängd browserflik eller timeout kasta en hel nattkörning.
+5. H7 – synka namnvalet mellan Hem och prognos, annars går Analys-flikens
+   siffror inte att lita på.
+6. M19-resten – npm audit fix i ml-backend (4 high, non-breaking).
+7. M1+M2 – koppla in supabaseErrorTranslation och sanera .or()/.ilike-
+   filtren via en delad uppslagsfunktion.
+8. M3 – rätta prisjusteringslogiken (framtida datum, förräntning, negativa
+   justeringar) innan fler historiska priser räknas upp fel.
+
+Trend: Säkerhetsmedvetenheten i NY kod är klart bättre än tidigare (analytics-
+routes har requireAdmin, migrationen har RLS, CRON_SECRET används, "server-
+only" i nya lib-filer, xlsx-sårbarheten löstes genom paketbyte) – men gamla
+öppna fynd åtgärdas långsamt (0 av de sex HÖG-fynden från 07-02 är stängda),
+och /api/dmt visar att auth-gaten fortfarande kan glömmas i enskilda routes.
+En central konvention (t.ex. lint-regel eller route-wrapper som kräver
+explicit requireAdmin/requireUser/public-markering) skulle ta bort felklassen.
+================================================================================
