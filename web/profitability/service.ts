@@ -950,23 +950,57 @@ async function applyNavAdjustments(
       nav_ers_exklusive_tillägg: undefined
     }
   }
-  const taxaValues = nav_values[0];
+
+  const taxaValues = Array.isArray(nav_values) ? nav_values[0] : undefined;
+
+  // get_nav_values kan sakna rad för t.ex. vikter utanför taxetabellen.
+  // Utan denna kontroll kraschar hela lönsamhetsberäkningen och bokningen
+  // blir helt utan prognos i Hem-vyn.
+  if (!taxaValues) {
+    console.error(
+      `NAV-taxor saknas för vikt ${weight} kg och avstånd ${distance} km.`,
+    );
+    return {
+      ...currentResult,
+      nav_error: `NAV-taxor saknas för vikt ${weight} kg och avstånd ${distance} km.`,
+      nav_ers_exklusive_tillägg: undefined
+    }
+  }
 
   // Räkna ut generell kalkyl som :
     // avg term: 1a + 1b*vikt i TON
     // ank term: 2a + 2b*vikt i TON
     // fjärr: 10*vikt i TON
-  const generell_avg_term = taxaValues.nav_avg_terminal_direktlastat_frs 
+  const generell_avg_term = taxaValues.nav_avg_terminal_direktlastat_frs
                    + taxaValues.nav_avg_terminal_direktlastat_ton * (weight / 1000);
   const generell_ank_term = taxaValues.nav_ank_terminal_direktlastat_frs
                    + taxaValues.nav_ank_terminal_direktlastat_ton * (weight / 1000);
-  
-  // Ta hänsyn till brytpunktsberäkning
-  const generell_fjarr_current = taxaValues.nav_taxa_fjarr_current * (weight / 1000);
-  const generell_fjarr_above = taxaValues.nav_taxa_fjarr_above * (weight_plus_one / 1000);
 
-  // Välj mindre av de två
-  const generell_fjarr = generell_fjarr_current < generell_fjarr_above ? generell_fjarr_current : generell_fjarr_above;
+  // Ta hänsyn till brytpunktsberäkning
+  const generell_fjarr_current = toFiniteNumber(taxaValues.nav_taxa_fjarr_current, 0) * (weight / 1000);
+
+  // Brytpunkten gäller bara om det faktiskt finns en viktklass ovanför:
+  // saknas nästa viktklass (round_up_weight ger 0/-1) eller saknas taxan för
+  // den (nav_taxa_fjarr_above är null) blir alternativet 0 kr, och ett
+  // rakt min() nollställer då hela fjärrdelen — dvs bokningen får ingen summa.
+  const taxa_fjarr_above = toFiniteNumber(taxaValues.nav_taxa_fjarr_above, 0);
+  const harBrytpunkt = weight_plus_one > weight && taxa_fjarr_above > 0;
+  const generell_fjarr_above = harBrytpunkt
+    ? taxa_fjarr_above * (weight_plus_one / 1000)
+    : null;
+
+  if (!harBrytpunkt) {
+    console.warn(
+      `Ingen giltig brytpunkt för vikt ${weight} kg `
+      + `(viktklass+1: ${weight_plus_one}, taxa ovanför: ${taxaValues.nav_taxa_fjarr_above}). `
+      + "Använder aktuell viktklass för fjärrdelen.",
+    );
+  }
+
+  // Välj mindre av de två, men bara när brytpunkten finns
+  const generell_fjarr = generell_fjarr_above !== null
+    ? Math.min(generell_fjarr_current, generell_fjarr_above)
+    : generell_fjarr_current;
 
   // Räkna ut justerad kalkyl som:
     // avg/ank terminal samma
