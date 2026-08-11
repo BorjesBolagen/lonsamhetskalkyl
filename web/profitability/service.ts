@@ -1002,6 +1002,23 @@ async function applyNavAdjustments(
     ? Math.min(generell_fjarr_current, generell_fjarr_above)
     : generell_fjarr_current;
 
+  // Saknas fjärrtaxa helt (t.ex. vikt utanför taxetabellen) blir fjärrandelen 0
+  // och prognosen visar 0 kr trots att kundnettot är beräknat. Behandla det som
+  // ett NAV-fel istället, så faller beräkningen tillbaka på hela kundnettot.
+  if (!(generell_fjarr > 0)) {
+    const message =
+      `NAV-taxa för fjärr saknas eller är 0 för vikt ${weight} kg `
+      + `och avstånd ${distance} km. Kundnettot används utan NAV-fördelning.`;
+
+    console.error(message);
+
+    return {
+      ...currentResult,
+      nav_error: message,
+      nav_ers_exklusive_tillägg: undefined
+    };
+  }
+
   // Räkna ut justerad kalkyl som:
     // avg/ank terminal samma
     // fjärr: generell * koeff från tabell
