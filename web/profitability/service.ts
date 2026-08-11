@@ -1303,28 +1303,42 @@ async function calculateBaseRevenue(
   input: ProfitabilityInput,
   weight_plus_one: number,
 ): Promise<ProfitabilityResult | null> {
+  const misslyckadeSteg: string[] = [];
+
   for (const step of BASE_CALCULATION_STEPS) {
     try {
       const estimated = await step.executor(input, weight_plus_one);
 
-      if (estimated !== null) {
+      // Ett kundnetto på noll eller mindre är inget användbart pris. Behandla
+      // det som utebliven träff så att nästa steg får försöka, istället för
+      // att låsa fast prognosen vid 0 kr.
+      if (estimated !== null && estimated > 0) {
         return {
           step_used: step.step,
           estimated_revenue: estimated,
         };
       }
     } catch (error) {
-      console.error(
-        `Fel i ${step.label}. Felmeddelande:`,
-        error instanceof Error ? error.message : error,
-      );
+      const message = error instanceof Error ? error.message : String(error);
 
-      return {
-        step_used: -1,
-        estimated_revenue: 0,
-        detail: `Något gick fel i ${step.label}`,
-      };
+      console.error(`Fel i ${step.label}. Felmeddelande:`, message);
+
+      // Ett fel i ett steg ska inte stoppa hela trappan. Nästa steg är en
+      // bredare matchning och kan mycket väl ge en användbar prognos.
+      misslyckadeSteg.push(`${step.label}: ${message}`);
     }
+  }
+
+  // Inget steg gav träff. Berodde det på fel snarare än på att historiken
+  // saknas ska det synas, annars döljs t.ex. ett databasavbrott.
+  if (misslyckadeSteg.length > 0) {
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail:
+        `Inget steg gav träff. Fel i ${misslyckadeSteg.length} av `
+        + `${BASE_CALCULATION_STEPS.length} steg.`,
+    };
   }
 
   return null;
