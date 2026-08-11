@@ -106,19 +106,22 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
         return totalKundnettofrakt / totalVikt * weight;
     };
 
-    // Lista med estimerade priser
+    // Lista med estimerade priser. Bara priser över noll räknas: historiken
+    // kan innehålla nollade eller krediterade rader, och ett sådant estimat
+    // skulle vinna min() nedan och låsa fast steg 1 vid 0 kr eller ett
+    // negativt belopp istället för att gå vidare till steg 2.
     const estimates: number[] = [];
 
     // Om vi hittade för orginalparametrar, beräkna estimerat pris
     if (hittatOrginalData) {
         const estOrginal = await estimeraPris(data_orginal);
-        if (estOrginal !== null) estimates.push(estOrginal);
+        if (estOrginal !== null && estOrginal > 0) estimates.push(estOrginal);
     }
 
     // Om vi hittade för vikt+1, beräkna estimerat pris
     if (hittatPlusEttData) {
         const estPlusEtt = await estimeraPris(data_plus_ett);
-        if (estPlusEtt !== null) estimates.push(estPlusEtt);
+        if (estPlusEtt !== null && estPlusEtt > 0) estimates.push(estPlusEtt);
     }
 
     // Math.min() utan argument ger Infinity, vilket skulle rapporteras som en

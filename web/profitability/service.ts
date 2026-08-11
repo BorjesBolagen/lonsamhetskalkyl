@@ -910,9 +910,60 @@ async function applyAddons(
 
 type FjarrTaxaUppslag = {
   viktklass: number | null;
+  overHelaViktklasstabellen: boolean;
   hogstaViktklass: number | null;
   taxaHogstaViktklass: number | null;
 };
+
+/**
+ * Placerar en vikt i viktklasstabellen.
+ *
+ * get_weight_class returnerar NULL för vikter utanför tabellen, och eftersom
+ * Number(null) är 0 går det inte att skilja "ingen klass" från klass 0 i
+ * TypeScript. Här läses hela tabellen istället, så att en vikt över sista
+ * intervallet kan identifieras explicit — det är just de sändningarna som
+ * ska räknas med högsta viktklassens taxa.
+ */
+async function klassificeraVikt(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  weight: number,
+): Promise<{ viktklass: number | null; overHelaTabellen: boolean }> {
+  const { data, error } = await supabase.rpc("get_entire_vkl_table");
+
+  if (error) {
+    console.error("Kunde inte hämta viktklasstabellen: " + error.message);
+    return { viktklass: null, overHelaTabellen: false };
+  }
+
+  const rader = Array.isArray(data) ? data : [];
+
+  if (rader.length === 0) {
+    return { viktklass: null, overHelaTabellen: false };
+  }
+
+  const traff = rader.find(
+    (rad) =>
+      weight >= toFiniteNumber(rad.min, Number.POSITIVE_INFINITY)
+      && weight <= toFiniteNumber(rad.max, Number.NEGATIVE_INFINITY),
+  );
+
+  if (traff) {
+    return {
+      viktklass: toFiniteNumber(traff.vkl, NaN),
+      overHelaTabellen: false,
+    };
+  }
+
+  const hogstaMaxVikt = Math.max(
+    ...rader.map((rad) => toFiniteNumber(rad.max, Number.NEGATIVE_INFINITY)),
+  );
+
+  return {
+    viktklass: null,
+    overHelaTabellen:
+      Number.isFinite(hogstaMaxVikt) && weight > hogstaMaxVikt,
+  };
+}
 
 /**
  * Tar reda på varför fjärrtaxan saknas för en sändning.
@@ -932,25 +983,19 @@ async function hamtaFjarrTaxaUppslag(
   weight: number,
   distanceKm: number | null,
 ): Promise<FjarrTaxaUppslag> {
+  const { viktklass: klassNummer, overHelaTabellen } =
+    await klassificeraVikt(supabase, weight);
+
+  const viktklass = klassNummer !== null && Number.isFinite(klassNummer)
+    ? klassNummer
+    : null;
+
   const tomtUppslag: FjarrTaxaUppslag = {
-    viktklass: null,
+    viktklass,
+    overHelaViktklasstabellen: overHelaTabellen,
     hogstaViktklass: null,
     taxaHogstaViktklass: null,
   };
-
-  const { data: viktklassData, error: viktklassError } = await supabase.rpc(
-    "get_weight_class",
-    { input_weight: weight },
-  );
-
-  if (viktklassError) {
-    console.error(
-      "Kunde inte hämta viktklass för fjärrtaxa: " + viktklassError.message,
-    );
-    return tomtUppslag;
-  }
-
-  const viktklass = toFiniteNumber(viktklassData, NaN);
 
   const { data: hogstaKlassRad, error: klassError } = await supabase
     .from("nav_taxa_fjarr_direktgods")
@@ -969,10 +1014,7 @@ async function hamtaFjarrTaxaUppslag(
   const hogstaViktklass = toFiniteNumber(hogstaKlassRad?.weight_class, NaN);
 
   if (!Number.isFinite(hogstaViktklass)) {
-    return {
-      ...tomtUppslag,
-      viktklass: Number.isFinite(viktklass) ? viktklass : null,
-    };
+    return tomtUppslag;
   }
 
   const { data: kmRader, error: kmError } = await supabase
@@ -987,7 +1029,6 @@ async function hamtaFjarrTaxaUppslag(
     );
     return {
       ...tomtUppslag,
-      viktklass: Number.isFinite(viktklass) ? viktklass : null,
       hogstaViktklass,
     };
   }
@@ -1004,7 +1045,7 @@ async function hamtaFjarrTaxaUppslag(
   const taxa = toFiniteNumber(traff?.value, 0);
 
   return {
-    viktklass: Number.isFinite(viktklass) ? viktklass : null,
+    ...tomtUppslag,
     hogstaViktklass,
     taxaHogstaViktklass: taxa > 0 ? taxa : null,
   };
@@ -1081,19 +1122,25 @@ async function applyNavAdjustments(
   if (taxa_fjarr_current <= 0) {
     const uppslag = await hamtaFjarrTaxaUppslag(supabase, weight, distance);
 
+    // Två sätt att hamna över taxetabellen: vikten ligger över hela
+    // viktklasstabellen, eller den har en viktklass som är högre än den
+    // högsta i fjärrtabellen.
     const arOverHogstaViktklass =
-      uppslag.viktklass !== null
-      && uppslag.hogstaViktklass !== null
-      && uppslag.viktklass > uppslag.hogstaViktklass;
+      uppslag.overHelaViktklasstabellen
+      || (
+        uppslag.viktklass !== null
+        && uppslag.hogstaViktklass !== null
+        && uppslag.viktklass > uppslag.hogstaViktklass
+      );
 
     if (arOverHogstaViktklass && uppslag.taxaHogstaViktklass !== null) {
       taxa_fjarr_current = uppslag.taxaHogstaViktklass;
       overHogstaViktklass = true;
 
       console.warn(
-        `Vikt ${weight} kg (viktklass ${uppslag.viktklass}) är över högsta `
-        + `viktklassen ${uppslag.hogstaViktklass}. Använder dess taxa `
-        + `${uppslag.taxaHogstaViktklass} kr/ton.`,
+        `Vikt ${weight} kg (viktklass ${uppslag.viktklass ?? "över tabellen"}) `
+        + `är över högsta viktklassen ${uppslag.hogstaViktklass}. `
+        + `Använder dess taxa ${uppslag.taxaHogstaViktklass} kr/ton.`,
       );
     } else {
       // Viktklassen ligger inom tabellen men saknar taxa. Att gissa med en
