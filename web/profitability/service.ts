@@ -908,6 +908,72 @@ async function applyAddons(
   };
 }
 
+/**
+ * Hämtar fjärrtaxan för den högsta viktklassen i nav_taxa_fjarr_direktgods.
+ *
+ * Tabellen är nycklad på diskret weight_class och en övre km-gräns, till
+ * skillnad från terminaltabellerna som använder öppna kg_from/km_from-gränser.
+ * En sändning som är tyngre än tabellens högsta viktklass får därför ingen
+ * träff alls. Enligt NAV-modellen ska den högsta viktklassens taxa användas
+ * för hela vikten i de fallen.
+ */
+async function hamtaHogstaViktklassFjarrTaxa(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  distanceKm: number | null,
+): Promise<{ taxa: number; viktklass: number } | null> {
+  const { data: hogstaKlassRad, error: klassError } = await supabase
+    .from("nav_taxa_fjarr_direktgods")
+    .select("weight_class")
+    .order("weight_class", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (klassError) {
+    console.error(
+      "Kunde inte hämta högsta viktklass för fjärrtaxa: " + klassError.message,
+    );
+    return null;
+  }
+
+  const hogstaViktklass = toFiniteNumber(hogstaKlassRad?.weight_class, NaN);
+
+  if (!Number.isFinite(hogstaViktklass)) {
+    return null;
+  }
+
+  const { data: kmRader, error: kmError } = await supabase
+    .from("nav_taxa_fjarr_direktgods")
+    .select("value, km_till_och_med")
+    .eq("weight_class", hogstaViktklass)
+    .order("km_till_och_med", { ascending: true });
+
+  if (kmError) {
+    console.error(
+      "Kunde inte hämta fjärrtaxa för högsta viktklassen: " + kmError.message,
+    );
+    return null;
+  }
+
+  const rader = Array.isArray(kmRader) ? kmRader : [];
+
+  if (rader.length === 0) {
+    return null;
+  }
+
+  // Första km-intervallet som täcker sträckan. Är sträckan längre än
+  // tabellens sista intervall används det längsta som finns.
+  const km = toFiniteNumber(distanceKm, 0);
+  const traff =
+    rader.find((rad) => toFiniteNumber(rad.km_till_och_med, 0) >= km)
+    ?? rader[rader.length - 1];
+
+  const taxa = toFiniteNumber(traff?.value, 0);
+
+  return taxa > 0
+    ? { taxa, viktklass: hogstaViktklass }
+    : null;
+}
+
 async function applyNavAdjustments(
   input: ProfitabilityInput,
   currentResult: ProfitabilityResult,
@@ -967,24 +1033,56 @@ async function applyNavAdjustments(
     }
   }
 
+  // Ta hänsyn till brytpunktsberäkning
+  let taxa_fjarr_current = toFiniteNumber(taxaValues.nav_taxa_fjarr_current, 0);
+
+  // Saknas taxa för sändningens viktklass är sändningen tyngre än
+  // fjärrtabellens högsta viktklass. Då används den högsta klassens taxa,
+  // multiplicerad med sändningens verkliga vikt.
+  let overHogstaViktklass = false;
+
+  if (taxa_fjarr_current <= 0) {
+    const hogstaKlass = await hamtaHogstaViktklassFjarrTaxa(supabase, distance);
+
+    if (hogstaKlass !== null) {
+      taxa_fjarr_current = hogstaKlass.taxa;
+      overHogstaViktklass = true;
+
+      console.warn(
+        `Vikt ${weight} kg saknar fjärrtaxa. Använder högsta viktklassen `
+        + `(${hogstaKlass.viktklass}) med taxa ${hogstaKlass.taxa} kr/ton.`,
+      );
+    }
+  }
+
   // Räkna ut generell kalkyl som :
     // avg term: 1a + 1b*vikt i TON
     // ank term: 2a + 2b*vikt i TON
     // fjärr: 10*vikt i TON
-  const generell_avg_term = taxaValues.nav_avg_terminal_direktlastat_frs
-                   + taxaValues.nav_avg_terminal_direktlastat_ton * (weight / 1000);
-  const generell_ank_term = taxaValues.nav_ank_terminal_direktlastat_frs
-                   + taxaValues.nav_ank_terminal_direktlastat_ton * (weight / 1000);
+  // En sändning över högsta viktklassen fyller ett helt ekipage och lastas
+  // direkt hos avsändaren utan terminalhantering. Hela kundnettot hör då till
+  // fjärrbenet, så terminalerna får ingen andel av fördelningen.
+  const generell_avg_term = overHogstaViktklass
+    ? 0
+    : taxaValues.nav_avg_terminal_direktlastat_frs
+      + taxaValues.nav_avg_terminal_direktlastat_ton * (weight / 1000);
+  const generell_ank_term = overHogstaViktklass
+    ? 0
+    : taxaValues.nav_ank_terminal_direktlastat_frs
+      + taxaValues.nav_ank_terminal_direktlastat_ton * (weight / 1000);
 
-  // Ta hänsyn till brytpunktsberäkning
-  const generell_fjarr_current = toFiniteNumber(taxaValues.nav_taxa_fjarr_current, 0) * (weight / 1000);
+  const generell_fjarr_current = taxa_fjarr_current * (weight / 1000);
 
   // Brytpunkten gäller bara om det faktiskt finns en viktklass ovanför:
   // saknas nästa viktklass (round_up_weight ger 0/-1) eller saknas taxan för
   // den (nav_taxa_fjarr_above är null) blir alternativet 0 kr, och ett
   // rakt min() nollställer då hela fjärrdelen — dvs bokningen får ingen summa.
+  // Är sändningen redan över högsta viktklassen finns ingen brytpunkt alls.
   const taxa_fjarr_above = toFiniteNumber(taxaValues.nav_taxa_fjarr_above, 0);
-  const harBrytpunkt = weight_plus_one > weight && taxa_fjarr_above > 0;
+  const harBrytpunkt =
+    !overHogstaViktklass
+    && weight_plus_one > weight
+    && taxa_fjarr_above > 0;
   const generell_fjarr_above = harBrytpunkt
     ? taxa_fjarr_above * (weight_plus_one / 1000)
     : null;
