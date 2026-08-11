@@ -1059,17 +1059,13 @@ async function applyNavAdjustments(
     // avg term: 1a + 1b*vikt i TON
     // ank term: 2a + 2b*vikt i TON
     // fjärr: 10*vikt i TON
-  // En sändning över högsta viktklassen fyller ett helt ekipage och lastas
-  // direkt hos avsändaren utan terminalhantering. Hela kundnettot hör då till
-  // fjärrbenet, så terminalerna får ingen andel av fördelningen.
-  const generell_avg_term = overHogstaViktklass
-    ? 0
-    : taxaValues.nav_avg_terminal_direktlastat_frs
-      + taxaValues.nav_avg_terminal_direktlastat_ton * (weight / 1000);
-  const generell_ank_term = overHogstaViktklass
-    ? 0
-    : taxaValues.nav_ank_terminal_direktlastat_frs
-      + taxaValues.nav_ank_terminal_direktlastat_ton * (weight / 1000);
+  // Terminaltabellerna är nycklade på öppna kg_from-gränser och ger därför
+  // värden även för vikter över högsta viktklassen. Fördelningen görs på
+  // samma sätt som för alla andra sändningar.
+  const generell_avg_term = taxaValues.nav_avg_terminal_direktlastat_frs
+                   + taxaValues.nav_avg_terminal_direktlastat_ton * (weight / 1000);
+  const generell_ank_term = taxaValues.nav_ank_terminal_direktlastat_frs
+                   + taxaValues.nav_ank_terminal_direktlastat_ton * (weight / 1000);
 
   const generell_fjarr_current = taxa_fjarr_current * (weight / 1000);
 
