@@ -42,8 +42,7 @@ export async function getCurrentUser(supabase: SupabaseServerClient): Promise<Ba
 /**
  * Rundar upp en vikt till lägsta vikt i nästa viktklass
  * @param weight vikt att hitta vikt+1 för
- * @returns vikt som ett nummer, -1 om fel uppstår eller om det inte finns
- *          någon viktklass ovanför (t.ex. vikter i den högsta viktklassen)
+ * @returns vikt som ett nummer, -1 om fel uppstår
  */
 export async function roundUpWeight(weight: number): Promise<number> {
 
@@ -57,15 +56,8 @@ export async function roundUpWeight(weight: number): Promise<number> {
     return -1;
   }
 
-  // Saknas nästa viktklass returnerar RPC:n null. Number(null) blir 0, vilket
-  // annars tolkas som en giltig vikt längre fram i beräkningen.
-  if (data === null || data === undefined) {
-    console.warn(`Ingen viktklass ovanför vikt ${weight} kg.`);
-    return -1;
-  }
-
   const viktklass = Number(data);
-  return Number.isFinite(viktklass) ? viktklass : -1;
+  return viktklass;
 
 }
 

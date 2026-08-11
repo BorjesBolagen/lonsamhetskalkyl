@@ -112,20 +112,15 @@ export async function try_steg_1(input: ProfitabilityInput, weight_plus_one: num
     // Om vi hittade för orginalparametrar, beräkna estimerat pris
     if (hittatOrginalData) {
         const estOrginal = await estimeraPris(data_orginal);
-        if (estOrginal !== null) estimates.push(estOrginal);
+        if (estOrginal) estimates.push(estOrginal);
     }
 
     // Om vi hittade för vikt+1, beräkna estimerat pris
     if (hittatPlusEttData) {
         const estPlusEtt = await estimeraPris(data_plus_ett);
-        if (estPlusEtt !== null) estimates.push(estPlusEtt);
+        if (estPlusEtt) estimates.push(estPlusEtt);
     }
 
-    // Math.min() utan argument ger Infinity, vilket skulle rapporteras som en
-    // träff i steg 1 och stoppa trappstegsmodellen med ett ogiltigt pris.
-    if (estimates.length === 0) {
-        return null;
-    }
 
     // Returnera det lägsta av de estimerade priserna
     return Math.min(...estimates);
