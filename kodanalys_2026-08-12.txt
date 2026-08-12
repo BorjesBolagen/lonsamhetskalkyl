@@ -1,0 +1,997 @@
+================================================================================
+KODANALYSRAPPORT - lonsamhetskalkyl
+Datum: 2026-08-12
+Branch: main (ed8e631)
+Genererad av: Claude Code (automatisk kodgranskning)
+================================================================================
+
+Foregaende rapport: kodanalys_2026-06-22.txt
+Denna rapport tacker utvecklingen 2026-06-19 - 2026-08-12 (ca 7 veckor).
+
+Metod: git-historik, lasning av samtliga 33 API-routes, auth-infrastruktur,
+middleware, migrationer, prismotor och frontend-hooks. Fynden nedan ar belagda
+med filnamn och radnummer. Dar en slutsats beror pa RLS-policies som inte finns
+i repot ar det uttryckligen markerat.
+
+Anmarkning om verktyg: npm audit kordes mot package-lock.json. Typkontroll
+(tsc) och lint kunde INTE koras i analysmiljon eftersom node_modules saknas -
+de fel som dessa verktyg rapporterade ar miljoartefakter och redovisas darfor
+inte som kodfynd.
+
+
+================================================================================
+1. VAD HAR HANT SEDAN SIST (2026-06-19 - 2026-08-12)
+================================================================================
+
+Omfattning: 86 commits, 90 filer andrade, ca +11 281 / -1 230 rader.
+API-ytan har vuxit fran 24 till 33 routes. Databasen har vuxit till 31 tabeller.
+
+NYTT / TILLAGT
+--------------
+* Nattlig prognosmotor. web/lib/forecastEngine.ts (+340) och
+  web/lib/forecastAnalytics.ts (+95). Cron-jobb /api/cron/daily-forecast som
+  kors 23:00 UTC via web/vercel.json, plus tva manuella admin-triggers
+  (/api/cron/manual-daily-forecast och -stream med SSE-progress).
+  Resultatet sparas i nya tabellen daily_equipage_forecast.
+* Analys-flik. web/app/analytics/page.tsx (+743 rader i komponenten) med
+  Excel-export via exceljs, grafer via recharts och tre API-routes under
+  /api/analytics/.
+* NAV-berakning (tva utgavor, 2026-07-01 och 07-02) med brytpunktsberakning
+  och varden i infobubbla bredvid priset.
+* Tillagg: HVO-tillagg och tid-tillagg (2026-07-03), DMT pabborjat (2026-07-05).
+  Nya routes /api/hvo och /api/dmt. web/profitability/addonEngine.ts utbyggd.
+* Paketbur och styckegods brutna till egna moduler:
+  web/profitability/paketbur.ts (+87) och styckegods.ts (+195).
+* Prisjustering over tid for aldre historiska sandningar (2026-07-06).
+  Ny tabell prisjusteringar och komponenten PriceAdjustmentsPopup.tsx (+291).
+* Gemensam auth-helper: web/lib/authHelpers.ts med requireUser() och
+  requireAdmin(). Anvands nu i 28 av 33 routes. Detta atgardar M5 strukturellt.
+* web/lib/profitabilityInput.ts (+168) - flyttar taxepunktsuppslaget ut ur
+  API-routen och slar upp allt i EN fraga i stallet for fyra sekventiella.
+* web/lib/supabaseErrorTranslation.ts (+90) for anvandarvanliga felmeddelanden.
+* Forsta databasmigrationen i repot:
+  web/supabase/migrations/20260703000000_daily_equipage_forecast.sql
+* Namnmatchning vidareutvecklad: /api/profitability/jaro-estimation och
+  /api/profitability/name-translations, namnoversattning pa bade avsandare och
+  mottagare, "markera/avmarkera alla" i urvalslistor.
+
+ANDRAT
+------
+* web/profitability/service.ts vaxte till 1 436 rader (+1 357). Innehaller nu
+  hela flodesdirigeringen (PAKETBUR, STYCKEGODS, FJARR, EGENFAKTURERAT, SUNE).
+* Trappstegsmodellen finjusterad i atta commits 2026-08-11, samtliga kring
+  fjarrtaxa och viktklassklampning:
+  - fjarrdelen nollstalldes felaktigt nar viktklass+1 saknades (fixat)
+  - skyddsnat: fall tillbaka pa kundnetto nar fjarrtaxan saknas
+  - over hogsta viktklassen anvands hogsta klassens fjarrtaxa
+  - klampning sker nu bara nar vikten verkligen overstiger hogsta viktklassen
+  - icke-positiva estimat avvisas i steg 1
+  - trappan gar vidare till nasta steg aven om ett steg kastar fel
+  - narmaste viktklass (uppat eller nedat) anvands nar fjarrtaxan saknas
+* web/app/home/hooks/useHomeLoader.ts omarbetad (+534).
+* web/app/settings/page.tsx utbyggd (+440) med ekipage- och linjeval.
+* Beroenden: xlsx (SheetJS) ersatt av exceljs pga prototype pollution.
+  Verifierat: inga xlsx-importer kvar i kallkod, noll traffar i lockfile.
+
+BORTTAGET
+---------
+* Den gamla lonsamhetsrouten finns kvar som en oanvand kopia,
+  web/app/api/profitability/route_profitability.ts (180 rader, noll
+  referenser). Den exponeras inte som endpoint - i App Router ar bara
+  route.ts speciell - men bor stadas bort.
+
+
+================================================================================
+2. STATUS PA FORRA RAPPORTENS FYND
+================================================================================
+
+ATGARDAT (5)
+------------
+H2  Auth pa lonsamhetsrouten. web/app/api/profitability/route.ts:10-11 borjar
+    nu med requireUser().
+H3  Division med noll. web/profitability/trappsteg_steg.ts:104-106 har
+    "if (totalVikt === 0) return null;". Samma skydd i steg 4 (rad 298).
+    Aven Math.min()-pa-tom-lista ar explicit hanterad (rad 127-133).
+M1  Otypade Supabase-anrop i lonsamhetsrouten. All logik flyttad till
+    web/lib/profitabilityInput.ts som ar typad via SupabaseClient<Database>.
+M2  Fyra sekventiella tax_point_lookup-anrop ersatta av EN fraga
+    (web/lib/profitabilityInput.ts:71-79).
+L7  iLog-hemligheter. Verifierat: inga NEXT_PUBLIC_ILOG_*-variabler nagonstans,
+    inget env-block i next.config.ts, .env* ar gitignorerad.
+
+DELVIS ATGARDAT (5)
+-------------------
+H1  web/app/api/users/get/user/route.ts har nu requireUser() och kolumn-
+    whitelist i stallet for select("*") - men rad 35 innehaller
+    "const isAdmin = false; // replace with your admin check if needed".
+    Se nytt fynd M4 nedan.
+M3  Validering av taxPointRelation-format finns bara i try_steg_4
+    (trappsteg_steg.ts:259-267). Steg 1, 2, 3 och 5 (rad 21, 150, 210, 315)
+    anvander fortfarande split("-").map(Number) utan kontroll.
+M4  Den brackliga _isDbValidDestination-kopplingen: konsumenten ar
+    bortkommenterad (service.ts:95, 102) men producenten satter fortfarande
+    faltet (profitabilityInput.ts:102, 150). Nu dod data i stallet.
+M5  authHelpers.ts finns och anvands i 28 av 33 routes. Men 12 routes har kvar
+    parallell manuell auth-kod, och /api/hvo definierar en EGEN lokal
+    requireAdmin() (rad 40) i stallet for att importera den delade.
+L1  Dod kod i home/page.tsx ar borta, EGENFAKTURERAT-logiken ar live. Kvar:
+    service.ts:95,102 samt den nya doda filen route_profitability.ts.
+L2  messages/get/messages returnerar inte langre status:false med HTTP 200.
+    Men svarsformaten skiljer sig fortfarande mellan routes.
+L3  !isNaN ersatt med Number.isNaN, men det ar fortfarande parseInt (ingen
+    Number.isFinite) och postnummer langdvalideras inte.
+
+KVARSTAR OFORANDRAT (5)
+-----------------------
+M6  Duplicerade utils. Har blivit VARRE - nu 9 duplicerade funktioner, se C1.
+M7  Ingen caching av iLog-anrop. ilogClient.ts:112 satter cache: "no-store".
+L4  forgot-password/route.ts:66-71 loggar fortfarande hela Supabase-felet.
+L5  users/route.ts GET anvander select("*") utan range()/limit().
+L6  home/page.tsx ar 556 rader med en enda useMemo och noll useCallback.
+
+
+================================================================================
+3. NYA FYND - KRITISKA PRISFEL I BERAKNINGSKEDJAN
+================================================================================
+
+Dessa fynd ger FEL BELOPP i produktion, i dag. De ar verifierade genom lasning
+av koden och bor atgardas fore sakerhetsfynden i avsnitt 4, eftersom de
+paverkar de beslut trafikledarna fattar varje dag.
+
+[KRITISK] K1. Fem av sex NAV-felvagar anvander HELA kundnettot som fjarrintakt
+  Filer: web/profitability/service.ts:1135-1142 (och 1102, 1120, 1254, 1270)
+         i kombination med service.ts:1413-1418
+
+  VERIFIERAT. Nar NAV-berakningen misslyckas returneras:
+      return { ...currentResult, nav_error: "...",
+               nav_ers_exklusive_tillagg: undefined }
+  step_used behalls alltsa OFORANDRAT fran currentResult.
+
+  Men skyddet pa rad 1413 kontrollerar bara step_used:
+      if (navResult.step_used === -1) return navResult;
+  vilket inte fangar dessa felvagar. Rad 1417 gor da:
+      const directLoadedFjarrRevenue =
+          navResult.nav_ers_exklusive_tillagg?.fjarr_ers ?? customerNetRevenue;
+  och eftersom faltet uttryckligen sattes till undefined faller ?? igenom till
+  HELA kundnettot.
+
+  Scenario: fjarrsandning pa 34 000 kg dar get_nav_values saknar rad (exakt det
+  fall kommentaren pa rad 1131-1133 beskriver). Ar andelen Direktlastat Fjarr
+  normalt ca 40 % blir visat pris ca 2,5 ganger for hogt - och DMT-tillagget
+  raknas dessutom pa den uppblasta basen.
+
+  Commit c00c9bc/b5a591d tog uttryckligen bort just detta beteende, men bara
+  for grenen pa rad 1217-1241 som satter step_used: -1. De ovriga fem
+  felvagarna missades.
+
+  Notera asymmetrin: saknad TAXA ger 0 kr, saknad NAV-RAD ger 250 % av ratt
+  belopp. Tva narmast identiska datafel ger motsatta utfall.
+
+  Atgard: satt step_used: -1 (eller en explicit nav_failed-flagga) i samtliga
+  felvagar, alternativt lat rad 1417 behandla saknad fjarr_ers som fel i
+  stallet for att falla tillbaka pa kundnettot.
+
+
+[KRITISK] K2. coefficient valideras aldrig - null blir tyst 0
+  Fil: web/profitability/service.ts:1249-1263
+
+  VERIFIERAT. Bara coefficient_error kontrolleras, aldrig sjalva vardet:
+      const justerad_fjarr = generell_fjarr * coefficient;
+  I JavaScript ar x * null === 0 (verifierat: 5*null = 0). En RPC som inte
+  hittar taxepunktsparet returnerar NULL utan att satta error.
+
+  Scenario: ny taxepunktsrelation som saknas i koefficienttabellen ger
+  justerad_fjarr = 0, vilket gor gap for stort och fjarr_ers systematiskt fel.
+  Ingen nav_error, ingen varning i UI:t.
+
+  Ar coefficient i stallet undefined blir justerad_fjarr NaN, som propagerar
+  hela vagen till estimated_revenue (roundMoney(NaN) === NaN).
+
+  Atgard: kontrollera Number.isFinite(coefficient) och behandla saknat varde
+  som fel.
+
+
+[KRITISK] K3. toFiniteNumber skyddar inte mot null - aterinfor en redan fixad bugg
+  Fil: web/profitability/service.ts:371-377
+       anvands pa rad 946-947, 951, 1016, 1072
+
+  VERIFIERAT. Number(null) === 0 och Number.isFinite(0) === true, sa
+  fallbacken anvands bara for undefined och icke-numerisk text - aldrig for
+  null.
+
+  Konkret pa rad 951:
+      const vkl = toFiniteNumber(traff.vkl, NaN);
+      return Number.isFinite(vkl) ? {viktklass: vkl, position:"inom"} : ...
+  vikt_till_viktklass.class ar nullable enligt schemat
+  (supabaseServerSchema.ts:823-828). En rad med class = null ger alltsa
+  viktklass 0 med position "inom" i stallet for "okand". Rad 1027-1052 valjer
+  da narmaste tillgangliga klass = den LAGSTA viktklassen, dvs den HOGSTA
+  kr/ton. En tung sandning far darmed for hog fjarrtaxa.
+
+  Detta ar exakt det fel commit b5a591d beskriver ("NULL blev tyst viktklass
+  0") - aterinfort i den nya hjalpfunktionen.
+
+  Samma monster pa rad 946-947: toFiniteNumber(rad.min, POSITIVE_INFINITY)
+  gor 0 av NULL, sa raden matchar tvartemot vad kommentaren avser.
+
+  Atgard: lagg till en explicit null-kontroll i toFiniteNumber, eller anvand
+  value == null ? fallback : Number(value).
+
+
+[KRITISK] K4. Saknat avstand tolkas som 0 km i stallet for som fel
+  Filer: web/profitability/service.ts:1097-1100, 1118, 1072-1074
+
+  get_distance kontrolleras bara mot distance_error, aldrig mot null.
+  Pa rad 1072 gor hamtaFjarrTaxaUppslag:
+      const km = toFiniteNumber(distanceKm, 0);
+  och eftersom Number(null) === 0 (se K3) anvands fallbacken aldrig - km blir
+  0. Rad 1074 matchar da forsta (kortaste) km-intervallet, dvs lagsta kr/ton
+  i klassen.
+
+  Scenario: taxepunktsrelation som saknas i distance_map. Fjarrtaxan hamtas
+  for "0 km" utan att nagot loggas. Felmeddelandet pa rad 1224 blir dessutom
+  "...och null km".
+
+
+[KRITISK] K5. Brytpunkten raknas pa fel vikt i trappstegsmodellen
+  Filer: web/profitability/trappsteg_steg.ts:106, 185, 233, 299, 344
+         jamfor web/profitability/service.ts:1197-1198
+
+  NAV implementerar brytpunktsregeln korrekt:
+      generell_fjarr_above = taxa_fjarr_above * (weight_plus_one / 1000);
+
+  Trappstegen kor daremot steg_N en gang med weight och en gang med
+  weight_plus_one, men multiplicerar BADA resultaten med den verkliga vikten:
+      return totalKundnettofrakt / totalVikt * weight;   (steg 1, rad 106)
+
+  Resultatet blir min(kr/kg_nuvarande, kr/kg_nasta) x vikt i stallet for
+  min(kr/kg_nuvarande x vikt, kr/kg_nasta x brytpunktsvikt). Eftersom kr/kg
+  nastan alltid sjunker med viktklassen vinner plus-ett-grenen i princip
+  alltid.
+
+  Scenario: 900 kg, nuvarande klass 12 kr/kg, nasta klass (brytpunkt 1000 kg)
+  10,50 kr/kg. Koden ger min(10 800, 9 450) = 9 450 kr. Brytpunktsregeln ger
+  min(10 800, 10 500) = 10 500 kr.
+
+  Kundnettot blir alltsa systematiskt for lagt i ALLA fem steg, vilket slar
+  rakt igenom NAV-fordelningen (gap = baseRevenue - sum_justerad) och ner i
+  visat pris. Detta ar sannolikt det fynd som paverkar flest sandningar.
+
+
+[KRITISK] K6. Styckegods slar upp distance_map med postnummer i stallet for taxepunkt
+  Fil: web/profitability/styckegods.ts:128-138 (via resolveDistanceKm rad 20-54)
+
+  pickupZipClean/destZipClean kommer fran consignment.pickupPostalCode eller
+  fran kolumnen tax_point_lookup.postnummer. Men distance_map.sender/receiver
+  ar TAXEPUNKTER - se app/api/distance-map/route.ts:44-71 och
+  lib/profitabilityInput.ts:71-97 dar taxepunkten ar kolumnen
+  taxepunktspostnummer, en ANNAN kolumn (schema rad 722-730).
+  service.ts:500-521 gor ratt och skickar taxepunkter.
+
+  Foljd: styckegodssandningar utan traff i styckegods_linjer far distanceKm
+  null, avstandsprislistan hoppas over (rad 153) och sandningen skickas till
+  trappstegsmodellen (service.ts:226) - alltsa fel prismodell for hela flodet.
+  Rakar postnumret av misstag finnas som taxepunkt far man avstandet for en
+  helt annan stracka.
+
+
+[KRITISK] K7. tonPrice valideras inte - 0 kr och NaN accepteras som giltigt pris
+  Fil: web/profitability/styckegods.ts:147, 158, 163-169
+
+      tonPrice = Number(linjeData.pris_per_ton);   // null -> 0, "1 250" -> NaN
+      if (tonPrice === null) return null;          // enda kontrollen
+
+  Scenario A: raden finns men pris_per_ton ar NULL -> tonPrice 0 -> price 0.
+  service.ts:199 accepterar det som en traff -> step_used 0,
+  estimated_revenue 0 med texten "Styckegods: Linjepris". Sandningen raknas
+  som prissatt till 0 kr och gar aldrig vidare till trappstegsmodellen.
+
+  Scenario B: text eller decimalkomma -> NaN -> propagerar till
+  estimated_revenue och vidare till forecastEngine.ts:215
+  (totalEstimatedRevenue += NaN), vilket gor HELA ekipagets dagsprognos NaN.
+  Den skrivs sedan till daily_equipage_forecast och summeras i Analys-vyn.
+
+  Atgard: kontrollera Number.isFinite(tonPrice) && tonPrice > 0.
+
+
+[KRITISK] K8. Prisjusteringar: framtida hojningar raknas in redan i dag
+  Fil: web/profitability/trappsteg_steg.ts:59-92, 96-107
+
+  a) Fragan pa rad 59-62 hamtar ALLA rader ur prisjusteringar utan filter pa
+     datum <= i dag, och totalJusterat (rad 76) summerar dem. En hojning som
+     registrerats i forvag for nasta ar - vilket popupen tillater
+     (PriceAdjustmentsPopup.tsx:94-101) - blaser upp dagens estimat direkt.
+  b) Rad 90-91: result > 0 ? result : 0 nollstaller nettonegativa
+     justeringar. Prishojningar tillampas, prissankningar ignoreras -
+     asymmetrin kan bara ge for hoga priser.
+  c) Rad 78-92: vakten fangar inte Invalid Date (ett objekt, alltid truthy)
+     och inte new Date(null) (epoch 1970). Med oparsbart avrakningsdatum blir
+     alla jamforelser falska, sumOlder = 0, och HELA den historiska
+     justeringen laggs pa raden.
+
+
+[KRITISK] K9. DMT: period som inte galler i dag kan valjas
+  Fil: web/profitability/service.ts:399-441
+
+      const candidates = activeRows.length > 0 ? activeRows : rows;
+      sortera pa valid_from FALLANDE, ta [0]
+
+  activeRows kraver att bade valid_from och valid_to ar satta och omsluter
+  dagens datum. Rader med NULL-datum kan alltsa aldrig bli aktiva, men ligger
+  kvar i rows och kan valjas av fallbacken. Och nar ingen period ar aktiv
+  valjs perioden med SENAST valid_from - som mycket val kan ligga i framtiden.
+
+  Scenario: nasta ars DMT-sats laddas in i forvag samtidigt som innevarande
+  periods valid_to passerats -> nasta ars procentsats anvands pa dagens
+  priser.
+
+
+[KRITISK] K10. Vikt 0 routas till FJARR och ger 0 kr med vilseledande felmeddelande
+  Filer: web/profitability/service.ts:92, 279, 1184, 1217-1241
+
+      const isUnder1000kg = weight > 0 && weight < 1000;   // rad 92
+
+  En bokning utan vikt (profitabilityInput.ts:156 satter chargeable_weight:
+  weight ?? 0) uppfyller inte styckegodsvillkoret och hamnar i FJARR.
+  valideraInput (rad 279) slapper igenom 0 eftersom bara isNaN kontrolleras.
+  generell_fjarr blir taxa x (0/1000) = 0 -> step_used -1 med texten
+  "Fjarr: NAV-taxa saknas for 0 kg och X km".
+
+  Den verkliga orsaken (vikt saknas) maskeras alltsa som ett taxefel, vilket
+  gor felsokningen missvisande.
+
+
+OVRIGA KORREKTHETSOBSERVATIONER (lagre effekt)
+----------------------------------------------
+* service.ts:1428 vs 1429-1430: HVO beraknas pa KUNDNETTOT men laggs ovanpa
+  FJARRANDELEN, medan DMT beraknas pa fjarrandelen. Ar fjarrandelen ~40 % av
+  kundnettot blir HVO-tillagget ~2,5x for stort i forhallande till den bas det
+  adderas till. Kan vara avsiktligt, men de tva procenttillaggen anvander
+  olika baser utan att koden forklarar varfor. BOR VERIFIERAS MOT AFFARSREGEL.
+* paketbur.ts:75-86: tierBurar = Math.ceil(actualBurar) valjer prisrad, men
+  priset multipliceras med det OAVRUNDADE actualBurar. For 2,4 burar valjs
+  raden for 3 burar och multipliceras med 2,4. Antingen ar pris ett styckpris
+  (da ska tier-raden inte rundas upp) eller ett totalpris (da ska det inte
+  multipliceras) - kombinationen kan inte vara ratt i bada fallen.
+* service.ts:1001-1004: viktklasslistan for fjarrtaxan hamtas utan .limit()
+  eller paginering. Kodbasen kanner till 1000-radersgransen pa andra stallen
+  (service.ts:638, forecastAnalytics.ts:19-20). Overstiger
+  nav_taxa_fjarr_direktgods 1000 rader faller de HOGSTA viktklasserna bort
+  (sortering stigande) och tunga sandningar far for hog kr/ton. VERIFIERA
+  RADANTALET i tabellen.
+* service.ts:1095: NAV splittar taxepunktsrelationen bara pa bindestreck,
+  medan getTaxPointsFromInput (rad 482-484) och addonEngine (rad 137-140)
+  accepterar [-,en-dash,em-dash]. En tankstreckrelation ger
+  Number("55302-11120") = NaN -> get_distance(NaN, NaN). NAV ignorerar
+  dessutom input.senderTaxPoint/receiverTaxPoint som redan ar upplosta.
+* service.ts:558-576 (findDistanceDmtRow) anvander dubbelt inklusiva granser
+  (>= km_from OCH <= km_to) medan fjarrtaxan (rad 1074) och styckegods
+  (styckegods.ts:155) bara ar ovre-inklusiva. Angransande intervall som delar
+  gransvarde matchas av den rad som rakar komma forst i sorteringen.
+* forecastEngine.ts:213-241: avvisade berakningar loggas bara och bidrar med
+  0, men consignment_count raknar ALLA bokningar. En rad i
+  daily_equipage_forecast gar darfor inte att skilja fran ett ekipage som
+  verkligen har lag intakt. Migrationen saknar kolumn for antal misslyckade
+  berakningar.
+* service.ts:1354-1362: nar steg felar men inget ger traff returneras bara
+  ett ANTAL ("Fel i 2 av 5 steg") - de insamlade meddelandena i
+  misslyckadeSteg kastas bort och finns bara i serverloggen.
+* Ignorerad error vid DB-uppslag finns aven i paketbur.ts:18-22, 27-33,
+  41-47, 50-56 och styckegods.ts:76-78, 83-90, 106-108, 112-119. I bada blir
+  dessutom parseInt("ABC123", 10) = NaN som skickas in i .eq("postnummer", NaN).
+* Dubbelavrundning: getBaseRevenueValue (rad 340-342) rundar, applyAddons
+  rundar om samma varde (rad 793-802) och rundar summan igen (rad 905).
+
+
+KONTROLLERAT OCH KORREKT
+------------------------
+* Math.min() med tom array ar skyddat (trappsteg_steg.ts:129-131) och
+  spreadarna i service.ts:958-971 ar skyddade av langdkontroller.
+* weight_plus_one > weight (rad 1195) hanterar -1 fran roundUpWeight korrekt.
+* Divisionerna pa rad 1278-1280 ar skyddade av sum_generell <= 0-kontrollen.
+* steg_2/steg_3 returnerar composite-objekt, steg_4/steg_5 arrayer - koden
+  indexerar ratt i respektive fall.
+* justerat lagras som andel (inte procent), sa 1 + adj har ratt enhet.
+
+
+================================================================================
+4. NYA FYND - HOG PRIORITET (SAKERHET)
+================================================================================
+
+[HOG] H1. /api/dmt saknar all autentisering - skriver till prisdata
+  Fil: web/app/api/dmt/route.ts:620 (GET), :632 (POST)
+
+  Filen importerar varken requireUser eller requireAdmin. Den ar den enda
+  icke-publika routen av 33 helt utan kontroll. POST tar emot en .xlsx-fil
+  eller inklistrad text och skriver till pristabellen addon_dmt:
+    rad 546-549  .delete().in("id", duplicateIds)
+    rad 559-566  .update({percentage, km_from, km_to})
+    rad 574-576  .insert(rule)
+
+  Att detta ar ett forbiseende och inte avsiktligt framgar av att
+  syster-endpointen /api/hvo har rollkontroll (hvo/route.ts:40), och att
+  DMT-uppladdning bara anropas fran admin-sidan
+  (web/app/admin/page.tsx:704, 741 via lib/api.ts:476, 493, 507).
+  Behorigheten ar alltsa enbart UI-djup.
+
+  Utnyttjande: vilken inloggad anvandare som helst kan kora
+    POST /api/dmt  {"pastedText":"DATE.FROM\t\t2020-01-01\n..."}
+  och skriva om drivmedelstillaggen for hela systemet.
+
+  Routen anvander getSupabaseServerClient() (anon + session), sa RLS pa
+  addon_dmt ar sista forsvarslinjen - och den policyn finns inte i repot.
+
+  Atgard: lagg requireAdmin() overst i bade GET och POST.
+
+
+[HOG] H2. Next.js 16.2.9 har nio hoga CVE:er, inklusive middleware-bypass
+  Filer: web/package.json:15, web/proxy.ts
+
+  npm audit rapporterar next i sarbart intervall
+  (9.3.4-canary.0 - 16.3.0-preview.10). Bland advisories:
+    - Middleware / Proxy bypass in App Router applications
+    - Unauthenticated disclosure of internal Server Function endpoints
+    - SSRF in Server Actions / i rewrites
+    - Cache confusion of response bodies
+    - DoS i Server Actions och Image Optimization
+
+  Middleware-bypassen ar direkt relevant har: web/proxy.ts:81-108 ar det ENDA
+  stallet dar admin-rollen kontrolleras for /admin. web/app/admin/page.tsx ar
+  en klientkomponent (rad 1) helt utan egen rollkontroll. Kan middleware
+  kringgas faller alltsa hela skyddet for adminpanelen. /analytics har en
+  klientkontroll (page.tsx:393-400) som ar kosmetisk.
+
+  Atgard: uppgradera till next 16.3.0. Lagg dessutom en serverside-kontroll i
+  sjalva admin-sidan sa att skyddet inte hanger pa ett enda lager.
+
+  Ovriga sarbara produktionsberoenden: postcss (XSS + path traversal),
+  sharp (libvips-CVE:er), nanoid, brace-expansion (DoS), uuid via exceljs.
+  Totalt 7 sarbarheter, 5 hoga. De flesta atgardas med npm audit fix.
+
+
+[HOG] H3. Kontoskapande och rolltilldelning sker i webblasaren
+  Fil: web/app/admin/page.tsx:572-607
+
+  Nya anvandare skapas med browser-klienten (anon-nyckeln som ligger i
+  JS-bundlen):
+    rad 572  await supabase.auth.signUp({...})
+    rad 604  await supabase.from("User").update(userUpdate).eq("id", ...)
+  dar userUpdate innehaller role (rad 597).
+
+  Tva foljder:
+  (a) For att flodet ska fungera maste projektets publika signup vara
+      pasagen, vilket innebar att vem som helst kan registrera konto direkt
+      mot Supabase utan att passera applikationen. /api/signup/route.ts gor
+      bara en e-postkontroll (rad 32) och skapar ingenting.
+  (b) role skrivs fran klienten med anvandarens egen JWT. Att anvandare far
+      UPDATE:a sin egen User-rad ar belagt av
+      web/app/api/users/set/filters/route.ts:34,46-49 som uppdaterar
+      User.filters med anon-klienten. Saknas kolumn-GRANT eller trigger som
+      blockerar just role kan en trafikledare kora
+        supabase.from("User").update({role:"admin"}).eq("id", <eget id>)
+      och darefter passera bade requireAdmin() (authHelpers.ts:33-43) och
+      middleware (proxy.ts:100-108), som lasar rollen fran samma kolumn.
+
+  MASTE VERIFIERAS mot faktisk RLS/kolumnrattighet i Supabase-projektet.
+
+  Atgard: flytta kontoskapande till en serverroute med requireAdmin() och
+  supabaseAdmin.auth.admin.createUser(). Stang av publik signup. Sakerstall
+  att role inte kan skrivas av anvandaren sjalv.
+
+
+[HOG] H4. Prisdata skrivs direkt fran webblasaren utan rollkontroll
+  Filer: web/components/PriceAdjustmentsPopup.tsx:93-97 (insert), :129 (delete)
+         web/app/admin/page.tsx:389-396 (rpc fill_name_translation_from_...)
+
+  Verifierat: komponenten anvander getSupabaseBrowserClient() (rad 4, 86, 129)
+  och gor insert/delete mot prisjusteringar utan att nagon serverkod ar
+  inblandad. Ingen rollkontroll finns i applikationslagret alls.
+
+  Prisjusteringarna paverkar lonsamhetsberakningen direkt - de anvands i
+  trappsteg_steg.ts:98-100 (getCumulativeJusteringFor) for att rakna upp
+  historiska kundnetton.
+
+  Utnyttjande: en inloggad icke-admin oppnar valfri sida och kor samma
+  .insert()/.delete() fran konsolen.
+
+  Atgard: flytta bakom serverroutes med requireAdmin().
+
+
+================================================================================
+5. NYA FYND - MEDEL PRIORITET
+================================================================================
+
+[MEDEL] M1. PostgREST-filterinjektion i .or()-strangar
+  Filer: web/lib/taxPointLookup.ts:88 och web/lib/profitabilityInput.ts:74-79
+
+  Bagge bygger filtersstrangar genom konkatenering av ovaliderad indata:
+    postortChunk.map((p) => `postort.ilike.${p}`).join(",")
+
+  ANMARKNING: koden i taxPointLookup.ts:83-92 infordes av en tidigare
+  Claude-session (commit f5572d5) som ett prestandafix - batchning av
+  postort-uppslag. Den ursprungliga varianten anvande .ilike("postort", p)
+  per ort, vilket var parameteriserat och sakert. Batchningen bytte alltsa
+  sakerhet mot prestanda utan att det uppmarksammades. Det ar en regression
+  som infordes av kodanalysarbetet sjalvt och bor rattas.
+
+  taxPointLookup.ts ar den allvarligare av de tva:
+    - Ingen normalisering alls; postorts byggs av value.trim() (rad 122-125)
+    - Kors mot getSupabaseAdminClient() (rad 59), alltsa service role
+      FORBI RLS
+    - Anropas fran /api/ilog/consignments:96 och unassigned-consignments:115,
+      bada skyddade av enbart requireUser()
+  Ett kommatecken i ett ortsnamn racker for att bryta filtret.
+
+  profitabilityInput.ts far ortsnamnet fran query-parametrar
+  (/api/profitability), men normalizeCity (rad 22-33) versaliserar, vilket
+  gor injicerade kolumnnamn till POSTORT och darmed troligen ogiltiga.
+  Begransar exploaterbarheten men ar inte ett medvetet skydd.
+
+  Foljdproblem: profitabilityInput.ts:71 ar "const { data } = await ..." -
+  error kontrolleras aldrig. Ett trasigt filter ger tyst noll traffar, vilket
+  betyder saknade taxepunkter och darmed fel pris utan nagon felsignal.
+
+  Atgard: ersatt .or()-bygget med .in("postort", chunk) (kraver normalisering
+  till versaler pa bagge sidor), byt getSupabaseAdminClient mot
+  getSupabaseServerClient i taxPointLookup.ts:59, och kontrollera error.
+
+
+[MEDEL] M2. Tyst trunkering vid 1 000 rader doljer en databugg
+  Fil: web/lib/importEngine.ts:327
+
+    supabaseAdmin.from('tax_point_lookup').select('postnummer, kontorsforkortning')
+
+  Ingen .range()/.limit(). PostgREST returnerar som standard max 1 000 rader.
+  tax_point_lookup tacker svenska postnummer och har garanterat fler poster.
+  taxPointMap blir alltsa ofullstandig, och paketbur-relationerna (rad 420-425)
+  misslyckas tyst for de flesta postnummer - priserna skrivs aldrig.
+
+  Detta ar en tyst datafelkalla, inte bara ett prestandaproblem.
+  Atgard: paginera med .range() i loop, eller hamta via RPC.
+
+
+[MEDEL] M3. N+1: tre HTTP-anrop per bokning utan namncache
+  Fil: web/app/home/hooks/useHomeProfitability.ts:47-127
+
+  Per bokning gors getBestNameMatch, getNameTranslations och
+  calculateProfitability - de tva forsta parallellt, den tredje sekventiellt
+  efter (rad 105).
+
+  Med 60 ekipage a 30 bokningar: 1 800 bokningar x 3 = 5 400 HTTP-requests.
+  Varje route inleds med requireUser() (authHelpers.ts:14-15) som anropar
+  supabase.auth.getUser() - ett NATVERKSANROP till Supabase Auth, inte lokal
+  JWT-verifiering. Alltsa 5 400 extra round-trips ovanpa.
+
+  Varst: samma kundnamn slas upp om och om igen. jaro-estimation kor
+  find_best_name_match (fuzzy-matchning over hela kundtabellen), och en
+  typisk dagsvolym har kanske 200 unika kunder pa 1 800 bokningar.
+
+  Losningen finns redan i kodbasen: web/lib/forecastEngine.ts:104-151 gor
+  exakt samma namnlogik men med en Map-cache per korning. Webblasarvagen
+  saknar den helt.
+
+  Atgard: kopiera nameCache-monstret till useHomeProfitability.
+
+
+[MEDEL] M4. Hardkodad admin-flagga i produktionskod
+  Fil: web/app/api/users/get/user/route.ts:35
+
+    const isAdmin = false; // replace with your admin check if needed
+
+  Fail-closed (admins far bara publika falt, aldrig for mycket), sa ingen
+  lacka - men en kvarglomd platshallare. Rad 30-33 duplicerar dessutom den
+  auth-kontroll requireUser() redan gjort pa rad 16-17.
+
+
+[MEDEL] M5. throw i stallet for return pa auth-fel ger 500 i stallet for 401
+  Filer: web/app/api/messages/get/messages/route.ts:11
+         web/app/api/messages/get/unreadMessages/route.ts:10
+
+    if (userError) throw userError;
+
+  Kastar ett NextResponse-objekt. Bada ligger utanfor filens try/catch
+  (som borjar pa rad 52 respektive 14), sa resultatet blir en ohanterad 500
+  i stallet for 401. Ovriga 29 routes anvander korrekt "return userError".
+
+  Fail-closed, men fel statuskod gor att frontend inte kan skilja
+  "logga in igen" fran "servern trasig", och det skrapar loggarna.
+
+
+[MEDEL] M6. O(n^3) distansuppslag i simulatorn
+  Filer: web/lib/backend/transportPlanningUtils.ts:785-822
+         web/app/simulator/useSimulatorPlanner.ts:158-197
+
+  calculateBestPickupBeforeDeliveryInsertion provar alla insattningspositioner
+  (O(n^2) kandidater) och anropar calculateRouteDistanceKm som gar igenom hela
+  rutten med ett await per delstracka (O(n)).
+
+  En rutt med 20 stopp: 190 kandidater x ~22 strackor = ~4 200 awaitade anrop
+  per bokning. Distanscachen (useSimulatorPlanner.ts:738-760) raddar de flesta
+  fran att bli HTTP, men de ~400 unika paren blir varsitt anrop till
+  /api/distance-map - som hamtar EN rad per request och kor requireUser() forst.
+
+  Dessutom (rad 200-214): klienten gor en egen omvand-riktning-fallback som
+  routen redan gor internt (distance-map/route.ts:66, 98). Varje saknad
+  relation kostar darfor 2 HTTP-anrop i stallet for 1.
+
+  Atgard: hamta hela distansmatrisen for aktuella taxepunkter i ett anrop och
+  gor calculateRouteDistanceKm synkron mot en lokal Map. Ta bort klientens
+  dubbla fallback.
+
+
+[MEDEL] M7. JSON.stringify av hela datamangden inuti en state-updater
+  Fil: web/app/home/hooks/useHomeLineState.ts:41-58, 96, 159
+
+  persistCurrentHomeCache anropas INUTI setLineCards-updatern och serialiserar
+  hela tradet - alla ekipage, alla bokningar, alla profitabilityValue-objekt.
+  updateEquipageInState anropas 2 ganger per ekipage under hydrering.
+
+  Med 60 ekipage: ~130 serialiseringar av en payload som vaxer mot flera MB.
+  O(n^2)-arbete pa main thread mitt under laddningen - direkt orsak till att
+  UI:t hackar medan priserna raknas.
+
+  Tva foljdproblem: sidoeffekt i en state-updater kors dubbelt i React 19
+  StrictMode, och sessionStorage har ~5 MB-tak - setItem kastar och
+  useHomeCache.ts:14-20 svaljer felet tyst, sa cachen slutar fungera osynligt.
+
+  Atgard: flytta persisteringen till en debouncad useEffect pa lineCards.
+
+
+[MEDEL] M8. Refresh av ett kort avbryter berakningen for alla andra
+  Fil: web/app/home/hooks/useHomeLoader.ts:499-527, 530-563
+
+  Att uppdatera ETT ekipage bumpar den globala latestLoadIdRef (rad 514).
+  Alla pagaende berakningar ser da latestLoadIdRef.current !== loadId och
+  returnerar tidigt (useHomeProfitability.ts:50-52, 129-131) UTAN att satta
+  status.
+
+  Med 60 ekipage dar anvandaren klickar refresh mitt i hydreringen: ~165
+  API-anrop kastas bort, och de ovriga korten ligger kvar i "idle"/"loading"
+  for alltid - permanent spinner tills sidan laddas om.
+
+  Dessutom ar Date.now() som loadId (rad 405, 446, 514, 550) inte
+  kollisionssakert.
+
+  Atgard: en loadId per hydreringskorning, inte en global. Anvand en
+  monotont okande raknare.
+
+
+[MEDEL] M9. Kontoupprakning pa losenordsaterstallning
+  Fil: web/app/api/auth/forgot-password/route.ts
+
+  Routen ar publik och saknar rate limiting. Trots kommentaren "prevents
+  account enumeration" (rad 18) finns en observerbar skillnad:
+    - Okand adress: omedelbart svar, status:true, inget mejl (rad 33-39)
+    - Kand adress: anropar resetPasswordForEmail (rad 60) och kan returnera
+      429 med ett ANNAT meddelande (rad 72-76) eller 400 (rad 85-88)
+
+  Tva forfragningar i snabb foljd avslojar alltsa om kontot finns. Aven
+  svarstiden skiljer (mejlutskicket).
+
+  Dessutom loggas anvandarbeteende: rad 34 console.log("anvandare angav fel
+  email"), och rad 66-71 loggar hela Supabase-felet (kvarstaende L4).
+
+  Atgard: rate-limita, och gor svaret identiskt i status, meddelande och
+  ungefarlig svarstid oavsett om adressen finns.
+
+
+[MEDEL] M10. Hela databasschemat utom en tabell saknas i versionshantering
+  Fil: web/supabase/migrations/ (1 fil)
+
+  Kodbasen anvander 31 tabeller och 13 databasfunktioner - inklusive hela
+  prismodellen (steg_1 t.o.m. steg_5, get_nav_values, get_coefficient,
+  find_best_name_match). Endast daily_equipage_forecast har en migration.
+
+  Konsekvenser:
+    - Prismodellen, som ar systemets karnlogik och det som mest sannolikt
+      orsakar ekonomiska fel, ar inte kodgranskad och inte versionshanterad
+    - RLS-policies finns inte i repot, vilket gor att flera fynd ovan
+      (H1, H3, H4, M1) inte gar att bedoma slutgiltigt fran koden
+    - Databasen kan inte aterskapas fran repot
+
+  Atgard: exportera befintligt schema, funktioner och RLS-policies till
+  migrationsfiler. Detta ar en forutsattning for att kunna verifiera
+  sakerhetsfynden ovan.
+
+
+[MEDEL] M11. Inga enhetstester for prismotorn
+  Filer: web/cypress/e2e/ (9 projektegna testfiler), inga jest/vitest
+
+  web/profitability/service.ts ar 1 436 rader ekonomisk logik med fem
+  prissteg, NAV-fordelning, viktklassklampning och tillagg. Det finns noll
+  enhetstester. Enda testerna ar E2E i Cypress, som inte kan tacka
+  gransfallen i prisberakningen.
+
+  Positivt: cypress/e2e/supabase-policies.cy.js testar faktiskt RLS - men
+  bara for User-tabellen (admin ser alla, trafikledare ser sig sjalv).
+  De 30 ovriga tabellerna, inklusive addon_dmt och prisjusteringar, saknar
+  policytester.
+
+  Atgard: infor vitest och tacka atminstone de fem stegen, viktklass-
+  granserna och tillaggslogiken med tabelldrivna tester.
+
+
+[MEDEL] M12. Interna databasfel returneras till klienten
+  Ra error.message fran Postgres/PostgREST lacker schema- och
+  constraint-detaljer i minst 18 routes, bl.a.:
+    users/route.ts:31,109,158 / dmt/route.ts:628,672 /
+    distance-map/route.ts:77,107 / messages/* / analytics/* /
+    profitability/route.ts:62
+  web/lib/backend/utils.ts:35 lagger dessutom till error.details, som vid
+  unique-violation innehaller kolumnnamn och varde
+  ("Key (email)=(x@y.z) already exists").
+
+  web/lib/supabaseErrorTranslation.ts finns och loser exakt detta, men
+  anvands bara pa ett stalle (PriceAdjustmentsPopup.tsx:112).
+
+
+================================================================================
+6. NYA FYND - LAG PRIORITET
+================================================================================
+
+[LAG] L1. Nio duplicerade utility-funktioner med DIVERGERANDE beteende
+  Filer: web/app/home/hooks/homeTypesAndUtils.ts mot
+         web/lib/backend/transportPlanningUtils.ts
+
+    parseProfitabilityReferenceValue   rad 71  / 75
+    toIlogDate                         rad 141 / 162
+    toBarPercent                       rad 262 / 217
+    getDisplayCustomerName             rad 300 / 246
+    calculateConsignmentProfitabilityPrice  rad 279 / 284
+    chunkArray                         rad 221 / 483
+    orientLineNameForSelectedAreas     rad 163 / 507
+    splitLineParts                     rad 152 / 496
+    getDominantConsignmentLineName     rad 191 / 535
+
+  Kopiorna ar INTE identiska. calculateConsignmentProfitabilityPrice i
+  simulatorversionen (rad 287-293) validerar indata och returnerar null
+  tidigt; Home-versionen (rad 282-295) skickar ivag anropet anda. Home och
+  simulatorn ger alltsa olika resultat for samma bokning vid ofullstandiga
+  data. Detta ar M6 fran forra rapporten, men forvarrat.
+
+  En tredje kopia av chunk finns i forecastEngine.ts:70-76 och en fjarde i
+  taxPointLookup.ts:44-50.
+
+
+[LAG] L2. Referensvardet 0 gar inte att spara - tyst overskrivet till 15 000
+  Filer: web/app/settings/page.tsx:394-398 mot
+         web/app/home/hooks/homeTypesAndUtils.ts:82
+
+  Settings sparar uttryckligen 0 nar rutan ar tom eller negativ (kommentaren
+  pa rad 393 sager "satt den till 0"). Home:s parser kraver candidate > 0
+  och faller annars tillbaka pa 15 000.
+
+  Anvandaren ser alltsa 0 i installningarna men far 15 000 i berakningen.
+  Verifierat i bada filerna.
+
+  Samma konstant ar dessutom definierad tva ganger
+  (lib/constants.ts:17 och homeTypesAndUtils.ts:9) och hardkodad en tredje
+  gang i home/page.tsx:170.
+
+
+[LAG] L3. Noll memoisering i komponenttradet
+  Fil: web/app/home/page.tsx:149-259 samt web/components/*
+
+  React.memo och useCallback forekommer pa tre stallen totalt i hela
+  kodbasen, alla i notifications/page.tsx. EquipageCard, LineCard,
+  PriceWithAddons och Dropdown ar omemoiserade, och
+  onRefresh={() => refresh(equipage.id)} (rad 247) skapar ny
+  funktionsreferens per kort per render.
+
+  Kombinerat med M7 (~130 state-uppdateringar under hydrering) blir det
+  storleksordningen 7 800 onodiga komponentrenderingar per laddning.
+
+
+[LAG] L4. Ny Intl.NumberFormat per formaterat varde
+  Fil: web/components/PriceWithAddons.tsx:43-54
+
+  Konstruktion av Intl.NumberFormat ar en av de dyraste operationerna i
+  webblasarens standardbibliotek. Anropas pa rad 396, 464, 489, 516, 525,
+  533, 547 - i Home-popupen en gang per tabellrad.
+
+  analytics/page.tsx:67-72 gor ratt (formatterare pa modulniva).
+
+
+[LAG] L5. Obatchad parallell hamtning mot iLog
+  Fil: web/app/simulator/useSimulatorPlanner.ts:1341-1346
+
+  Promise.all over samtliga ekipage utan batchning. En linje med 30 ekipage
+  ger 30 samtidiga iLog-anrop, och varje sadant kor serverside aven
+  enrichTaxPointRelationFromSupabase (2+ Supabase-queries).
+
+  Ovriga kodvagar batchar medvetet (useHomeLoader.ts:188,309 = 6,
+  useHomeProfitability.ts:47 = 4, forecastEngine.ts:51 = 3). Har saknas det.
+
+
+[LAG] L6. chartPoints ar O(datum x rader) och raknas om vid varje klick
+  Fil: web/app/analytics/page.tsx:533-554
+
+  For varje datum loopas hela selectedRows. Anropas tre ganger
+  (revenue/weight/flm). 90 dagar x 200 ekipage = ~4,9 miljoner iterationer,
+  och det kors om vid varje kryssruteklick eftersom selectedRows (rad 486)
+  far ny referens.
+
+  Atgard: gruppera per datum en gang i en Map och bygg alla tre serierna i
+  samma pass - faktor ~270 snabbare.
+
+
+[LAG] L7. Blockerande synkron CSV-parsning
+  Fil: web/lib/importEngine.ts:247-279
+
+  Hela filen lases in i minnet, splittas till lines och sedan till rows
+  (array-av-arrayer). For en 100 MB CSV med 500 000 rader blir det flera
+  hundra MB heap och en blockerad event loop i tiotals sekunder - pa Vercel
+  innebar det timeout eller OOM.
+
+  Relaterat: rad 80-86 gor linjar sokning i viktklassintervallen per rad
+  (500 000 x ~50 = 25 miljoner jamforelser). Binarsokning eller
+  uppslagsarray loser det.
+
+
+[LAG] L8. 25+ any-castningar som kringgar de genererade schematyperna
+  Projektet har fullstandiga typer i lib/supabaseServerSchema.ts men de
+  kringgas systematiskt:
+    profitability/paketbur.ts:18,27,41,50,66     (5 st)
+    profitability/styckegods.ts:29,76,83,87,...  (9 st)
+    profitability/service.ts:505-506, 634-635
+    profitability/trappsteg_steg.ts:70, 391
+
+  paketbur.ts:85 (correctRow.pris * actualBurar) har noll typskydd pa ett
+  varde som direkt blir ett pris.
+
+
+[LAG] L9. Dod kod
+    web/app/api/profitability/route_profitability.ts   180 rader, 0 referenser
+    lib/api.ts:682-696        getIlogUnassignedConsignments, identisk kopia
+                              av useSimulatorPlanner.ts:139-155, aldrig importerad
+    lib/api.ts:241-256        getIlogConsignment - inga anropare
+    lib/api.ts:62-69          getAllUsers - inga anropare
+    lib/api.ts:112-121,170-179 setEmail, deleteUser - markerade NOT DONE YET
+    useHomeLoader.ts:10       normalizeText importeras aldrig anvands
+    useHomeLoader.ts:275,340  orientationLabels ar alltid [] -
+                              orientLineNameForSelectedAreas ar en no-op
+    transportPlanningUtils.ts:850-899  tre bakatkompatibla alias utan anropare
+
+
+[LAG] L10. Kvarglomda console.log
+    app/api/cron/manual-daily-forecast/route.ts:23   "gets in here"
+    app/home/hooks/useHomeProfitability.ts:117       "gets in here " + error
+                                                     (i catch - doljer fel)
+    app/api/auth/forgot-password/route.ts:34         loggar anvandarbeteende
+    components/Navigation.tsx:93                     "User signed out..."
+  Dessutom useHomeProfitability.ts:96 console.warn per bokning utan
+  namnmatchning - hundratals rader per laddning.
+
+
+[LAG] L11. Ovriga observationer
+  - sb-remember-me satts utan httpOnly (login/route.ts:74-79) och styr
+    sessionens maxAge (30 dygn). En anvandare kan satta den i konsolen och
+    forlanga sessionen aven utan "kom ihag mig".
+  - CRON_SECRET jamfors icke-konstant-tid (cron/daily-forecast/route.ts:43).
+    Anvand crypto.timingSafeEqual.
+  - getSupabaseServerClient() returnerar tyst admin-klienten inuti
+    runWithSupabaseAdminContext (supabaseServer.ts:14-23). Anvands i dag bara
+    fran forecastEngine.ts:253 via auth-skyddade routes, men konstruktionen
+    gor det latt att av misstag dra in en request-scopad kodvag i
+    admin-kontexten.
+  - home/page.tsx:200 anvander selectedEquipage!.id i en async callback -
+    kraschar om popupen stangs under berakning.
+  - Fyra for langa enheter: useSimulatorPlanner.ts (1 507 rader, 25 useState),
+    analytics/page.tsx (743 rader i komponenten), settings/page.tsx (890),
+    importEngine.ts processHistoricalCSV (269).
+
+
+================================================================================
+7. POSITIVT SEDAN FORRA RAPPORTEN
+================================================================================
+
+* authHelpers.ts infordes och anvands i 28 av 33 routes - M5 ar strukturellt
+  atgardat aven om utrullningen inte ar komplett.
+* Migrationen 20260703000000_daily_equipage_forecast.sql ar forebildlig:
+  RLS pastagen, admin-only select-policy, skrivning enbart via service role.
+  Anvand den som mall for M10.
+* xlsx (prototype pollution) utbytt mot exceljs. Verifierat helt borta.
+* Division med noll och Math.min()-pa-tom-lista ar bada explicit atgardade
+  MED forklarande kommentarer i trappsteg_steg.ts:104, 127.
+* Cron-endpointen ar korrekt skyddad med CRON_SECRET, och bada manuella
+  triggers med requireAdmin().
+* import-historical ar val gjord: requireAdmin, servergenererad lagringsvag
+  (klientens filnamn anvands aldrig), agarkontroll pa jobbet, filen raderas
+  alltid i finally. dmt/route.ts:414-421 har storleksgrans och
+  magic-byte-kontroll.
+* Commiten "Lat trappstegsmodellen ga vidare till nasta steg aven vid fel"
+  (47fc41d) ar valmotiverad: fel loggas, misslyckade steg spars och redovisas
+  i detail sa att ett databasavbrott inte goms bakom "inga steg gav traff".
+  Notera dock att ett ihallande DB-fel nu tyst degraderar till ett bredare,
+  mindre traffsakert prissteg i stallet for att larma - overvag att
+  monitorera hur ofta detail innehaller felade steg.
+* Ingen XSS-yta: noll traffar pa dangerouslySetInnerHTML, innerHTML, eval
+  eller new Function i hela web/.
+* Inga hemligheter incheckade. Endast NEXT_PUBLIC_SUPABASE_URL/ANON_KEY och
+  SITE_URL har publikt prefix, vilket ar avsett.
+
+
+================================================================================
+8. SAMMANSTALLNING OCH REKOMMENDERAD ORDNING
+================================================================================
+
+KRITISK: 10  (NAV-fallback till kundnetto, coefficient null, toFiniteNumber
+              null, saknat avstand som 0 km, brytpunkt pa fel vikt, styckegods
+              med fel nyckel, tonPrice utan validering, framtida
+              prisjusteringar, DMT-period utanfor giltighet, vikt 0 till FJARR)
+HOG:      4  (dmt utan auth, Next.js-CVE:er, rolltilldelning i klienten,
+              prisdata skrivs fran klienten)
+MEDEL:   12  (or-injektion, tyst trunkering, N+1, hardkodad admin-flagga,
+              throw/return, O(n^3)-distans, stringify i updater, loadId-
+              invalidering, kontouppräkning, saknade migrationer, inga
+              enhetstester, lackande DB-fel)
+LAG:     11  (duplicerade utils, 0-vardesbugg, memoisering, Intl, obatchat
+              iLog, chartPoints, CSV-parsning, any-castningar, dod kod,
+              console.log, ovrigt)
+
+Kvarstaende fran forra rapporten: M6, M7, L4, L5, L6 samt delvis H1, M3,
+M4, M5, L1, L2, L3.
+
+OVERGRIPANDE BEDOMNING
+----------------------
+Utvecklingstakten har varit hog och mycket har blivit battre - authHelpers,
+den forsta migrationen, borttagen xlsx-sarbarhet och flera medvetna fixar med
+forklarande kommentarer. Men prismotorn har vuxit med 1 357 rader utan ett
+enda enhetstest, och det syns: tio verifierade fel som ger fel belopp i
+produktion, varav flera aterinfor buggar som tidigare commits uttryckligen
+atgardat (K1 mot c00c9bc, K3 mot b5a591d).
+
+Det aterkommande monstret ar detsamma i nio av tio fall: ett saknat varde
+(null) behandlas som ett giltigt varde (0) i stallet for som ett fel. I
+JavaScript ar Number(null) === 0 och x * null === 0, bada utan varning. Det
+ar varfor samma bugg fortsatter dyka upp pa nya stallen.
+
+Strukturell rekommendation: infor en enda hjalpfunktion for "obligatoriskt
+numeriskt varde fran databasen" som kastar eller returnerar null vid
+null/undefined/NaN, och anvand den konsekvent. Kombinerat med enhetstester
+(M11) ar det den enda atgarden som hindrar att detta upprepas.
+
+REKOMMENDERAD ORDNING
+---------------------
+FORST - fel belopp i produktion:
+ 1. K1 - satt step_used: -1 i samtliga NAV-felvagar. Enskilt storst
+    beloppsfel (~250 % for hogt vid saknad NAV-rad).
+ 2. K5 - brytpunktsberakningen i trappstegen. Paverkar sannolikt flest
+    sandningar av alla fynd, i samtliga fem steg.
+ 3. K2 + K3 + K4 - null-hanteringen (coefficient, toFiniteNumber, avstand).
+    Bor gors i ett svep eftersom de har samma grundorsak.
+ 4. K7 + K6 - styckegodsflodet: validera tonPrice och byt postnummer mot
+    taxepunkt i distance_map-uppslaget.
+ 5. K8 + K9 - filtrera prisjusteringar och DMT-perioder pa dagens datum.
+ 6. K10 - avvisa vikt 0 tidigt med ett riktigt felmeddelande.
+
+DAREFTER - sakerhet:
+ 7. H1 - lagg requireAdmin() i /api/dmt. En rad kod, stanger en
+    oautentiserad skrivvag till prisdata.
+ 8. H2 - npm audit fix och uppgradera next till 16.3.0. Lagg samtidigt en
+    serverside-rollkontroll i admin-sidan.
+ 9. M10 - exportera schema, funktioner och RLS-policies till migrationer.
+    Forutsattning for att kunna avgora om H3, H4 och M1 ar exploaterbara.
+10. H3 + H4 - nar RLS ar verifierad: flytta kontoskapande, rolltilldelning
+    och prisjusteringar bakom serverroutes med requireAdmin().
+11. M1 - ersatt .or()-strangbygget. Notera att taxPointLookup.ts-varianten
+    ar en regression infard av tidigare kodanalysarbete.
+
+SEDAN - stabilitet och prestanda:
+12. M11 - enhetstester for prismotorn. Bor egentligen gors FORE punkt 1-6,
+    men i praktiken parallellt: skriv testet som reproducerar buggen, fixa,
+    behall testet.
+13. M2 - .range() pa tax_point_lookup-selecten. En rad, tyst databugg.
+14. M3 + M7 + L3 - namncache, debouncad persistering, React.memo.
+    Storsta vinsten for upplevd prestanda i Home, alla tre sma ingrepp.
+15. L1 + L2 - sla ihop de tva util-filerna. Loser samtidigt beteende-
+    divergensen mellan Home och simulatorn och 0-vardesbuggen.
+
+ATT VERIFIERA MOT AFFARSREGEL (inte kodfel, men oklart)
+-------------------------------------------------------
+* HVO beraknas pa kundnettot men laggs pa fjarrandelen (service.ts:1428-1430).
+  Ar det avsiktligt?
+* paketbur.ts:75-86 - ar pris ett styckpris eller ett totalpris for nivan?
+* Radantalet i nav_taxa_fjarr_direktgods - overstiger det 1 000?
+
+================================================================================
