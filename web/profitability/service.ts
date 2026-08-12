@@ -908,60 +908,167 @@ async function applyAddons(
   };
 }
 
+type FjarrTaxaUppslag = {
+  viktklass: number | null;
+  anvandViktklass: number | null;
+  taxa: number | null;
+};
+
+type ViktklassPosition = "inom" | "over" | "under" | "okand";
+
 /**
- * Hämtar fjärrtaxan för den högsta viktklassen i nav_taxa_fjarr_direktgods.
+ * Placerar en vikt i viktklasstabellen.
  *
- * Tabellen är nycklad på diskret weight_class och en övre km-gräns, till
- * skillnad från terminaltabellerna som använder öppna kg_from/km_from-gränser.
- * En sändning som är tyngre än tabellens högsta viktklass får därför ingen
- * träff alls. Enligt NAV-modellen ska den högsta viktklassens taxa användas
- * för hela vikten i de fallen.
+ * get_weight_class returnerar NULL för vikter utanför tabellen, och eftersom
+ * Number(null) är 0 går det inte att skilja "ingen klass" från klass 0 i
+ * TypeScript. Här läses hela tabellen istället, så att vikter över respektive
+ * under tabellen kan identifieras explicit.
  */
-async function hamtaHogstaViktklassFjarrTaxa(
+async function klassificeraVikt(
   supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  weight: number,
+): Promise<{ viktklass: number | null; position: ViktklassPosition }> {
+  const { data, error } = await supabase.rpc("get_entire_vkl_table");
+
+  if (error) {
+    console.error("Kunde inte hämta viktklasstabellen: " + error.message);
+    return { viktklass: null, position: "okand" };
+  }
+
+  const rader = Array.isArray(data) ? data : [];
+
+  if (rader.length === 0) {
+    return { viktklass: null, position: "okand" };
+  }
+
+  const traff = rader.find(
+    (rad) =>
+      weight >= toFiniteNumber(rad.min, Number.POSITIVE_INFINITY)
+      && weight <= toFiniteNumber(rad.max, Number.NEGATIVE_INFINITY),
+  );
+
+  if (traff) {
+    const vkl = toFiniteNumber(traff.vkl, NaN);
+
+    return Number.isFinite(vkl)
+      ? { viktklass: vkl, position: "inom" }
+      : { viktklass: null, position: "okand" };
+  }
+
+  const hogstaMaxVikt = Math.max(
+    ...rader.map((rad) => toFiniteNumber(rad.max, Number.NEGATIVE_INFINITY)),
+  );
+
+  if (Number.isFinite(hogstaMaxVikt) && weight > hogstaMaxVikt) {
+    return { viktklass: null, position: "over" };
+  }
+
+  const lagstaMinVikt = Math.min(
+    ...rader.map((rad) => toFiniteNumber(rad.min, Number.POSITIVE_INFINITY)),
+  );
+
+  if (Number.isFinite(lagstaMinVikt) && weight < lagstaMinVikt) {
+    return { viktklass: null, position: "under" };
+  }
+
+  return { viktklass: null, position: "okand" };
+}
+
+/**
+ * Hämtar fjärrtaxan för den viktklass som ligger närmast sändningens.
+ *
+ * nav_taxa_fjarr_direktgods är nycklad på diskret weight_class och en övre
+ * km-gräns, till skillnad från terminaltabellerna som använder öppna
+ * kg_from/km_from-gränser. Saknas sändningens viktklass i tabellen — antingen
+ * för att vikten ligger utanför tabellen eller för att just den klassen saknar
+ * rad — används närmaste viktklass som finns, uppåt eller nedåt. Vid lika
+ * avstånd väljs den högre klassen, eftersom den ger en lägre taxa och därmed
+ * en försiktigare prognos.
+ */
+async function hamtaFjarrTaxaUppslag(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  weight: number,
   distanceKm: number | null,
-): Promise<{ taxa: number; viktklass: number } | null> {
-  const { data: hogstaKlassRad, error: klassError } = await supabase
+): Promise<FjarrTaxaUppslag> {
+  const { viktklass, position } = await klassificeraVikt(supabase, weight);
+
+  const tomtUppslag: FjarrTaxaUppslag = {
+    viktklass,
+    anvandViktklass: null,
+    taxa: null,
+  };
+
+  const { data: klassRader, error: klassError } = await supabase
     .from("nav_taxa_fjarr_direktgods")
     .select("weight_class")
-    .order("weight_class", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("weight_class", { ascending: true });
 
   if (klassError) {
     console.error(
-      "Kunde inte hämta högsta viktklass för fjärrtaxa: " + klassError.message,
+      "Kunde inte hämta viktklasser för fjärrtaxa: " + klassError.message,
     );
-    return null;
+    return tomtUppslag;
   }
 
-  const hogstaViktklass = toFiniteNumber(hogstaKlassRad?.weight_class, NaN);
+  const tillgangligaKlasser = Array.from(
+    new Set(
+      (Array.isArray(klassRader) ? klassRader : [])
+        .map((rad) => toFiniteNumber(rad.weight_class, NaN))
+        .filter((klass) => Number.isFinite(klass)),
+    ),
+  ).sort((a, b) => a - b);
 
-  if (!Number.isFinite(hogstaViktklass)) {
-    return null;
+  if (tillgangligaKlasser.length === 0) {
+    return tomtUppslag;
   }
+
+  // Vikter utanför viktklasstabellen har ingen egen klass att mäta avstånd
+  // från, men vet vilken ände av tabellen de hör till.
+  const malklass =
+    viktklass !== null
+      ? viktklass
+      : position === "over"
+        ? tillgangligaKlasser[tillgangligaKlasser.length - 1]
+        : position === "under"
+          ? tillgangligaKlasser[0]
+          : null;
+
+  if (malklass === null) {
+    return tomtUppslag;
+  }
+
+  // Närmaste klass. Vid lika avstånd vinner den högre klassen.
+  const anvandViktklass = tillgangligaKlasser.reduce((bast, klass) => {
+    const avstandBast = Math.abs(bast - malklass);
+    const avstandKlass = Math.abs(klass - malklass);
+
+    if (avstandKlass < avstandBast) {
+      return klass;
+    }
+
+    return avstandKlass === avstandBast && klass > bast
+      ? klass
+      : bast;
+  }, tillgangligaKlasser[0]);
 
   const { data: kmRader, error: kmError } = await supabase
     .from("nav_taxa_fjarr_direktgods")
     .select("value, km_till_och_med")
-    .eq("weight_class", hogstaViktklass)
+    .eq("weight_class", anvandViktklass)
     .order("km_till_och_med", { ascending: true });
 
   if (kmError) {
     console.error(
-      "Kunde inte hämta fjärrtaxa för högsta viktklassen: " + kmError.message,
+      "Kunde inte hämta fjärrtaxa för viktklass "
+      + `${anvandViktklass}: ${kmError.message}`,
     );
-    return null;
+    return tomtUppslag;
   }
 
   const rader = Array.isArray(kmRader) ? kmRader : [];
 
-  if (rader.length === 0) {
-    return null;
-  }
-
   // Första km-intervallet som täcker sträckan. Är sträckan längre än
-  // tabellens sista intervall används det längsta som finns.
+  // klassens sista intervall används det längsta som finns.
   const km = toFiniteNumber(distanceKm, 0);
   const traff =
     rader.find((rad) => toFiniteNumber(rad.km_till_och_med, 0) >= km)
@@ -969,9 +1076,11 @@ async function hamtaHogstaViktklassFjarrTaxa(
 
   const taxa = toFiniteNumber(traff?.value, 0);
 
-  return taxa > 0
-    ? { taxa, viktklass: hogstaViktklass }
-    : null;
+  return {
+    viktklass,
+    anvandViktklass,
+    taxa: taxa > 0 ? taxa : null,
+  };
 }
 
 async function applyNavAdjustments(
@@ -1036,22 +1145,27 @@ async function applyNavAdjustments(
   // Ta hänsyn till brytpunktsberäkning
   let taxa_fjarr_current = toFiniteNumber(taxaValues.nav_taxa_fjarr_current, 0);
 
-  // Saknas taxa för sändningens viktklass är sändningen tyngre än
-  // fjärrtabellens högsta viktklass. Då används den högsta klassens taxa,
-  // multiplicerad med sändningens verkliga vikt.
-  let overHogstaViktklass = false;
+  // Saknas taxa för sändningens viktklass används närmaste viktklass som
+  // finns i tabellen, uppåt eller nedåt.
+  let ersattViktklass = false;
+  let saknadFjarrtaxa: FjarrTaxaUppslag | null = null;
 
   if (taxa_fjarr_current <= 0) {
-    const hogstaKlass = await hamtaHogstaViktklassFjarrTaxa(supabase, distance);
+    const uppslag = await hamtaFjarrTaxaUppslag(supabase, weight, distance);
 
-    if (hogstaKlass !== null) {
-      taxa_fjarr_current = hogstaKlass.taxa;
-      overHogstaViktklass = true;
+    if (uppslag.taxa !== null) {
+      taxa_fjarr_current = uppslag.taxa;
+      ersattViktklass = true;
 
       console.warn(
-        `Vikt ${weight} kg saknar fjärrtaxa. Använder högsta viktklassen `
-        + `(${hogstaKlass.viktklass}) med taxa ${hogstaKlass.taxa} kr/ton.`,
+        `Vikt ${weight} kg (viktklass ${uppslag.viktklass ?? "utanför tabellen"}) `
+        + `saknar fjärrtaxa. Använder närmaste viktklass `
+        + `${uppslag.anvandViktklass} med taxa ${uppslag.taxa} kr/ton.`,
       );
+    } else {
+      // Tabellen gick inte att läsa eller är tom. Att låta hela kundnettot bli
+      // fjärrintäkt ger ett tyst för högt belopp — rapportera istället.
+      saknadFjarrtaxa = uppslag;
     }
   }
 
@@ -1073,10 +1187,11 @@ async function applyNavAdjustments(
   // saknas nästa viktklass (round_up_weight ger 0/-1) eller saknas taxan för
   // den (nav_taxa_fjarr_above är null) blir alternativet 0 kr, och ett
   // rakt min() nollställer då hela fjärrdelen — dvs bokningen får ingen summa.
-  // Är sändningen redan över högsta viktklassen finns ingen brytpunkt alls.
+  // Har taxan hämtats från en annan viktklass går brytpunkten inte att
+  // jämföra mot, eftersom klassen ovanför då inte är sändningens egen.
   const taxa_fjarr_above = toFiniteNumber(taxaValues.nav_taxa_fjarr_above, 0);
   const harBrytpunkt =
-    !overHogstaViktklass
+    !ersattViktklass
     && weight_plus_one > weight
     && taxa_fjarr_above > 0;
   const generell_fjarr_above = harBrytpunkt
@@ -1096,18 +1211,30 @@ async function applyNavAdjustments(
     ? Math.min(generell_fjarr_current, generell_fjarr_above)
     : generell_fjarr_current;
 
-  // Saknas fjärrtaxa helt (t.ex. vikt utanför taxetabellen) blir fjärrandelen 0
-  // och prognosen visar 0 kr trots att kundnettot är beräknat. Behandla det som
-  // ett NAV-fel istället, så faller beräkningen tillbaka på hela kundnettot.
+  // Utan fjärrtaxa går fjärrandelen inte att räkna ut. Att falla tillbaka på
+  // hela kundnettot skulle göra hela sändningens intäkt till fjärrintäkt och
+  // kraftigt överskatta prognosen, så rapportera det som ett fel istället.
   if (!(generell_fjarr > 0)) {
-    const message =
-      `NAV-taxa för fjärr saknas eller är 0 för vikt ${weight} kg `
-      + `och avstånd ${distance} km. Kundnettot används utan NAV-fördelning.`;
+    const viktklassText = saknadFjarrtaxa?.viktklass !== null
+      && saknadFjarrtaxa?.viktklass !== undefined
+      ? ` (viktklass ${saknadFjarrtaxa.viktklass})`
+      : "";
 
-    console.error(message);
+    const message =
+      `Fjärr: NAV-taxa saknas för ${weight} kg${viktklassText} och ${distance} km`;
+
+    console.error(
+      message
+      + `. Närmaste viktklass i nav_taxa_fjarr_direktgods: `
+      + `${saknadFjarrtaxa?.anvandViktklass ?? "ingen"}.`,
+    );
 
     return {
       ...currentResult,
+      step_used: -1,
+      estimated_revenue: 0,
+      base_revenue: undefined,
+      detail: message,
       nav_error: message,
       nav_ers_exklusive_tillägg: undefined
     };
@@ -1196,28 +1323,42 @@ async function calculateBaseRevenue(
   input: ProfitabilityInput,
   weight_plus_one: number,
 ): Promise<ProfitabilityResult | null> {
+  const misslyckadeSteg: string[] = [];
+
   for (const step of BASE_CALCULATION_STEPS) {
     try {
       const estimated = await step.executor(input, weight_plus_one);
 
-      if (estimated !== null) {
+      // Ett kundnetto på noll eller mindre är inget användbart pris. Behandla
+      // det som utebliven träff så att nästa steg får försöka, istället för
+      // att låsa fast prognosen vid 0 kr.
+      if (estimated !== null && estimated > 0) {
         return {
           step_used: step.step,
           estimated_revenue: estimated,
         };
       }
     } catch (error) {
-      console.error(
-        `Fel i ${step.label}. Felmeddelande:`,
-        error instanceof Error ? error.message : error,
-      );
+      const message = error instanceof Error ? error.message : String(error);
 
-      return {
-        step_used: -1,
-        estimated_revenue: 0,
-        detail: `Något gick fel i ${step.label}`,
-      };
+      console.error(`Fel i ${step.label}. Felmeddelande:`, message);
+
+      // Ett fel i ett steg ska inte stoppa hela trappan. Nästa steg är en
+      // bredare matchning och kan mycket väl ge en användbar prognos.
+      misslyckadeSteg.push(`${step.label}: ${message}`);
     }
+  }
+
+  // Inget steg gav träff. Berodde det på fel snarare än på att historiken
+  // saknas ska det synas, annars döljs t.ex. ett databasavbrott.
+  if (misslyckadeSteg.length > 0) {
+    return {
+      step_used: -1,
+      estimated_revenue: 0,
+      detail:
+        `Inget steg gav träff. Fel i ${misslyckadeSteg.length} av `
+        + `${BASE_CALCULATION_STEPS.length} steg.`,
+    };
   }
 
   return null;
@@ -1266,6 +1407,12 @@ export async function calculateProfitability(
     baseResultWithCustomerNet,
     weight_plus_one,
   );
+
+  // Kunde fjärrandelen inte räknas ut alls redovisas det istället för att
+  // gissa fram ett belopp.
+  if (navResult.step_used === -1) {
+    return navResult;
+  }
 
   const directLoadedFjarrRevenue = navResult.nav_ers_exklusive_tillägg?.fjarr_ers
     ?? customerNetRevenue;
