@@ -17,6 +17,12 @@ import {
   normalizeText,
   parseAreaState,
 } from "../areaLineConfig";
+import {
+  parseSelectedEquipageIds,
+  parseSelectedLineIds,
+  parseVehicleSelectorMode,
+  type VehicleSelectorMode,
+} from "../../vehicleSelectionConfig";
 import { DEFAULT_PROFITABILITY_REFERENCE_VALUE } from "../constants";
 import { DEFAULT_MILE_COST } from "../constants";
 
@@ -46,10 +52,24 @@ export type ConsignmentTotals = {
   totalFlm: number;
 };
 
+// Användarens fordonsurval från Inställningar, samma källa som Home använder.
+export type VehicleSelection = {
+  mode: VehicleSelectorMode;
+  selectedLineIds: number[];
+  selectedEquipageIds: number[];
+};
+
 export type TransportPlanningUserSettings = {
   selectedAreas: AreaState;
+  vehicleSelection: VehicleSelection;
   profitabilityReferenceValue: number;
   mileCostReferenceValue: number;
+};
+
+export const EMPTY_VEHICLE_SELECTION: VehicleSelection = {
+  mode: "equipages",
+  selectedLineIds: [],
+  selectedEquipageIds: [],
 };
 
 // Resultat från ruttavstånd där saknade relationer sparas för felsökning i UI:t.
@@ -118,32 +138,36 @@ export function parseMileCostReferenceValue(filters: unknown): number {
 /**
  * Hämtar användarens transportplaneringsinställningar.
  */
-export async function getCurrentTransportPlanningUserSettings() {
+export async function getCurrentTransportPlanningUserSettings(): Promise<TransportPlanningUserSettings> {
+  const fallbackSettings: TransportPlanningUserSettings = {
+    selectedAreas: DEFAULT_AREAS,
+    vehicleSelection: EMPTY_VEHICLE_SELECTION,
+    profitabilityReferenceValue: DEFAULT_PROFITABILITY_REFERENCE_VALUE,
+    mileCostReferenceValue: DEFAULT_MILE_COST,
+  };
+
   try {
     const response = await getCurrentlySignedInUser();
     const user = response.data;
 
     if (!user) {
-      return {
-        selectedAreas: DEFAULT_AREAS,
-        profitabilityReferenceValue: DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-        mileCostReferenceValue: DEFAULT_MILE_COST,
-      };
+      return fallbackSettings;
     }
 
     return {
       selectedAreas: parseAreaState(user.filters),
+      vehicleSelection: {
+        mode: parseVehicleSelectorMode(user.filters),
+        selectedLineIds: parseSelectedLineIds(user.filters),
+        selectedEquipageIds: parseSelectedEquipageIds(user.filters),
+      },
       profitabilityReferenceValue: parseProfitabilityReferenceValue(
         user.filters,
       ),
       mileCostReferenceValue: parseMileCostReferenceValue(user.filters),
     };
   } catch {
-    return {
-      selectedAreas: DEFAULT_AREAS,
-      profitabilityReferenceValue: DEFAULT_PROFITABILITY_REFERENCE_VALUE,
-      mileCostReferenceValue: DEFAULT_MILE_COST,
-    };
+    return fallbackSettings;
   }
 }
 
@@ -454,6 +478,192 @@ export function filterEquipagesForSelectedLine(
   }
 
   return Array.from(result.values());
+}
+
+// Ekipage utan kopplad linje får en egen pseudolinje så de fortfarande går att välja.
+export const EQUIPAGE_FALLBACK_LINE_TYPE = "EQUIPAGE";
+
+// Var linjelistan kommer ifrån, används för att kunna förklara urvalet i UI:t.
+export type VehicleSelectionLineSource = "lines" | "equipages" | "all";
+
+export type VehicleSelectionLines = {
+  lines: LineWithCluster[];
+  source: VehicleSelectionLineSource;
+};
+
+/**
+ * Bygger en pseudolinje för ett ekipage som saknar kopplad linje i iLog.
+ *
+ * Negativt id håller pseudolinjen utanför iLog:s linje-id-rymd så den aldrig
+ * kolliderar med en riktig linje i linjelistan.
+ */
+export function makeEquipageFallbackLine(
+  equipage: EquipageItem,
+): LineWithCluster {
+  return {
+    id: -equipage.id,
+    name: equipage.name,
+    fromArea: "",
+    toArea: "",
+    mine: true,
+    type: EQUIPAGE_FALLBACK_LINE_TYPE,
+    publicId: equipage.id,
+    cluster: "Ekipage",
+  };
+}
+
+/**
+ * Returnerar ekipage-id om linjen är en pseudolinje, annars null.
+ */
+export function getEquipageIdFromFallbackLine(line: LineItem): number | null {
+  return line.type === EQUIPAGE_FALLBACK_LINE_TYPE ? -line.id : null;
+}
+
+/**
+ * Begränsar ekipagelistan till användarens sparade ekipageval.
+ *
+ * I linjeläge, eller när inget ekipage är valt, används alla ekipage.
+ */
+export function scopeEquipagesForVehicleSelection(
+  equipages: EquipageItem[],
+  selection: VehicleSelection,
+): EquipageItem[] {
+  if (
+    selection.mode !== "equipages" ||
+    selection.selectedEquipageIds.length === 0
+  ) {
+    return equipages;
+  }
+
+  const selectedIds = new Set(selection.selectedEquipageIds);
+
+  return equipages.filter((equipage) => selectedIds.has(equipage.id));
+}
+
+/**
+ * Härleder linjerna som ett ekipage hör till enligt iLog-kopplingarna.
+ */
+function getLinkedLinesForEquipages(
+  lines: LineWithCluster[],
+  equipages: EquipageItem[],
+): LineWithCluster[] {
+  const linkedLineIds = new Set<number>();
+  const linkedLineNames = new Set<string>();
+
+  for (const equipage of equipages) {
+    for (const lineId of equipage.linkedLineIds) {
+      linkedLineIds.add(lineId);
+    }
+
+    for (const lineName of equipage.linkedLineNames) {
+      linkedLineNames.add(normalizeLineName(lineName));
+    }
+  }
+
+  return lines.filter(
+    (line) =>
+      linkedLineIds.has(line.id) ||
+      linkedLineNames.has(normalizeLineName(line.name)),
+  );
+}
+
+/**
+ * Bygger simulatorns linjelista från användarens urval i Inställningar.
+ *
+ * Samma urvalskälla som Home: valda linjer i linjeläge, och i ekipageläge de
+ * linjer som de valda ekipagen är kopplade till. Saknas urval helt visas alla
+ * linjer i stället för en tom lista.
+ */
+export function getLinesForVehicleSelection(
+  lines: LineItem[],
+  equipages: EquipageItem[],
+  selection: VehicleSelection,
+): VehicleSelectionLines {
+  const allLines: LineWithCluster[] = lines.map((line) => ({
+    ...line,
+    cluster: getLineCluster(line.name) ?? "",
+  }));
+
+  const sortByName = (candidates: LineWithCluster[]): LineWithCluster[] =>
+    [...candidates].sort((a, b) => a.name.localeCompare(b.name, "sv"));
+
+  if (selection.mode === "lines" && selection.selectedLineIds.length > 0) {
+    const selectedIds = new Set(selection.selectedLineIds);
+    const selectedLines = allLines.filter((line) => selectedIds.has(line.id));
+
+    if (selectedLines.length > 0) {
+      return { lines: sortByName(selectedLines), source: "lines" };
+    }
+  }
+
+  if (
+    selection.mode === "equipages" &&
+    selection.selectedEquipageIds.length > 0
+  ) {
+    const scopedEquipages = scopeEquipagesForVehicleSelection(
+      equipages,
+      selection,
+    );
+    const linkedLines = getLinkedLinesForEquipages(allLines, scopedEquipages);
+    const coveredEquipageIds = new Set(
+      scopedEquipages
+        .filter((equipage) =>
+          linkedLines.some(
+            (line) =>
+              equipage.linkedLineIds.includes(line.id) ||
+              equipage.linkedLineNames.some(
+                (lineName) =>
+                  normalizeLineName(lineName) === normalizeLineName(line.name),
+              ),
+          ),
+        )
+        .map((equipage) => equipage.id),
+    );
+
+    // Ekipage utan träff mot någon linje skulle annars bli omöjliga att välja.
+    const fallbackLines = scopedEquipages
+      .filter((equipage) => !coveredEquipageIds.has(equipage.id))
+      .map(makeEquipageFallbackLine);
+
+    const derivedLines = [...linkedLines, ...fallbackLines];
+
+    if (derivedLines.length > 0) {
+      return { lines: sortByName(derivedLines), source: "equipages" };
+    }
+  }
+
+  return { lines: sortByName(allLines), source: "all" };
+}
+
+/**
+ * Filtrerar ekipage mot vald linje, inklusive pseudolinjer för lösa ekipage.
+ */
+export function getEquipagesForSelectedLine(
+  equipages: EquipageItem[],
+  selectedLine: LineItem,
+  selection: VehicleSelection,
+): EquipageItem[] {
+  const scopedEquipages = scopeEquipagesForVehicleSelection(
+    equipages,
+    selection,
+  );
+
+  const fallbackEquipageId = getEquipageIdFromFallbackLine(selectedLine);
+  if (fallbackEquipageId !== null) {
+    return scopedEquipages.filter(
+      (equipage) => equipage.id === fallbackEquipageId,
+    );
+  }
+
+  const scopedMatches = filterEquipagesForSelectedLine(
+    scopedEquipages,
+    selectedLine,
+  );
+
+  // Utan träff inom urvalet visas linjens övriga ekipage hellre än en tom lista.
+  return scopedMatches.length > 0
+    ? scopedMatches
+    : filterEquipagesForSelectedLine(equipages, selectedLine);
 }
 
 /**

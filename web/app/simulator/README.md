@@ -5,9 +5,10 @@ Simulatorn används för att testa om oplacerade bokningar bör läggas på ett 
 ## Huvudflöde
 
 1. Användaren väljer datum.
-2. Simulatorn hämtar linjer och ekipage med samma filtreringslogik som Home.
+2. Simulatorn hämtar linjer och ekipage från iLog och filtrerar dem på användarens
+   urval i Inställningar, samma urvalskälla som Home.
 3. Användaren väljer linje.
-4. Simulatorn visar endast ekipage som faktiskt hör till vald linje enligt Home-logiken.
+4. Simulatorn visar endast ekipage som hör till vald linje.
 5. Användaren väljer ekipage.
 6. Simulatorn hämtar ekipagets nuvarande bokningar.
 7. Simulatorn hämtar oplacerade bokningar för vald linje.
@@ -20,13 +21,26 @@ Simulatorn används för att testa om oplacerade bokningar bör läggas på ett 
 
 ## Linjer och ekipage
 
-Simulatorn använder samma gemensamma funktioner som Home:
+Urvalet styrs av `filters.vehicleSelectorMode`, `filters.lines` och
+`filters.equipages` som sparas på inställningssidan:
 
-- `getFilteredLinesAndEquipagesForAreas`
-- `getEquipageLinePlacement`
-- `equipagePlacementMatchesLine`
+- **Linjeläge** – linjelistan är användarens valda linjer.
+- **Ekipageläge** – linjelistan härleds från de valda ekipagens `linkedLineIds`
+  och `linkedLineNames`. Ett valt ekipage utan kopplad linje får en egen
+  pseudolinje (negativt id, `type: "EQUIPAGE"`) så att det ändå går att välja.
+  Sådana pseudolinjer har inga oplacerade bokningar i iLog.
+- **Utan sparat urval** – alla linjer visas, tillsammans med en notis om att
+  inget urval finns i Inställningar.
 
-Det innebär att simulatorn inte bara går på kopplade `linkedLineIds` eller `linkedLineNames`, utan även kontrollerar faktiska bokningar på ekipaget för valt datum.
+Gemensamma funktioner i `lib/backend/transportPlanningUtils`:
+
+- `getLinesForVehicleSelection`
+- `getEquipagesForSelectedLine`
+- `scopeEquipagesForVehicleSelection`
+
+Det äldre områdes-/klusterfiltret (`filters.areas`) används inte längre av
+simulatorn. Det togs bort från inställningssidan och var tomt för de flesta
+användare, vilket gjorde både linje- och ekipagelistan tom.
 
 ## Oplacerade bokningar
 
