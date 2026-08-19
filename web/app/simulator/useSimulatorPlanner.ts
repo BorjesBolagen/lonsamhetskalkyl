@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getIlogConsignments, getIlogEquipages } from "../../lib/api";
+import {
+  getIlogConsignments,
+  getIlogEquipages,
+  getIlogLines,
+} from "../../lib/api";
 import type { ProfitabilityValue } from "../../lib/api";
 import type {
   ConsignmentListItem,
   EquipageItem,
   LineItem,
 } from "../../lib/ilogTypes";
-import { DEFAULT_AREAS } from "../../lib/areaLineConfig";
-import type { AreaState } from "../../lib/areaLineConfig";
 import {
   buildDeliveryRouteWithStartAndStop,
   calculateBestPickupBeforeDeliveryInsertion,
@@ -20,24 +22,22 @@ import {
   getCurrentTransportPlanningUserSettings,
   getDefaultNextDate,
   getDisplayCustomerName,
-  filterEquipagesForSelectedLine,
-  getFilteredLinesAndEquipagesForAreas,
-  getSelectedAreaLabels,
+  getEquipageIdFromFallbackLine,
+  getEquipagesForSelectedLine,
+  getLinesForVehicleSelection,
   parseTaxPointRelation,
   safeGetSessionStorageJson,
   safeSetSessionStorageJson,
   toIlogDate,
+  EMPTY_VEHICLE_SELECTION,
 } from "../../lib/backend/transportPlanningUtils";
+import type { VehicleSelection } from "../../lib/backend/transportPlanningUtils";
 import { DEFAULT_PROFITABILITY_REFERENCE_VALUE } from "@/lib/constants";
 import { DEFAULT_MILE_COST } from "@/lib/constants";
 
 // Cache-nyckel för att kunna återställa simulatorns senaste lokala urval.
 const SIMULATOR_CACHE_KEY = "simulator-cache-v9";
 const FICTITIOUS_TAX_POINT_RELATION_PATTERN = /^\d{5}-\d{5}$/;
-
-type SimulatorLine = LineItem & {
-  cluster: string;
-};
 
 // Fiktiva bokningar har användarstyrd intäkt och behöver därför inte prissteg.
 type SimulatedRevenueValue = {
@@ -274,22 +274,18 @@ function getOtherEquipageConsignmentKey(
 }
 
 export function useSimulatorPlanner() {
-  const [selectedAreas, setSelectedAreas] = useState<AreaState>(DEFAULT_AREAS);
-  const [areasLoaded, setAreasLoaded] = useState(false);
+  const [vehicleSelection, setVehicleSelection] = useState<VehicleSelection>(
+    EMPTY_VEHICLE_SELECTION,
+  );
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
     useState<number>(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
   const [mileCostReferenceValue, setMileCostReferenceValue] =
     useState<number>(DEFAULT_MILE_COST);
 
   const [selectedDate, setSelectedDate] = useState(getDefaultNextDate);
-  const [availableLines, setAvailableLines] = useState<SimulatorLine[]>([]);
-  const [homeVisibleLines, setHomeVisibleLines] = useState<SimulatorLine[]>([]);
-  const [filteredAreaEquipages, setFilteredAreaEquipages] = useState<
-    EquipageItem[]
-  >([]);
-  const [availableEquipages, setAvailableEquipages] = useState<EquipageItem[]>(
-    [],
-  );
+  const [allLines, setAllLines] = useState<LineItem[]>([]);
+  const [allEquipages, setAllEquipages] = useState<EquipageItem[]>([]);
 
   const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
   const [selectedEquipageId, setSelectedEquipageId] = useState<number | null>(
@@ -321,7 +317,6 @@ export function useSimulatorPlanner() {
     useState<number[]>([]);
 
   const [isLoadingLines, setIsLoadingLines] = useState(false);
-  const [isLoadingEquipages, setIsLoadingEquipages] = useState(false);
   const [isLoadingUnassigned, setIsLoadingUnassigned] = useState(false);
   const [isLoadingCurrentEquipage, setIsLoadingCurrentEquipage] =
     useState(false);
@@ -336,15 +331,59 @@ export function useSimulatorPlanner() {
   const [errorMsg, setErrorMsg] = useState("");
 
   // Härledda val gör renderingen enklare och undviker upprepade filter i JSX.
-  const selectedAreaLabels = useMemo(
-    () => getSelectedAreaLabels(selectedAreas),
-    [selectedAreas],
+  // Linjelistan följer användarens urval i Inställningar, precis som Home.
+  const { lines: availableLines, source: lineSelectionSource } = useMemo(
+    () => getLinesForVehicleSelection(allLines, allEquipages, vehicleSelection),
+    [allLines, allEquipages, vehicleSelection],
   );
 
   const selectedLine = useMemo(
     () => availableLines.find((line) => line.id === selectedLineId) ?? null,
     [availableLines, selectedLineId],
   );
+
+  const availableEquipages = useMemo(
+    () =>
+      selectedLine
+        ? getEquipagesForSelectedLine(
+            allEquipages,
+            selectedLine,
+            vehicleSelection,
+          ).sort((a, b) => a.name.localeCompare(b.name, "sv"))
+        : [],
+    [allEquipages, selectedLine, vehicleSelection],
+  );
+
+  // Förklarar för användaren varför linjelistan ser ut som den gör.
+  const lineSelectionNotice = useMemo(() => {
+    if (!settingsLoaded || isLoadingLines || errorMsg) {
+      return "";
+    }
+
+    if (availableLines.length === 0) {
+      return "Inga linjer kunde hämtas från iLog.";
+    }
+
+    if (lineSelectionSource !== "all") {
+      return "";
+    }
+
+    const hasSavedSelection =
+      vehicleSelection.mode === "lines"
+        ? vehicleSelection.selectedLineIds.length > 0
+        : vehicleSelection.selectedEquipageIds.length > 0;
+
+    return hasSavedSelection
+      ? "Ditt urval i Inställningar matchade inga linjer, så alla linjer visas."
+      : "Inga lastbilar eller linjer är valda i Inställningar, så alla linjer visas.";
+  }, [
+    availableLines,
+    errorMsg,
+    isLoadingLines,
+    lineSelectionSource,
+    settingsLoaded,
+    vehicleSelection,
+  ]);
 
   const selectedEquipage = useMemo(
     () =>
@@ -539,7 +578,6 @@ export function useSimulatorPlanner() {
     setUnassignedConsignments([]);
     setOtherEquipageConsignments([]);
     setCurrentEquipageSummary(null);
-    setAvailableEquipages([]);
   }
 
   // Vid byte av ekipage börjar borttagningsurvalet om för att undvika fel korskoppling.
@@ -1046,13 +1084,13 @@ export function useSimulatorPlanner() {
   }
 
   useEffect(() => {
-    // Läser användarens sparade områden och referensvärden vid sidladdning.
+    // Läser användarens sparade fordonsurval och referensvärden vid sidladdning.
     async function loadCurrentUserSettings() {
       const settings = await getCurrentTransportPlanningUserSettings();
-      setSelectedAreas(settings.selectedAreas);
+      setVehicleSelection(settings.vehicleSelection);
       setProfitabilityReferenceValue(settings.profitabilityReferenceValue);
       setMileCostReferenceValue(settings.mileCostReferenceValue);
-      setAreasLoaded(true);
+      setSettingsLoaded(true);
     }
 
     void loadCurrentUserSettings();
@@ -1115,9 +1153,9 @@ export function useSimulatorPlanner() {
   ]);
 
   useEffect(() => {
-    // Hämtar linjer efter att användarens område/kluster har laddats.
-    async function loadLinesForSelectedAreas() {
-      if (!areasLoaded) {
+    // Hämtar linjer och ekipage när användarens urval från Inställningar finns.
+    async function loadVehicleSelectionSources() {
+      if (!settingsLoaded) {
         return;
       }
 
@@ -1125,91 +1163,48 @@ export function useSimulatorPlanner() {
       setErrorMsg("");
 
       try {
-        const { approvedLines } =
-          await getFilteredLinesAndEquipagesForAreas(selectedAreaLabels);
+        const [linesResponse, equipagesResponse] = await Promise.all([
+          getIlogLines(),
+          getIlogEquipages(),
+        ]);
 
-        setAvailableLines(approvedLines as SimulatorLine[]);
-        setFilteredAreaEquipages([]);
+        if (!linesResponse.status || !equipagesResponse.status) {
+          setErrorMsg(
+            linesResponse.message ||
+              equipagesResponse.message ||
+              "Kunde inte hämta linjer och ekipage, testa ladda om sidan.",
+          );
+          setAllLines([]);
+          setAllEquipages([]);
+          return;
+        }
+
+        setAllLines((linesResponse.data ?? []) as LineItem[]);
+        setAllEquipages((equipagesResponse.data ?? []) as EquipageItem[]);
       } catch {
-        setErrorMsg("Kunde inte hämta linjer, testa ladda om sidan.");
-        setAvailableLines([]);
-        setHomeVisibleLines([]);
-        setFilteredAreaEquipages([]);
+        setErrorMsg(
+          "Kunde inte hämta linjer och ekipage, testa ladda om sidan.",
+        );
+        setAllLines([]);
+        setAllEquipages([]);
       } finally {
         setIsLoadingLines(false);
       }
     }
 
-    void loadLinesForSelectedAreas();
-  }, [areasLoaded, selectedAreaLabels]);
+    void loadVehicleSelectionSources();
+  }, [settingsLoaded]);
 
   useEffect(() => {
-    // Feedback: linjelistan ska visa alla linjer i valda kluster, även riktningar utan lastade bokningar.
-    setHomeVisibleLines(availableLines);
-  }, [availableLines]);
-
-  useEffect(() => {
-    // Hämtar ekipage först när både linje och giltigt datum finns.
-    async function loadEquipagesForSelectedLine() {
-      if (!selectedLine || !selectedDate) {
-        setAvailableEquipages([]);
-        setSelectedEquipageId(null);
-        setCurrentEquipageSummary(null);
-        setExcludedCurrentConsignmentIds([]);
-        return;
-      }
-
-      const ilogDate = toIlogDate(selectedDate);
-      if (!ilogDate) {
-        setAvailableEquipages([]);
-        setSelectedEquipageId(null);
-        setCurrentEquipageSummary(null);
-        setExcludedCurrentConsignmentIds([]);
-        return;
-      }
-
-      setIsLoadingEquipages(true);
-      setErrorMsg("");
-
-      try {
-        const response = await getIlogEquipages();
-
-        if (!response.status) {
-          setErrorMsg(
-            response.message || "Kunde inte hämta ekipage för vald linje.",
-          );
-          setAvailableEquipages([]);
-          setSelectedEquipageId(null);
-          setCurrentEquipageSummary(null);
-          setExcludedCurrentConsignmentIds([]);
-          return;
-        }
-
-        const equipages = filterEquipagesForSelectedLine(
-          (response.data ?? []) as EquipageItem[],
-          selectedLine,
-        ).sort((a, b) => a.name.localeCompare(b.name, "sv"));
-
-        setAvailableEquipages(equipages);
-
-        setSelectedEquipageId((current) =>
-          current && equipages.some((equipage) => equipage.id === current)
-            ? current
-            : null,
-        );
-      } catch {
-        setErrorMsg("Kunde inte hämta ekipage för vald linje.");
-        setAvailableEquipages([]);
-        setSelectedEquipageId(null);
-        setCurrentEquipageSummary(null);
-        setExcludedCurrentConsignmentIds([]);
-      } finally {
-        setIsLoadingEquipages(false);
-      }
+    // Nollställ vald linje om den inte längre ingår i användarens urval.
+    if (
+      selectedLineId !== null &&
+      availableLines.length > 0 &&
+      !availableLines.some((line) => line.id === selectedLineId)
+    ) {
+      setSelectedLineId(null);
     }
-
-    void loadEquipagesForSelectedLine();
-  }, [selectedLine, selectedDate]);
+  }, [availableLines, selectedLineId]);
 
   useEffect(() => {
     // Nollställ valt ekipage om det inte längre finns i den filtrerade listan.
@@ -1231,6 +1226,13 @@ export function useSimulatorPlanner() {
       }
 
       if (!selectedLine || !selectedDate) {
+        setUnassignedConsignments([]);
+        setSelectedConsignmentIds([]);
+        return;
+      }
+
+      // Pseudolinjer för lösa ekipage saknar zon i iLog och har inga oplacerade bokningar.
+      if (getEquipageIdFromFallbackLine(selectedLine) !== null) {
         setUnassignedConsignments([]);
         setSelectedConsignmentIds([]);
         return;
@@ -1457,7 +1459,8 @@ export function useSimulatorPlanner() {
     selectedDate,
     setSelectedDate: handleDateChange,
     profitabilityReferenceValue,
-    availableLines: homeVisibleLines,
+    availableLines,
+    lineSelectionNotice,
     selectedLineId,
     setSelectedLineId: handleLineChange,
     selectedLine,
@@ -1493,9 +1496,8 @@ export function useSimulatorPlanner() {
     simulationSummary,
     runSimulation,
     getDisplayCustomerName,
-    areasLoaded,
+    settingsLoaded,
     isLoadingLines,
-    isLoadingEquipages,
     isLoadingUnassigned,
     isLoadingCurrentEquipage,
     isLoadingOtherEquipageConsignments,

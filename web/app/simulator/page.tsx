@@ -55,6 +55,7 @@ export default function SimulatorPage() {
     selectedDate,
     setSelectedDate,
     availableLines,
+    lineSelectionNotice,
     selectedLineId,
     setSelectedLineId,
     selectedLine,
@@ -89,9 +90,8 @@ export default function SimulatorPage() {
     simulationSummary,
     runSimulation,
     getDisplayCustomerName,
-    areasLoaded,
+    settingsLoaded,
     isLoadingLines,
-    isLoadingEquipages,
     isLoadingUnassigned,
     isLoadingCurrentEquipage,
     isLoadingOtherEquipageConsignments,
@@ -538,6 +538,7 @@ export default function SimulatorPage() {
                       Datum
                     </span>
                     <input
+                      id="selectedDate"
                       type="date"
                       value={selectedDate}
                       onChange={(event) => setSelectedDate(event.target.value)}
@@ -550,6 +551,7 @@ export default function SimulatorPage() {
                       Linje
                     </span>
                     <select
+                      id="selectedLine"
                       value={selectedLineId ?? ""}
                       onChange={(event) =>
                         setSelectedLineId(
@@ -558,7 +560,7 @@ export default function SimulatorPage() {
                             : null,
                         )
                       }
-                      disabled={!areasLoaded || isLoadingLines}
+                      disabled={!settingsLoaded || isLoadingLines}
                       className="h-11 w-full rounded-2xl border border-[var(--seperating-gray)] bg-[var(--primary-element)] px-4 text-sm font-medium text-[var(--text-primary)] outline-none transition focus:border-[var(--button-submit)] focus:ring-2 focus:ring-[var(--notification-color)] disabled:opacity-60"
                     >
                       <option value="">Välj linje</option>
@@ -575,6 +577,7 @@ export default function SimulatorPage() {
                       Ekipage
                     </span>
                     <select
+                      id="selectedEquipage"
                       value={selectedEquipageId ?? ""}
                       onChange={(event) =>
                         setSelectedEquipageId(
@@ -583,11 +586,15 @@ export default function SimulatorPage() {
                             : null,
                         )
                       }
-                      disabled={!selectedLine || isLoadingEquipages}
+                      disabled={!selectedLine}
                       className="h-11 w-full rounded-2xl border border-[var(--seperating-gray)] bg-[var(--primary-element)] px-4 text-sm font-medium text-[var(--text-primary)] outline-none transition focus:border-[var(--button-submit)] focus:ring-2 focus:ring-[var(--notification-color)] disabled:opacity-60"
                     >
                       <option value="">
-                        {selectedLine ? "Välj ekipage" : "Välj linje först"}
+                        {!selectedLine
+                          ? "Välj linje först"
+                          : availableEquipages.length === 0
+                            ? "Inga ekipage på vald linje"
+                            : "Välj ekipage"}
                       </option>
                       {availableEquipages.map((equipage) => (
                         <option key={equipage.id} value={equipage.id}>
@@ -600,13 +607,15 @@ export default function SimulatorPage() {
               </div>
 
               {(errorMsg ||
+                lineSelectionNotice ||
                 isLoadingLines ||
-                isLoadingEquipages ||
                 isLoadingUnassigned) && (
                 <div className="relative mt-5 flex flex-wrap gap-2 text-sm">
-                  {isLoadingLines && <StatusPill>Hämtar linjer...</StatusPill>}
-                  {isLoadingEquipages && (
-                    <StatusPill>Hämtar ekipage...</StatusPill>
+                  {isLoadingLines && (
+                    <StatusPill>Hämtar linjer och ekipage...</StatusPill>
+                  )}
+                  {lineSelectionNotice && (
+                    <StatusPill>{lineSelectionNotice}</StatusPill>
                   )}
                   {isLoadingUnassigned && (
                     <StatusPill>Hämtar oplacerade bokningar...</StatusPill>
