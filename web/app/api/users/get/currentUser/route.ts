@@ -15,12 +15,12 @@ import { requireUser } from "@/lib/authHelpers";
  */
 export async function GET() {
 
-    const { error: userError } = await requireUser();
-    if (userError) return userError;
+    const auth = await requireUser();
+    if (auth.error) return auth.error;
 
     try {
         const supabase = await getSupabaseServerClient();
-        const currentUser = await getCurrentUser(supabase);
+        const currentUser = await getCurrentUser(supabase, auth.user.id);
         return NextResponse.json({ status: true, message: "Användare hämtad", data: currentUser.data }, { status: 200 });
     } catch (error) {
         const message = error instanceof Error ? error.message : "Internal server error";

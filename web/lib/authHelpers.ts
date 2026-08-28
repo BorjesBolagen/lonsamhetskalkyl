@@ -1,13 +1,18 @@
 "use server";
 
 import { NextResponse } from "next/server";
+import type { User } from "@supabase/supabase-js";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
-type AuthSuccess = { error: null };
-type AuthFailure = { error: NextResponse };
+type AuthSuccess = { error: null; user: User };
+type AuthFailure = { error: NextResponse; user: null };
 
 /**
  * General function for asserting that the logged in user has a valid JWT and a verified email adress
+ *
+ * Returnerar även den inloggade användaren. Varje supabase.auth.getUser() är
+ * ett nätverksanrop mot Supabase Auth (auth-js cachar inte), så anropande kod
+ * ska återanvända `user` härifrån istället för att hämta den en gång till.
  * @returns 
  */
 export async function requireUser(): Promise<AuthSuccess | AuthFailure> {
@@ -16,11 +21,12 @@ export async function requireUser(): Promise<AuthSuccess | AuthFailure> {
 
     if (error || !user) {
         return {
+            user: null,
             error: NextResponse.json({ status: false, message: "Ej autentiserad" }, { status: 401 }),
         };
     }
 
-    return { error: null };
+    return { error: null, user };
 }
 
 export async function requireAdmin(): Promise<AuthSuccess | AuthFailure> {
@@ -28,19 +34,19 @@ export async function requireAdmin(): Promise<AuthSuccess | AuthFailure> {
     if (result.error) return result;
 
     const supabase = await getSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
 
     const { data: profile } = await supabase
         .from("User")
         .select("role")
-        .eq("id", user!.id)
+        .eq("id", result.user.id)
         .maybeSingle();
 
     if (profile?.role !== "admin") {
         return {
+            user: null,
             error: NextResponse.json({ status: false, message: "Åtkomst nekad" }, { status: 403 }),
         };
     }
 
-    return { error: null };
+    return { error: null, user: result.user };
 }

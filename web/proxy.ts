@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_ROUTES = ["/login", "/forgot-password", "/reset-password"];
 const PROTECTED_ROUTES = ["/home", "/settings", "/admin", "/notifications", "/simulator", "/analytics"];
+const ADMIN_ROUTES = ["/admin", "/analytics"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -57,28 +58,13 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // Protected routes - kräver autentisering
-  if (PROTECTED_ROUTES.some((route) => pathname.startsWith(route))) {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => request.cookies.getAll(),
-          setAll: () => {},
-        }
-      }
-    )
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-  }
+  // Protected routes - kräver autentisering. Adminvyerna kräver dessutom
+  // admin-rollen. Kontrollerna delar på en getUser() eftersom varje sådant
+  // anrop går över nätet till Supabase Auth.
+  const isProtectedRoute = PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
+  const isAdminRoute = ADMIN_ROUTES.some((route) => pathname.startsWith(route));
 
-  // Only allow admins to access the admin panel and the analytics view
-  if (pathname.startsWith('/admin') || pathname.startsWith('/analytics')) {
+  if (isProtectedRoute || isAdminRoute) {
     // needs its own client since cookies() from next/headers isn't available here
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -91,20 +77,23 @@ export async function proxy(request: NextRequest) {
       }
     )
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
+      return NextResponse.redirect(new URL("/login", request.url));
     }
 
-    const { data } = await supabase
-      .from('User')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    // Only allow admins to access the admin panel and the analytics view
+    if (isAdminRoute) {
+      const { data } = await supabase
+        .from('User')
+        .select('role')
+        .eq('id', user.id)
+        .single()
 
-    if (data?.role !== 'admin') {
-      return new NextResponse(null, { status: 403 })
+      if (data?.role !== 'admin') {
+        return new NextResponse(null, { status: 403 })
+      }
     }
   }
 

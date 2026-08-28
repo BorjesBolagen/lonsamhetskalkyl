@@ -11,6 +11,9 @@ type SupabaseServerClient = ReturnType<typeof createServerClient<Database>>;
 /**
  * Helper function to get the currently signed in user
  * @param supabase 
+ * @param authUserId id på den redan verifierade auth-användaren, t.ex. från
+ *        requireUser(). Anges den hoppas ett extra supabase.auth.getUser()
+ *        över, vilket sparar ett nätverksanrop mot Supabase Auth.
  * @returns json(
  *      status: boolean,
  *      message: string,
@@ -18,18 +21,23 @@ type SupabaseServerClient = ReturnType<typeof createServerClient<Database>>;
  * )
  * @throws Error if user is not signed in or if there is an unexpected error during the process
  */
-export async function getCurrentUser(supabase: SupabaseServerClient): Promise<BasicResponse<User>> {
+export async function getCurrentUser(supabase: SupabaseServerClient, authUserId?: string): Promise<BasicResponse<User>> {
 
   // Get auth user
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error) throw new Error("Oväntat fel: " + error.message);
-  if (!user) throw new Error("Du måste vara inloggad.");
+  let userId = authUserId;
+
+  if (!userId) {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) throw new Error("Oväntat fel: " + error.message);
+    if (!user) throw new Error("Du måste vara inloggad.");
+    userId = user.id;
+  }
 
   // Query user table
   const { data: userData, error: userError } = await supabase
     .from("User")
     .select("*")
-    .eq("id", user.id)
+    .eq("id", userId)
     .maybeSingle()
   
   if (userError) throw new Error("Oväntat fel: " + userError.message + ". " + userError.details);

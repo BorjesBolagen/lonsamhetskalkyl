@@ -6,13 +6,13 @@ import { requireUser } from "@/lib/authHelpers";
 
 export async function GET() {
 
-    const { error: userError } = await requireUser();
-    if (userError) throw userError;
+    const auth = await requireUser();
+    if (auth.error) throw auth.error;
 
     let currentUser: User;
     const supabase = await getSupabaseServerClient();
     try {
-        const response = await getCurrentUser(supabase);
+        const response = await getCurrentUser(supabase, auth.user.id);
         currentUser = response.data!;
     } catch (e) {
         return NextResponse.json(
