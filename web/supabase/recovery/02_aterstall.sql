@@ -239,3 +239,66 @@ COMMIT;
 -- PostgREST cachar schemat. Utan den här signalen kan API:t fortsätta
 -- svara utifrån den gamla bilden en stund.
 NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------
+-- Slutkontroll
+-- ---------------------------------------------------------------------
+-- Skriptet rapporterar vad det gjorde med RAISE NOTICE, och Supabases SQL
+-- Editor visar inte alltid sådana meddelanden — den visar frågeresultat,
+-- och bara från den sista satsen. Därför den här avslutande frågan: den
+-- blir det du faktiskt får se.
+--
+-- Så här ska det se ut när allt gått igenom:
+--   tabellrattigheter   anon / authenticated / service_role, samma antal
+--   default_privileges  raden för "tabeller" nämner alla tre rollerna
+--   kvar_att_reda_ut    inga rader alls
+SELECT kontroll, objekt, detalj FROM (
+
+  SELECT 1 AS ordning, 'tabellrattigheter' AS kontroll, g.grantee::text AS objekt,
+         count(DISTINCT g.table_name)::text || ' tabeller' AS detalj
+    FROM information_schema.role_table_grants g
+   WHERE g.table_schema = 'public'
+     AND g.grantee IN ('anon','authenticated','service_role')
+   GROUP BY g.grantee
+
+  UNION ALL
+  SELECT 1, 'tabellrattigheter', r.rolname::text, '>>> SAKNAR RATTIGHETER <<<'
+    FROM pg_roles r
+   WHERE r.rolname IN ('anon','authenticated','service_role')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.role_table_grants g
+                      WHERE g.table_schema = 'public' AND g.grantee = r.rolname)
+
+  UNION ALL
+  SELECT 2, 'default_privileges',
+         CASE d.defaclobjtype WHEN 'r' THEN 'tabeller' WHEN 'S' THEN 'sekvenser'
+                              WHEN 'f' THEN 'funktioner' ELSE d.defaclobjtype::text END,
+         d.defaclacl::text
+    FROM pg_default_acl d
+    JOIN pg_namespace n ON n.oid = d.defaclnamespace
+   WHERE n.nspname = 'public'
+
+  -- Det som spärrarna valde att inte röra. Tomt = allt är städat.
+  UNION ALL
+  SELECT 3, 'kvar_att_reda_ut', c.relname::text, 'tabell som skriptet lamnade orord'
+    FROM pg_class c
+   WHERE c.relnamespace = 'public'::regnamespace
+     AND c.relkind = 'r'
+     AND c.relname IN ('absence','app_user','assignment','base_schedule','board','board_crew',
+                       'board_group','board_member','board_row','employee','session',
+                       'station_place','sync_run','traffic_area','transpa_shift',
+                       'transpa_tenant','vehicle','vehicle_group','work_pattern','work_pattern_day')
+
+  UNION ALL
+  SELECT 3, 'kvar_att_reda_ut', t.typname::text, 'enum-typ som skriptet lamnade orord'
+    FROM pg_type t
+   WHERE t.typnamespace = 'public'::regnamespace
+     AND t.typtype = 'e'
+     AND t.typname IN ('absence_status','absence_type','assignment_source','board_role','direction',
+                       'row_kind','shift','sync_status','user_role','vehicle_kind','view_mode')
+
+  UNION ALL
+  SELECT 3, 'kvar_att_reda_ut', 'drizzle', 'schemat finns kvar'
+    FROM pg_namespace n WHERE n.nspname = 'drizzle'
+
+) AS slutkontroll
+ORDER BY ordning, kontroll, objekt;

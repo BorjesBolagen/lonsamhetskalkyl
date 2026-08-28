@@ -11,7 +11,13 @@ Kör i ordning:
 1. `01_diagnostik.sql` — ändrar ingenting, visar bara vad som hände.
 2. `02_aterstall.sql` — åtgärdar det.
 
-Båda klistras in i Supabase → SQL Editor.
+Båda klistras in i Supabase → SQL Editor, hela filen i taget.
+
+Supabases SQL Editor visar bara resultatet av den **sista** satsen när man
+kör flera på en gång. Därför är `01_diagnostik.sql` skriven som en enda
+fråga som returnerar alla sju kontroller i samma tabell, och därför slutar
+`02_aterstall.sql` med en slutkontroll — dess `RAISE NOTICE`-rapport syns
+inte nödvändigtvis i editorn, men den avslutande frågan gör det.
 
 ## Vad skriptet faktiskt gjorde
 
@@ -102,6 +108,9 @@ den felaktiga SQL:en applicerad ovanpå.
   `daily_equipage_forecast` är orörd, och de 18 främmande tabellerna,
   elva typerna och drizzle-schemat är borta.
 - Att köra `02_aterstall.sql` en andra gång ändrar ingenting.
+- Slutkontrollen i `02_aterstall.sql` visar efteråt att alla tre rollerna
+  har rättigheter igen, att default privileges är tillbaka, och att inget
+  ligger kvar under `kvar_att_reda_ut`.
 - Spärrarna provades var för sig: en tabell med andra kolumner, en tabell
   med rätt kolumner men med rader i, en enum med samma namn men andra
   värden, och ett drizzle-schema med en okänd migrationsrad — samtliga
