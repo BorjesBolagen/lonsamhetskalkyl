@@ -131,6 +131,9 @@ export default function Home() {
     selectedEquipage,
     isPopupOpen,
     areasLoaded,
+    isAdmin,
+    groupByConsignmentLines,
+    setGroupByConsignmentLines,
     refreshingEquipages,
     refreshingLines,
     loadLines,
@@ -334,7 +337,10 @@ export default function Home() {
               </div>
 
               <button
-                onClick={loadLines}
+                onClick={() => {
+                  setGroupByConsignmentLines(false);
+                  void loadLines({ groupByConsignmentLines: false });
+                }}
                 disabled={!areasLoaded || loadingLines}
                 className="w-full bg-[var(--button-submit)] hover:bg-[var(--button-submit-hover)] disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-md inline-flex items-center justify-center gap-2"
               >
@@ -350,6 +356,20 @@ export default function Home() {
                     : `Hämta valda ${modeLabel}`}
                 </span>
               </button>
+
+              {/* Temporary admin-only test path, see app/home/README.md. */}
+              {isAdmin && vehicleSelectorMode === "lines" && (
+                <button
+                  onClick={() => {
+                    setGroupByConsignmentLines(true);
+                    void loadLines({ groupByConsignmentLines: true });
+                  }}
+                  disabled={!areasLoaded || loadingLines}
+                  className="w-full bg-transparent border-2 border-dashed border-[var(--border-primary)] text-[var(--text-primary)] font-semibold py-2 px-4 rounded-lg transition-colors duration-300 text-sm hover:bg-[var(--bg)] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Nytt linjeval
+                </button>
+              )}
             </div>
 
             <div className="text-sm text-[var(--text-primary)]">
@@ -372,6 +392,12 @@ export default function Home() {
                       : `${lineCards.length} ${lineLabel} med totalt ${visibleEquipageCount} ${equipageLabel}`}
                     .
                   </p>
+                  {groupByConsignmentLines && (
+                    <p className="text-[var(--text-primary)] italic">
+                      Nytt linjeval (test): bilar visas under alla valda linjer
+                      deras bokningar hör till.
+                    </p>
+                  )}
                   {loadingProfitabilityCount > 0 && (
                     <p>
                       Pris beräknas fortfarande för {loadingProfitabilityCount}{" "}

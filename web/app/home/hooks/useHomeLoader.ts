@@ -14,6 +14,7 @@ import {
   chunkArray,
   EquipageWithConsignments,
   getConsignmentFlm,
+  getConsignmentLineNames,
   getDominantConsignmentLineName,
   getIlogConsignmentsWithRetry,
   LineWithEquipages,
@@ -28,6 +29,8 @@ type UseHomeLoaderParams = {
   selectedEquipageIds: number[];
   selectedLineIds: number[];
   selectedAreaLabels: string[];
+  // Temporary flag for the admin-only "Nytt linjeval" path.
+  groupByConsignmentLines: boolean;
   lineCards: LineWithEquipages[];
   setLineCards: Dispatch<SetStateAction<LineWithEquipages[]>>;
   setCandidateEquipageCount: Dispatch<SetStateAction<number>>;
@@ -124,6 +127,7 @@ export function useHomeLoader({
   selectedEquipageIds,
   selectedLineIds,
   selectedAreaLabels,
+  groupByConsignmentLines,
   lineCards,
   setCandidateEquipageCount,
   setVisibleEquipageCount,
@@ -156,6 +160,7 @@ export function useHomeLoader({
       selectedLineIds,
       selectedAreaLabels,
       appliedFilterLabels,
+      groupByConsignmentLines,
     });
     setAppliedFilterLabels(appliedFilterLabels);
   };
@@ -401,7 +406,201 @@ export function useHomeLoader({
     void hydrateProfitabilityForEquipages(loadId, baseEquipages);
   }
 
-  const loadLines = async () => {
+  /**
+   * "Nytt linjeval" (admin test path): places an equipage on every selected line its
+   * loaded bookings belong to, instead of only the most common one.
+   *
+   * The equipage row itself is unchanged - all bookings and one profitability
+   * calculation per truck - so a truck shown on several lines mirrors the same values.
+   */
+  async function loadLineCardsByConsignmentLines(
+    ilogDate: string,
+    lines: LineItem[],
+    equipages: EquipageItem[],
+    loadId: number,
+  ): Promise<void> {
+    if (selectedLineIds.length === 0) {
+      resetDisplayedData();
+      persistEmptyResult([]);
+      return;
+    }
+
+    const selectedLineIdSet = new Set(selectedLineIds);
+
+    const approvedLines = lines
+      .map((line) => ({
+        ...line,
+        cluster: getLineCluster(line.name) ?? "",
+      }))
+      .filter((line): line is LineWithEquipages => {
+        return selectedLineIdSet.has(line.id);
+      });
+
+    const requestedFilterLabels = approvedLines.map((line) => line.name);
+    const orientationLabels: string[] = [];
+
+    if (approvedLines.length === 0) {
+      resetDisplayedData();
+      persistEmptyResult(requestedFilterLabels);
+      return;
+    }
+
+    const filteredLineIds = new Set(approvedLines.map((line) => line.id));
+    const filteredLineNames = new Set(
+      approvedLines.map((line) => normalizeLineName(line.name)),
+    );
+
+    // Resolves a booking's line name back to one of the user's selected lines.
+    const approvedLineByName = new Map<string, LineWithEquipages>();
+    for (const line of approvedLines) {
+      const key = normalizeLineName(line.name);
+      if (!approvedLineByName.has(key)) {
+        approvedLineByName.set(key, line);
+      }
+    }
+
+    const filteredEquipageMap = new Map<number, EquipageItem>();
+    for (const equipage of equipages) {
+      const belongsToApprovedLine =
+        equipage.linkedLineIds.some((lineId) => filteredLineIds.has(lineId)) ||
+        equipage.linkedLineNames.some((lineName) =>
+          filteredLineNames.has(normalizeLineName(lineName)),
+        );
+
+      if (belongsToApprovedLine && !filteredEquipageMap.has(equipage.id)) {
+        filteredEquipageMap.set(equipage.id, equipage);
+      }
+    }
+
+    const filteredEquipages = Array.from(filteredEquipageMap.values());
+
+    setCandidateEquipageCount(filteredEquipages.length);
+    setAppliedFilterLabels(requestedFilterLabels);
+
+    const baseEquipages: EquipageWithConsignments[] = [];
+    // Tracked per equipage id so a truck placed on several lines is counted once.
+    const visibleEquipageIds = new Set<number>();
+
+    for (const equipageBatch of chunkArray(filteredEquipages, 6)) {
+      const groupedByDirectedLine = new Map<string, LineWithEquipages>();
+
+      const batchResults = await Promise.allSettled(
+        equipageBatch.map(async (equipage) => {
+          const consignments = await getIlogConsignmentsWithRetry(
+            ilogDate,
+            equipage.id,
+          );
+
+          if (consignments.length === 0) {
+            return null;
+          }
+
+          // Every selected line the loaded bookings point at.
+          const targetLineMap = new Map<number, LineWithEquipages>();
+          for (const lineName of getConsignmentLineNames(consignments)) {
+            const line = approvedLineByName.get(normalizeLineName(lineName));
+
+            if (line && !targetLineMap.has(line.id)) {
+              targetLineMap.set(line.id, line);
+            }
+          }
+
+          if (targetLineMap.size === 0) {
+            // No booking pointed at a selected line: fall back to the iLog link so no
+            // truck disappears compared to the previous view.
+            const matchingLines = approvedLines.filter(
+              (line) =>
+                equipage.linkedLineIds.includes(line.id) ||
+                equipage.linkedLineNames.some(
+                  (lineName) =>
+                    normalizeLineName(lineName) === normalizeLineName(line.name),
+                ),
+            );
+
+            const fallbackLine = matchingLines[0] ?? approvedLines[0];
+            if (!fallbackLine) {
+              return null;
+            }
+
+            targetLineMap.set(fallbackLine.id, fallbackLine);
+          }
+
+          const targetLines = Array.from(targetLineMap.values());
+          // One row per equipage keeps profitability at one calculation per truck.
+          const equipageRow = createEquipageRow(
+            equipage,
+            targetLines[0].id,
+            orientLineNameForSelectedAreas(targetLines[0].name, orientationLabels),
+            consignments,
+          );
+
+          return { targetLines, equipageRow };
+        }),
+      );
+
+      if (latestLoadIdRef.current !== loadId) {
+        return;
+      }
+
+      for (const result of batchResults) {
+        if (result.status !== "fulfilled" || result.value === null) {
+          continue;
+        }
+
+        const { targetLines, equipageRow } = result.value;
+        baseEquipages.push(equipageRow);
+        visibleEquipageIds.add(equipageRow.id);
+
+        for (const line of targetLines) {
+          const directedLineName = orientLineNameForSelectedAreas(
+            line.name,
+            orientationLabels,
+          );
+          const directedLineKey = `${line.id}|${normalizeLineName(directedLineName)}`;
+          // Each card keeps its own row copy so it can show its own line name.
+          const rowForLine: EquipageWithConsignments = {
+            ...equipageRow,
+            lineId: line.id,
+            lineName: directedLineName,
+          };
+
+          const lineBucket = groupedByDirectedLine.get(directedLineKey);
+
+          if (lineBucket) {
+            lineBucket.equipages.push(rowForLine);
+          } else {
+            groupedByDirectedLine.set(directedLineKey, {
+              ...line,
+              name: directedLineName,
+              equipages: [rowForLine],
+            });
+          }
+        }
+      }
+
+      const batchLines = Array.from(groupedByDirectedLine.values())
+        .map((line) => ({
+          ...line,
+          equipages: line.equipages.sort((a, b) =>
+            a.name.localeCompare(b.name, "sv"),
+          ),
+        }))
+        .filter((line) => line.equipages.length > 0)
+        .sort((a, b) => a.name.localeCompare(b.name, "sv"));
+
+      mergeLineBatchIntoState(batchLines);
+      setVisibleEquipageCount(visibleEquipageIds.size);
+    }
+
+    setVisibleEquipageCount(visibleEquipageIds.size);
+    void hydrateProfitabilityForEquipages(loadId, baseEquipages);
+  }
+
+  const loadLines = async (options?: { groupByConsignmentLines?: boolean }) => {
+    // The flag is passed explicitly by the button so the run does not depend on a
+    // pending setState having flushed.
+    const useConsignmentLines =
+      options?.groupByConsignmentLines ?? groupByConsignmentLines;
     const loadId = Date.now();
     latestLoadIdRef.current = loadId;
     setLoadingLines(true);
@@ -428,6 +627,8 @@ export function useHomeLoader({
 
       if (vehicleSelectorMode === "equipages") {
         await loadEquipageCards(ilogDate, lines, equipages, loadId);
+      } else if (useConsignmentLines) {
+        await loadLineCardsByConsignmentLines(ilogDate, lines, equipages, loadId);
       } else {
         await loadLineCards(ilogDate, lines, equipages, loadId);
       }

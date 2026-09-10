@@ -17,6 +17,7 @@ type UseHomeLineStateParams = {
   selectedLineIds: number[];
   selectedAreaLabels: string[];
   appliedFilterLabels: string[];
+  groupByConsignmentLines: boolean;
 };
 
 /**
@@ -29,6 +30,7 @@ export function useHomeLineState({
   selectedLineIds,
   selectedAreaLabels,
   appliedFilterLabels,
+  groupByConsignmentLines,
 }: UseHomeLineStateParams) {
   const [lineCards, setLineCards] = useState<LineWithEquipages[]>([]);
   const [candidateEquipageCount, setCandidateEquipageCount] = useState(0);
@@ -39,10 +41,12 @@ export function useHomeLineState({
 
   /** Persists the current card state, including derived visible count. */
   function persistCurrentHomeCache(nextLineCards: LineWithEquipages[]): void {
-    const nextVisibleEquipageCount = nextLineCards.reduce(
-      (sum, line) => sum + line.equipages.length,
-      0,
-    );
+    // Counted per equipage id: one truck can appear on several lines at once.
+    const nextVisibleEquipageCount = new Set(
+      nextLineCards.flatMap((line) =>
+        line.equipages.map((equipage) => equipage.id),
+      ),
+    ).size;
 
     persistHomeCache({
       selectedDate,
@@ -54,6 +58,7 @@ export function useHomeLineState({
       selectedLineIds,
       selectedAreaLabels,
       appliedFilterLabels,
+      groupByConsignmentLines,
     });
   }
 

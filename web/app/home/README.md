@@ -37,6 +37,41 @@ Detta dokument beskriver hur sidan Home hämtar data från iLog, filtrerar resul
 10. Ekipage grupperas/sorteras per visad linje.
 11. Profitability beräknas asynkront per consignment efter initial rendering.
 
+## Nytt linjeval (tillfällig admin-testväg)
+
+Linjeläget har just nu **två** vägar. Den vanliga knappen kör oförändrat (steg 1-11 ovan).
+Admins ser dessutom knappen "Nytt linjeval", som kör
+`loadLineCardsByConsignmentLines` i stället för `loadLineCards`.
+
+Skillnaden ligger bara i placeringen av ekipaget:
+
+- Gamla vägen: `getDominantConsignmentLineName` väljer den vanligaste `zoneName` bland
+  bokningarna, och ekipaget hamnar på **en** linje.
+- Nya vägen: `getConsignmentLineNames` returnerar **alla** distinkta `zoneName`, som
+  matchas mot användarens valda linjer. Ekipaget visas under varje träffad linje. Utan
+  träff används iLog-kopplingen som fallback, precis som förut.
+
+Allt på bilnivå är oförändrat: kortet visar alla ekipagets bokningar, lönsamheten
+beräknas en gång per bil, och eftersom `updateEquipageInState` matchar på `equipage.id`
+speglas varje uppdatering till alla kort där bilen förekommer. Räknaren
+"N linjer med totalt M ekipage" räknar distinkta ekipage-id.
+
+Valet är inte sparat i användarens inställningar: det ligger i `groupByConsignmentLines`
+i `useHomeDashboardData` och följer med i sessionStorage-cachen, så det överlever en
+sidladdning men nollställs vid ny session eller när den vanliga knappen används.
+
+Admin-gatet är en UI-avgränsning, inte en säkerhetsgräns - grupperingen sker i klienten
+på data användaren redan har åtkomst till.
+
+När den nya vägen är verifierad i drift tas följande bort:
+
+- `loadLineCards` och grenen i `loadLines` i `useHomeLoader.ts`
+- `getDominantConsignmentLineName` i `homeTypesAndUtils.ts`
+- `groupByConsignmentLines`/`setGroupByConsignmentLines` genom hook-kedjan och
+  `HomeCachePayload`
+- knappen "Nytt linjeval", test-markören i statusrutan och `isAdmin` i
+  `useHomePreferences` (om inget annat använder den då)
+
 ## Detaljvy (Info-knappen)
 
 När användaren klickar `Info` på ett ekipage:
