@@ -679,6 +679,31 @@ export const runHistoricalImport = async (jobId: string): Promise<{
 	};
 };
 
+/**
+ * Hämtar alla bokningar på en linje för ett datum, både placerade och oplacerade.
+ *
+ * Används av Home i "Nytt linjeval" för att låta bokningarna peka ut linjens bilar.
+ */
+export async function getIlogLineConsignments(
+  date: string,
+  lineId: number,
+  lineType: "ZONE" | "ZONEFILTER" | "ZONEGROUP",
+): Promise<IlogResponse<ConsignmentListItem[]>> {
+  const response = await fetch(
+    `/api/ilog/line-consignments?date=${encodeURIComponent(date)}&lineId=${lineId}&lineType=${encodeURIComponent(lineType)}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Request failed: " + (await response.text()));
+  }
+
+  return (await response.json()) as IlogResponse<ConsignmentListItem[]>;
+}
+
 export async function getIlogUnassignedConsignments(
   date: string,
   lineId: number,

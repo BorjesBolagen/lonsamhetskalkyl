@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { ilogGet, IlogHttpError } from "@/lib/ilogClient";
 import { mapConsignments } from "@/lib/ilogMappers";
-import { enrichTaxPointRelationFromSupabase } from "@/lib/taxPointLookup";
-import type { ConsignmentListItem } from "@/lib/ilogTypes";
 import { requireUser } from "@/lib/authHelpers";
 import {
   getIlogEndpoint,
@@ -13,24 +11,29 @@ import {
 const DATE_REGEX = /^\d{8}$/;
 
 /**
- * Bokningen räknas som oplacerad om den saknar ekipage.
- */
-function isUnassignedConsignment(consignment: ConsignmentListItem): boolean {
-  return (consignment.equipageName?.trim() ?? "").length === 0;
-}
-
-/**
- * GET /api/ilog/unassigned-consignments
+ * GET /api/ilog/line-consignments
  *
- * Hämtar bokningar på vald linje, filtrerar oplacerade och enrichar taxPointRelation.
+ * Hämtar *alla* bokningar på en linje för ett datum, både placerade och oplacerade.
+ *
+ * Home använder den i "Nytt linjeval" för att låta bokningarna peka ut vilka bilar som
+ * hör till linjen, i stället för att utgå från ekipagets linjetagg i iLog.
+ *
+ * Skiljer sig från /api/ilog/unassigned-consignments, som filtrerar bort bokningar med
+ * ekipage och enrichar taxPointRelation för simulatorn. Här behövs bara ekipage och
+ * linje - bilens fulla bokningslista hämtas ändå per ekipage.
+ *
+ * Query params:
+ *   - date (yyyyMMdd), lineId (heltal), lineType (ZONE | ZONEFILTER | ZONEGROUP)
+ *   - ?debugRaw=true → rå JSON från iLog (endast utanför produktion)
  */
 export async function GET(request: Request) {
-
   const { error } = await requireUser();
   if (error) return error;
 
   const { searchParams } = new URL(request.url);
-  const debugRaw = process.env.NODE_ENV !== "production" && searchParams.get("debugRaw") === "true";
+  const debugRaw =
+    process.env.NODE_ENV !== "production" &&
+    searchParams.get("debugRaw") === "true";
 
   const date = searchParams.get("date");
   const lineId = searchParams.get("lineId");
@@ -84,17 +87,10 @@ export async function GET(request: Request) {
       });
     }
 
-    const consignments = mapConsignments(rawConsignments);
-    const unassignedConsignments = consignments.filter(isUnassignedConsignment);
-
-    // Viktigt: lägger till taxPointRelation från Supabase.
-    const enrichedConsignments =
-      await enrichTaxPointRelationFromSupabase(unassignedConsignments);
-
     return NextResponse.json({
       status: true,
-      message: "Unassigned consignments fetched",
-      data: enrichedConsignments,
+      message: "Line consignments fetched",
+      data: mapConsignments(rawConsignments),
     });
   } catch (error) {
     if (error instanceof IlogHttpError) {

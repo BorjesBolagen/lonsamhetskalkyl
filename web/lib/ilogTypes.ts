@@ -71,6 +71,7 @@ export type ConsignmentListItem = {
     pickupLocationName: string;
     zoneName: string;
     equipageName: string;
+    equipageId: number | null;
     pickupDate: string;
     positioning: string;
     pickupLocationStreet: string;

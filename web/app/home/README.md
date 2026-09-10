@@ -39,22 +39,37 @@ Detta dokument beskriver hur sidan Home hämtar data från iLog, filtrerar resul
 
 ## Nytt linjeval (tillfällig admin-testväg)
 
-Linjeläget har just nu **två** vägar. Den vanliga knappen kör oförändrat (steg 1-11 ovan).
-Admins ser dessutom knappen "Nytt linjeval", som kör
+Linjeläget har just nu **två** vägar. Den vanliga knappen kör oförändrat (steg 1-11
+ovan). Admins ser dessutom knappen "Nytt linjeval", som kör
 `loadLineCardsByConsignmentLines` i stället för `loadLineCards`.
 
-Skillnaden ligger bara i placeringen av ekipaget:
+Skillnaden är vilken fråga som ställs till iLog:
 
-- Gamla vägen: `getDominantConsignmentLineName` väljer den vanligaste `zoneName` bland
-  bokningarna, och ekipaget hamnar på **en** linje.
-- Nya vägen: `getConsignmentLineNames` returnerar **alla** distinkta `zoneName`, som
-  matchas mot användarens valda linjer. Ekipaget visas under varje träffad linje. Utan
-  träff används iLog-kopplingen som fallback, precis som förut.
+- Gamla vägen frågar **bilen** vilka linjer den är taggad med
+  (`linkedLineIds`/`linkedLineNames`), hämtar bokningar för de bilarna och lägger bilen
+  på en linje via `getDominantConsignmentLineName`. En bil vars tagg pekar någon
+  annanstans kommer aldrig med, även om den kör gods på linjen.
+- Nya vägen frågar **linjen** vilka bokningar den har, via
+  `/api/ilog/line-consignments` (som i sin tur går mot iLog:s
+  `zone`/`zonefilter`/`zonegroup`-consignments). Varje bokning pekar ut sitt ekipage,
+  och bilen hamnar på varje vald linje den har en bokning på. Linjetaggen används inte.
 
-Allt på bilnivå är oförändrat: kortet visar alla ekipagets bokningar, lönsamheten
-beräknas en gång per bil, och eftersom `updateEquipageInState` matchar på `equipage.id`
-speglas varje uppdatering till alla kort där bilen förekommer. Räknaren
-"N linjer med totalt M ekipage" räknar distinkta ekipage-id.
+Ekipaget slås upp på `consignment.equipageId` när iLog skickar det, annars på
+`equipageName` mot listan från `/driver/equipages`. Är id:t satt men bilen ligger
+utanför användarens grupp syntetiseras ett minimalt `EquipageItem` så bilen ändå kan
+visas.
+
+När placeringarna är klara hämtas **hela** dagens bokningslista per bil, så kortet
+visar bilen och inte bara de valda linjernas gods. Allt på bilnivå är därmed
+oförändrat: lönsamheten beräknas en gång per bil, och eftersom `updateEquipageInState`
+matchar på `equipage.id` speglas varje uppdatering till alla kort där bilen förekommer.
+Räknaren "N linjer med totalt M ekipage" räknar distinkta ekipage-id.
+
+Två räknare i statusrutan finns för att en bil som uteblir ska synas i stället för att
+tyst försvinna: `unavailableEquipageCount` är differensen mellan upptäckta och visade
+bilar oavsett orsak (okänt ekipage, misslyckat anrop, inga bokningar kvar efter
+filtrering), och `failedLineCount` är antalet linjer vars bokningar inte gick att
+hämta - en sådan linje tar annars med sig alla sina bilar utan spår.
 
 Valet är inte sparat i användarens inställningar: det ligger i `groupByConsignmentLines`
 i `useHomeDashboardData` och följer med i sessionStorage-cachen, så det överlever en
@@ -62,6 +77,10 @@ sidladdning men nollställs vid ny session eller när den vanliga knappen använ
 
 Admin-gatet är en UI-avgränsning, inte en säkerhetsgräns - grupperingen sker i klienten
 på data användaren redan har åtkomst till.
+
+Kända avgränsningar: bokningar på en vald linje **utan** ekipage visas inte alls (de
+ligger inte på någon bil - simulatorn är stället för dem), och en refresh flyttar inte
+en bil till en ny linje förrän hela vyn hämtas om.
 
 När den nya vägen är verifierad i drift tas följande bort:
 
@@ -71,6 +90,10 @@ När den nya vägen är verifierad i drift tas följande bort:
   `HomeCachePayload`
 - knappen "Nytt linjeval", test-markören i statusrutan och `isAdmin` i
   `useHomePreferences` (om inget annat använder den då)
+
+Nya filer som stannar oavsett: `lib/ilogLineEndpoints.ts`,
+`app/api/ilog/line-consignments/route.ts`, `getIlogLineConsignments` i `lib/api.ts` och
+`equipageId` på `ConsignmentListItem`.
 
 ## Detaljvy (Info-knappen)
 
