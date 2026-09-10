@@ -21,6 +21,9 @@ export function useHomeDashboardData() {
   const [appliedFilterLabels, setAppliedFilterLabels] = useState<string[]>([]);
   // Guards async updates so stale loads cannot overwrite newer state.
   const latestLoadIdRef = useRef(0);
+  // Temporary admin-only test path: place equipages on every line their bookings
+  // belong to instead of only the most common one.
+  const [groupByConsignmentLines, setGroupByConsignmentLines] = useState(false);
 
   const {
     vehicleSelectorMode,
@@ -31,6 +34,7 @@ export function useHomeDashboardData() {
     setSelectedDate,
     profitabilityReferenceValue,
     areasLoaded,
+    isAdmin,
   } = useHomePreferences();
 
   const {
@@ -54,6 +58,7 @@ export function useHomeDashboardData() {
     selectedLineIds,
     selectedAreaLabels,
     appliedFilterLabels,
+    groupByConsignmentLines,
   });
 
   const {
@@ -83,6 +88,7 @@ export function useHomeDashboardData() {
     selectedEquipageIds,
     selectedLineIds,
     selectedAreaLabels,
+    groupByConsignmentLines,
     lineCards,
     setLineCards,
     setCandidateEquipageCount,
@@ -109,6 +115,7 @@ export function useHomeDashboardData() {
     setVisibleEquipageCount,
     setAppliedFilterLabels,
     setLoadingProfitabilityCount,
+    setGroupByConsignmentLines,
   });
 
   /** Opens details modal and ensures totals are up to date before rendering. */
@@ -139,6 +146,9 @@ export function useHomeDashboardData() {
     selectedEquipage,
     isPopupOpen,
     areasLoaded,
+    isAdmin,
+    groupByConsignmentLines,
+    setGroupByConsignmentLines,
     refreshingEquipages,
     refreshingLines,
     loadLines,

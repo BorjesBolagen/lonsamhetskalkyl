@@ -31,6 +31,8 @@ export function useHomePreferences() {
   const [selectedLineIds, setSelectedLineIds] = useState<number[]>([]);
   const [selectedAreas, setSelectedAreas] = useState<AreaState>(DEFAULT_AREAS);
   const [areasLoaded, setAreasLoaded] = useState(false);
+  // Gates the temporary "Nytt linjeval" test path on Home to admins only.
+  const [isAdmin, setIsAdmin] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getDefaultHomeDate);
   const [profitabilityReferenceValue, setProfitabilityReferenceValue] =
     useState<number>(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
@@ -59,12 +61,14 @@ export function useHomePreferences() {
           setProfitabilityReferenceValue(
             parseProfitabilityReferenceValue(user.filters),
           );
+          setIsAdmin(user.role === "admin");
         } else {
           setVehicleSelectorMode("equipages");
           setSelectedEquipageIds([]);
           setSelectedLineIds([]);
           setSelectedAreas(DEFAULT_AREAS);
           setProfitabilityReferenceValue(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
+          setIsAdmin(false);
         }
       } catch {
         setVehicleSelectorMode("equipages");
@@ -72,6 +76,7 @@ export function useHomePreferences() {
         setSelectedLineIds([]);
         setSelectedAreas(DEFAULT_AREAS);
         setProfitabilityReferenceValue(DEFAULT_PROFITABILITY_REFERENCE_VALUE);
+        setIsAdmin(false);
       } finally {
         setAreasLoaded(true);
       }
@@ -89,5 +94,6 @@ export function useHomePreferences() {
     setSelectedDate,
     profitabilityReferenceValue,
     areasLoaded,
+    isAdmin,
   };
 }

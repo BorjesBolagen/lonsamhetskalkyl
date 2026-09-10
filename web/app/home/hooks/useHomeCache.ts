@@ -61,6 +61,7 @@ type UseHomeCacheRestoreParams = {
   setVisibleEquipageCount: (value: number) => void;
   setAppliedFilterLabels: (value: string[]) => void;
   setLoadingProfitabilityCount: (value: number) => void;
+  setGroupByConsignmentLines: (value: boolean) => void;
 };
 
 export function useHomeCacheRestore({
@@ -76,6 +77,7 @@ export function useHomeCacheRestore({
   setVisibleEquipageCount,
   setAppliedFilterLabels,
   setLoadingProfitabilityCount,
+  setGroupByConsignmentLines,
 }: UseHomeCacheRestoreParams): void {
   useEffect(() => {
     if (!areasLoaded) {
@@ -104,14 +106,14 @@ export function useHomeCacheRestore({
 
       // Rebuild derived totals from consignments so stale cached totals do not leak into UI.
       const normalizedLineCards = normalizeLineCards(cached.lineCards);
-      const remainingProfitabilityCount = normalizedLineCards.reduce(
-        (sum, line) =>
-          sum +
-          line.equipages.filter(
-            (equipage) => equipage.profitabilityStatus === "loading",
-          ).length,
-        0,
-      );
+      // Deduped per equipage id so a truck shown on several lines counts once.
+      const remainingProfitabilityCount = new Set(
+        normalizedLineCards.flatMap((line) =>
+          line.equipages
+            .filter((equipage) => equipage.profitabilityStatus === "loading")
+            .map((equipage) => equipage.id),
+        ),
+      ).size;
 
       setSelectedDate(cached.selectedDate || getDefaultHomeDate());
       setLineCards(normalizedLineCards);
@@ -120,6 +122,7 @@ export function useHomeCacheRestore({
       setVisibleEquipageCount(cached.visibleEquipageCount ?? 0);
       setAppliedFilterLabels(cached.appliedFilterLabels ?? []);
       setLoadingProfitabilityCount(remainingProfitabilityCount);
+      setGroupByConsignmentLines(cached.groupByConsignmentLines === true);
     } catch {
       // ignore malformed cache
     }
@@ -131,6 +134,7 @@ export function useHomeCacheRestore({
     selectedAreaLabels,
     setAppliedFilterLabels,
     setCandidateEquipageCount,
+    setGroupByConsignmentLines,
     setHasLoadedLines,
     setLineCards,
     setLoadingProfitabilityCount,
