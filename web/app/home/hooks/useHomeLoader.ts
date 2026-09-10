@@ -2,8 +2,16 @@
 
 import { useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { getIlogEquipages, getIlogLines } from "../../../lib/api";
-import type { EquipageItem, LineItem } from "../../../lib/ilogTypes";
+import {
+  getIlogEquipages,
+  getIlogLineConsignments,
+  getIlogLines,
+} from "../../../lib/api";
+import type {
+  ConsignmentListItem,
+  EquipageItem,
+  LineItem,
+} from "../../../lib/ilogTypes";
 import {
   getLineCluster,
   normalizeLineName,
@@ -14,7 +22,6 @@ import {
   chunkArray,
   EquipageWithConsignments,
   getConsignmentFlm,
-  getConsignmentLineNames,
   getDominantConsignmentLineName,
   getIlogConsignmentsWithRetry,
   LineWithEquipages,
@@ -92,6 +99,75 @@ function makeEquipageFallbackLine(equipage: EquipageItem): LineItem {
   } as LineItem;
 }
 
+const LINE_CONSIGNMENT_TYPES = new Set(["ZONE", "ZONEFILTER", "ZONEGROUP"]);
+
+/** Equipage names come from the same iLog records, so a trimmed casefold is enough. */
+function normalizeEquipageName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/**
+ * Fetches every booking on one line for the date, both assigned and unassigned.
+ *
+ * Returns an empty list for line types iLog has no consignment endpoint for, so one
+ * odd line cannot break the whole load.
+ */
+async function getConsignmentsForLine(
+  ilogDate: string,
+  line: LineItem,
+): Promise<ConsignmentListItem[]> {
+  const lineType = (line.type ?? "").toUpperCase();
+
+  if (!LINE_CONSIGNMENT_TYPES.has(lineType)) {
+    return [];
+  }
+
+  const response = await getIlogLineConsignments(
+    ilogDate,
+    line.id,
+    lineType as "ZONE" | "ZONEFILTER" | "ZONEGROUP",
+  );
+
+  return response.data ?? [];
+}
+
+/**
+ * Resolves the equipage a booking sits on.
+ *
+ * iLog does not always send the equipage id, so the name is matched against the
+ * equipage list as a fallback. When the id is present but the equipage is outside the
+ * user's group, a minimal item is synthesized so the truck can still be shown.
+ */
+function resolveConsignmentEquipage(
+  consignment: ConsignmentListItem,
+  equipageById: Map<number, EquipageItem>,
+  equipageByName: Map<string, EquipageItem>,
+): EquipageItem | null {
+  const equipageName = consignment.equipageName.trim();
+
+  if (consignment.equipageId !== null) {
+    const known = equipageById.get(consignment.equipageId);
+    if (known) {
+      return known;
+    }
+
+    if (equipageName) {
+      return {
+        id: consignment.equipageId,
+        name: equipageName,
+        linkedLineIds: [],
+        linkedLineNames: [],
+      };
+    }
+  }
+
+  if (!equipageName) {
+    return null;
+  }
+
+  return equipageByName.get(normalizeEquipageName(equipageName)) ?? null;
+}
+
 function createEquipageRow(
   equipage: EquipageItem,
   displayLineId: number,
@@ -148,6 +224,10 @@ export function useHomeLoader({
   const [refreshingLines, setRefreshingLines] = useState<Set<number>>(
     () => new Set(),
   );
+  // "Nytt linjeval": trucks found on the selected lines that could not be shown.
+  const [unavailableEquipageCount, setUnavailableEquipageCount] = useState(0);
+  // "Nytt linjeval": lines whose bookings could not be fetched at all.
+  const [failedLineCount, setFailedLineCount] = useState(0);
 
   const persistEmptyResult = (appliedFilterLabels: string[]) => {
     persistHomeCache({
@@ -407,11 +487,15 @@ export function useHomeLoader({
   }
 
   /**
-   * "Nytt linjeval" (admin test path): places an equipage on every selected line its
-   * loaded bookings belong to, instead of only the most common one.
+   * "Nytt linjeval" (admin test path): asks each selected line which bookings it has,
+   * and lets those bookings point out the trucks.
    *
-   * The equipage row itself is unchanged - all bookings and one profitability
-   * calculation per truck - so a truck shown on several lines mirrors the same values.
+   * The old path asks iLog which lines a truck is tagged with, so a truck tagged
+   * elsewhere never shows up even when it carries freight on a selected line. Here the
+   * line is the question and the equipage is the answer, so tagging does not matter.
+   *
+   * The card itself is unchanged: the truck's whole day and one profitability
+   * calculation per truck, mirrored to every card the truck appears on.
    */
   async function loadLineCardsByConsignmentLines(
     ilogDate: string,
@@ -419,6 +503,9 @@ export function useHomeLoader({
     equipages: EquipageItem[],
     loadId: number,
   ): Promise<void> {
+    setUnavailableEquipageCount(0);
+    setFailedLineCount(0);
+
     if (selectedLineIds.length === 0) {
       resetDisplayedData();
       persistEmptyResult([]);
@@ -445,47 +532,100 @@ export function useHomeLoader({
       return;
     }
 
-    const filteredLineIds = new Set(approvedLines.map((line) => line.id));
-    const filteredLineNames = new Set(
-      approvedLines.map((line) => normalizeLineName(line.name)),
+    setAppliedFilterLabels(requestedFilterLabels);
+
+    const equipageById = new Map(
+      equipages.map((equipage) => [equipage.id, equipage]),
+    );
+    const equipageByName = new Map(
+      equipages.map((equipage) => [
+        normalizeEquipageName(equipage.name),
+        equipage,
+      ]),
     );
 
-    // Resolves a booking's line name back to one of the user's selected lines.
-    const approvedLineByName = new Map<string, LineWithEquipages>();
-    for (const line of approvedLines) {
-      const key = normalizeLineName(line.name);
-      if (!approvedLineByName.has(key)) {
-        approvedLineByName.set(key, line);
+    // Which trucks appear on which of the selected lines, according to the bookings.
+    const placementByEquipageId = new Map<
+      number,
+      { equipage: EquipageItem; lineIds: Set<number> }
+    >();
+    // Bookings whose equipage could not be identified at all.
+    const unidentifiedEquipageNames = new Set<string>();
+    // A line we cannot fetch takes all its trucks with it, so it must be reported.
+    let failedLines = 0;
+
+    for (const lineBatch of chunkArray(approvedLines, 4)) {
+      const lineResults = await Promise.allSettled(
+        lineBatch.map(async (line) => ({
+          line,
+          consignments: await getConsignmentsForLine(ilogDate, line),
+        })),
+      );
+
+      if (latestLoadIdRef.current !== loadId) {
+        return;
+      }
+
+      for (const lineResult of lineResults) {
+        if (lineResult.status !== "fulfilled") {
+          failedLines += 1;
+          continue;
+        }
+
+        const { line, consignments } = lineResult.value;
+
+        for (const consignment of consignments) {
+          const equipage = resolveConsignmentEquipage(
+            consignment,
+            equipageById,
+            equipageByName,
+          );
+
+          if (!equipage) {
+            const rawName = consignment.equipageName.trim();
+            // No equipage at all means the booking is unplanned, not a missing truck.
+            if (rawName) {
+              unidentifiedEquipageNames.add(normalizeEquipageName(rawName));
+            }
+            continue;
+          }
+
+          const placement = placementByEquipageId.get(equipage.id);
+
+          if (placement) {
+            placement.lineIds.add(line.id);
+          } else {
+            placementByEquipageId.set(equipage.id, {
+              equipage,
+              lineIds: new Set([line.id]),
+            });
+          }
+        }
       }
     }
 
-    const filteredEquipageMap = new Map<number, EquipageItem>();
-    for (const equipage of equipages) {
-      const belongsToApprovedLine =
-        equipage.linkedLineIds.some((lineId) => filteredLineIds.has(lineId)) ||
-        equipage.linkedLineNames.some((lineName) =>
-          filteredLineNames.has(normalizeLineName(lineName)),
-        );
+    setFailedLineCount(failedLines);
 
-      if (belongsToApprovedLine && !filteredEquipageMap.has(equipage.id)) {
-        filteredEquipageMap.set(equipage.id, equipage);
-      }
-    }
+    const placements = Array.from(placementByEquipageId.values());
+    const discoveredEquipageCount =
+      placements.length + unidentifiedEquipageNames.size;
 
-    const filteredEquipages = Array.from(filteredEquipageMap.values());
+    setCandidateEquipageCount(discoveredEquipageCount);
 
-    setCandidateEquipageCount(filteredEquipages.length);
-    setAppliedFilterLabels(requestedFilterLabels);
+    const approvedLineById = new Map(
+      approvedLines.map((line) => [line.id, line]),
+    );
 
     const baseEquipages: EquipageWithConsignments[] = [];
     // Tracked per equipage id so a truck placed on several lines is counted once.
     const visibleEquipageIds = new Set<number>();
 
-    for (const equipageBatch of chunkArray(filteredEquipages, 6)) {
+    for (const placementBatch of chunkArray(placements, 6)) {
       const groupedByDirectedLine = new Map<string, LineWithEquipages>();
 
       const batchResults = await Promise.allSettled(
-        equipageBatch.map(async (equipage) => {
+        placementBatch.map(async ({ equipage, lineIds }) => {
+          // The whole day, so the card shows the truck and not just the selected lines.
           const consignments = await getIlogConsignmentsWithRetry(
             ilogDate,
             equipage.id,
@@ -495,37 +635,14 @@ export function useHomeLoader({
             return null;
           }
 
-          // Every selected line the loaded bookings point at.
-          const targetLineMap = new Map<number, LineWithEquipages>();
-          for (const lineName of getConsignmentLineNames(consignments)) {
-            const line = approvedLineByName.get(normalizeLineName(lineName));
+          const targetLines = Array.from(lineIds)
+            .map((lineId) => approvedLineById.get(lineId))
+            .filter((line): line is LineWithEquipages => Boolean(line));
 
-            if (line && !targetLineMap.has(line.id)) {
-              targetLineMap.set(line.id, line);
-            }
+          if (targetLines.length === 0) {
+            return null;
           }
 
-          if (targetLineMap.size === 0) {
-            // No booking pointed at a selected line: fall back to the iLog link so no
-            // truck disappears compared to the previous view.
-            const matchingLines = approvedLines.filter(
-              (line) =>
-                equipage.linkedLineIds.includes(line.id) ||
-                equipage.linkedLineNames.some(
-                  (lineName) =>
-                    normalizeLineName(lineName) === normalizeLineName(line.name),
-                ),
-            );
-
-            const fallbackLine = matchingLines[0] ?? approvedLines[0];
-            if (!fallbackLine) {
-              return null;
-            }
-
-            targetLineMap.set(fallbackLine.id, fallbackLine);
-          }
-
-          const targetLines = Array.from(targetLineMap.values());
           // One row per equipage keeps profitability at one calculation per truck.
           const equipageRow = createEquipageRow(
             equipage,
@@ -593,6 +710,16 @@ export function useHomeLoader({
     }
 
     setVisibleEquipageCount(visibleEquipageIds.size);
+    // Everything found on the lines that did not make it onto a card, whatever the
+    // reason: unknown equipage, a failed fetch, or no bookings left after filtering.
+    setUnavailableEquipageCount(
+      Math.max(0, discoveredEquipageCount - visibleEquipageIds.size),
+    );
+
+    if (visibleEquipageIds.size === 0) {
+      persistEmptyResult(requestedFilterLabels);
+    }
+
     void hydrateProfitabilityForEquipages(loadId, baseEquipages);
   }
 
@@ -636,6 +763,8 @@ export function useHomeLoader({
       setLineError("Kunde inte hämta filtrerade bokningar, försök igen.");
       resetDisplayedData();
       setAppliedFilterLabels([]);
+      setUnavailableEquipageCount(0);
+      setFailedLineCount(0);
     } finally {
       if (latestLoadIdRef.current === loadId) {
         setLoadingLines(false);
@@ -650,6 +779,8 @@ export function useHomeLoader({
     setLineError("");
     setHasLoadedLines(false);
     setAppliedFilterLabels([]);
+    setUnavailableEquipageCount(0);
+    setFailedLineCount(0);
     clearHomeCache();
   };
 
@@ -770,6 +901,8 @@ export function useHomeLoader({
     setHasLoadedLines,
     refreshingEquipages,
     refreshingLines,
+    unavailableEquipageCount,
+    failedLineCount,
     loadLines,
     clearDisplayedLines,
     refreshEquipageConsignments,

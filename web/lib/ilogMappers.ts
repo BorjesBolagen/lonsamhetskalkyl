@@ -559,6 +559,10 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
       const equipageName =
         readNestedString(row, "equipage", ["name"]) || readString(row, ["equipageName"]);
 
+      // Finns inte alltid i iLog:s svar - namnet är fallback vid uppslag mot ekipagelistan.
+      const equipageId =
+        readNestedNumber(row, "equipage", ["id"]) ?? readNumber(row, ["equipageId"]);
+
       const pickupDate =
         readNestedString(row, "consignment", ["pickupDate"]) || readString(row, ["pickupDate"]);
 
@@ -637,6 +641,7 @@ export const mapConsignments = (raw: unknown): ConsignmentListItem[] => {
         pickupLocationName,
         zoneName,
         equipageName,
+        equipageId,
         pickupDate,
         positioning,
         pickupLocationStreet,

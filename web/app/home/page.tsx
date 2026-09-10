@@ -131,6 +131,8 @@ export default function Home() {
     selectedEquipage,
     isPopupOpen,
     areasLoaded,
+    unavailableEquipageCount,
+    failedLineCount,
     isAdmin,
     groupByConsignmentLines,
     setGroupByConsignmentLines,
@@ -394,8 +396,19 @@ export default function Home() {
                   </p>
                   {groupByConsignmentLines && (
                     <p className="text-[var(--text-primary)] italic">
-                      Nytt linjeval (test): bilar visas under alla valda linjer
-                      deras bokningar hör till.
+                      Nytt linjeval (test): linjernas bokningar avgör vilka bilar
+                      som visas, inte bilarnas linjetagg i iLog.
+                    </p>
+                  )}
+                  {groupByConsignmentLines && unavailableEquipageCount > 0 && (
+                    <p className="text-[var(--text-primary)]">
+                      {unavailableEquipageCount} bilar hittades på dina linjer men
+                      kunde inte visas.
+                    </p>
+                  )}
+                  {groupByConsignmentLines && failedLineCount > 0 && (
+                    <p className="text-[var(--error)]">
+                      {failedLineCount} linjer kunde inte hämtas och kan sakna bilar.
                     </p>
                   )}
                   {loadingProfitabilityCount > 0 && (
@@ -408,6 +421,17 @@ export default function Home() {
               ) : (
                 <div className="text-[var(--text-primary)] space-y-1 leading-6">
                   <p>Inga bokningar hittades för dina val.</p>
+                  {groupByConsignmentLines && unavailableEquipageCount > 0 && (
+                    <p>
+                      {unavailableEquipageCount} bilar hittades på dina linjer men
+                      kunde inte visas.
+                    </p>
+                  )}
+                  {groupByConsignmentLines && failedLineCount > 0 && (
+                    <p className="text-[var(--error)]">
+                      {failedLineCount} linjer kunde inte hämtas.
+                    </p>
+                  )}
                   <p>
                     Val: {appliedFilterLabels.length > 0
                       ? appliedFilterLabels.join(", ")

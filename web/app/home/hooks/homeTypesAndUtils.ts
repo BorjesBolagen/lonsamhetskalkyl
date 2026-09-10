@@ -4,7 +4,7 @@ import {
   calculateProfitability,
 } from "../../../lib/api";
 import type { ConsignmentListItem, LineItem } from "../../../lib/ilogTypes";
-import { normalizeLineName, normalizeText } from "../../../lib/areaLineConfig";
+import { normalizeText } from "../../../lib/areaLineConfig";
 
 export const DEFAULT_PROFITABILITY_REFERENCE_VALUE = 15000;
 export const HOME_CACHE_KEY = "home-lines-cache-v13";
@@ -214,37 +214,6 @@ export function getDominantConsignmentLineName(
   }
 
   return bestName;
-}
-
-/**
- * Returns every distinct line name found among the consignments, in first-seen order.
- *
- * Used by the "Nytt linjeval" path, where an equipage belongs to every line its loaded
- * bookings come from instead of only the most common one.
- */
-export function getConsignmentLineNames(
-  consignments: ConsignmentListItem[],
-): string[] {
-  const seen = new Set<string>();
-  const names: string[] = [];
-
-  for (const consignment of consignments) {
-    const candidate = consignment.zoneName.trim();
-    if (!candidate) {
-      continue;
-    }
-
-    // Dedupe on the normalized form but keep the raw name for display.
-    const key = normalizeLineName(candidate);
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    names.push(candidate);
-  }
-
-  return names;
 }
 
 /**
