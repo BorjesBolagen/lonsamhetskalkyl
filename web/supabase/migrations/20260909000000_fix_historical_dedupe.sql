@@ -99,7 +99,9 @@ create index if not exists historical_shipment_price_key_idx
 
 -- get_office_for_taxep söker på taxepunktspostnummer, som bara är främmande
 -- nyckel. PostgreSQL indexerar inte den refererande sidan automatiskt, så
--- zz_set_office_relation-triggern gjorde en full genomsökning per importerad rad.
+-- uppslaget blev en full genomsökning av alla 10 857 raderna. Funktionen
+-- anropas två gånger per steg_5-beräkning. (Triggern zz_set_office_relation
+-- använder den däremot inte – den slår upp på postnummer, som är primärnyckel.)
 create index if not exists tax_point_lookup_taxepunktspostnummer_idx
   on public.tax_point_lookup (taxepunktspostnummer);
 
@@ -108,8 +110,9 @@ create index if not exists tax_point_lookup_taxepunktspostnummer_idx
 create index if not exists calculation_medelse_vkl_km_idx
   on public.calculation_medelse (vklfgrv, km_bucket desc);
 
--- Dedupliceringen anropas som RPC av service_role. Standardtimeouten för
--- API-rollerna är 8 sekunder, vilket inte räcker för en genomgång av hela
--- tabellen ens med indexet ovan.
+-- Dedupliceringen anropas som RPC via PostgREST, som loggar in som
+-- authenticator. Den rollen har statement_timeout 8s, vilket var precis vad den
+-- gamla funktionen slog i. Den nya klarar sig gott inom 8s, men marginalen
+-- sätts ändå så att tabelltillväxt inte tyst återinför problemet.
 alter role service_role set statement_timeout = '120s';
 notify pgrst, 'reload config';
