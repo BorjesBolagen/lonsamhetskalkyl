@@ -15,7 +15,7 @@ export type EquipageItem = {
     id: number;
     name: string;
     /** Bilens registreringsnummer från ekipagets truck-resurs; null om ekipaget saknar bil. */
-    regnr?: string | null;
+    regnr: string | null;
     linkedLineIds: number[];
     linkedLineNames: string[];
 };

@@ -155,6 +155,7 @@ function resolveConsignmentEquipage(
       return {
         id: consignment.equipageId,
         name: equipageName,
+        regnr: null,
         linkedLineIds: [],
         linkedLineNames: [],
       };
