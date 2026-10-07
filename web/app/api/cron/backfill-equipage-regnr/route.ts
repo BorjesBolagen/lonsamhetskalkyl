@@ -124,11 +124,13 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      status: true,
+      status: failures.length === 0,
       dryRun,
       message: dryRun
         ? "Torrkörning: inget har skrivits. Lägg till ?apply=true för att köra på riktigt."
-        : "Backfill klar.",
+        : failures.length > 0
+          ? "Backfill delvis klar: se summary.failures. Kör igen för att ta de som återstår."
+          : "Backfill klar.",
       summary: {
         equipagesInIlog: equipages.length,
         equipagesWithRegnrInIlog: regnrById.size,
