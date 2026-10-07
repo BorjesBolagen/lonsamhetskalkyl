@@ -309,6 +309,7 @@ export async function runDailyEquipageForecast(
           forecast_date: forecastDate,
           equipage_id: forecast.equipage.id,
           equipage_name: forecast.equipage.name,
+          equipage_regnr: forecast.equipage.regnr ?? null,
           total_weight_kg: forecast.totalWeightKg,
           total_flm: forecast.totalFlm,
           total_estimated_revenue: forecast.totalEstimatedRevenue,
