@@ -305,9 +305,37 @@ const collectConsignmentCandidates = (
 };
 
 /**
+ * Hämtar bilens regnr ur ett ekipages `resources`-lista.
+ *
+ * Ett ekipage kan ha flera resurser (t.ex. släp + bil) eller inga alls, så vi
+ * tar första resursen med truck=true och ifyllt registrationNumber. Släp
+ * (truck=false, t.ex. "DAHL SLÄP") räknas inte som regnr. Returnerar null om
+ * ekipaget saknar bil.
+ */
+const readEquipageRegnr = (row: Record<string, unknown>): string | null => {
+  if (!Array.isArray(row.resources)) {
+    return null;
+  }
+
+  for (const rawResource of row.resources) {
+    const resource = asRecord(rawResource);
+    if (resource.truck !== true) {
+      continue;
+    }
+
+    const regnr = readString(resource, ["registrationNumber"]).trim();
+    if (regnr) {
+      return regnr;
+    }
+  }
+
+  return null;
+};
+
+/**
  * Mappning: iLog raw equipages → EquipageItem[]
  * 
- * Extraherar id och name (registreringsnummer).
+ * Extraherar id, name (bilens namn, t.ex. "L80") och regnr (från resources).
  * Filter bort items utan ID.
  */
 export const mapEquipages = (raw: unknown[]): EquipageItem[] => {
@@ -350,6 +378,7 @@ export const mapEquipages = (raw: unknown[]): EquipageItem[] => {
       return {
         id,
         name,
+        regnr: readEquipageRegnr(row),
         linkedLineIds: Array.from(linkedLineIds),
         linkedLineNames: Array.from(linkedLineNames),
       };

@@ -205,6 +205,7 @@ export type Database = {
           consignment_count: number
           equipage_id: number
           equipage_name: string
+          equipage_regnr: string | null
           forecast_date: string
           total_estimated_revenue: number
           total_flm: number
@@ -215,6 +216,7 @@ export type Database = {
           consignment_count: number
           equipage_id: number
           equipage_name: string
+          equipage_regnr?: string | null
           forecast_date: string
           total_estimated_revenue: number
           total_flm: number
@@ -225,6 +227,7 @@ export type Database = {
           consignment_count?: number
           equipage_id?: number
           equipage_name?: string
+          equipage_regnr?: string | null
           forecast_date?: string
           total_estimated_revenue?: number
           total_flm?: number
