@@ -924,6 +924,10 @@ export type Database = {
           equipage_name: string | null
           forecast: number | null
           forecast_days: number | null
+          forecast_egenfakturerat: number | null
+          forecast_paketbur: number | null
+          forecast_partigods: number | null
+          forecast_styckegods: number | null
           outcome: number | null
           regnr: string
         }[]

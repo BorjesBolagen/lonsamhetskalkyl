@@ -604,6 +604,10 @@ export type ForecastVsOutcomeRow = {
 	diff: number;
 	diffPercent: number | null;
 	forecastDays: number;
+	forecastStyckegods: number | null;
+	forecastPartigods: number | null;
+	forecastPaketbur: number | null;
+	forecastEgenfakturerat: number | null;
 };
 
 export type ForecastVsOutcomeData = {

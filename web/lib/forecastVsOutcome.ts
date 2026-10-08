@@ -20,7 +20,15 @@ export type ForecastVsOutcomeRow = {
   /** Diff i procent av prognosen; null om prognos saknas eller är 0. */
   diffPercent: number | null;
   forecastDays: number;
+  /** Prognos per intäktsgrupp; null om prognos saknas för bilen. */
+  forecastStyckegods: number | null;
+  forecastPartigods: number | null;
+  forecastPaketbur: number | null;
+  forecastEgenfakturerat: number | null;
 };
+
+const toNumberOrNull = (value: number | string | null): number | null =>
+  value === null ? null : Number(value);
 
 export async function fetchForecastVsOutcome(
   supabase: SupabaseClient<Database>,
@@ -46,6 +54,10 @@ export async function fetchForecastVsOutcome(
       diff,
       diffPercent: forecast ? (diff / forecast) * 100 : null,
       forecastDays: row.forecast_days ?? 0,
+      forecastStyckegods: toNumberOrNull(row.forecast_styckegods),
+      forecastPartigods: toNumberOrNull(row.forecast_partigods),
+      forecastPaketbur: toNumberOrNull(row.forecast_paketbur),
+      forecastEgenfakturerat: toNumberOrNull(row.forecast_egenfakturerat),
     };
   });
 }

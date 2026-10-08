@@ -8,9 +8,23 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { requireAdmin } from "@/lib/authHelpers";
-import { fetchForecastVsOutcome } from "@/lib/forecastVsOutcome";
+import {
+  fetchForecastVsOutcome,
+  type ForecastVsOutcomeRow,
+} from "@/lib/forecastVsOutcome";
 
 const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function sumGroup(
+  rows: ForecastVsOutcomeRow[],
+  key:
+    | "forecastStyckegods"
+    | "forecastPartigods"
+    | "forecastPaketbur"
+    | "forecastEgenfakturerat",
+): number {
+  return rows.reduce((sum, r) => sum + (r[key] ?? 0), 0);
+}
 
 export async function GET(request: NextRequest) {
   const { error: authError } = await requireAdmin();
@@ -36,6 +50,10 @@ export async function GET(request: NextRequest) {
       { header: "Regnr", key: "regnr", width: 12 },
       { header: "Utfall (SEK)", key: "outcome", width: 16 },
       { header: "Prognos (SEK)", key: "forecast", width: 16 },
+      { header: "Styckegods (SEK)", key: "styckegods", width: 18 },
+      { header: "Partigods (SEK)", key: "partigods", width: 18 },
+      { header: "Paketbur (SEK)", key: "paketbur", width: 18 },
+      { header: "Egenfakturerat (SEK)", key: "egenfakturerat", width: 20 },
       { header: "Diff (SEK)", key: "diff", width: 16 },
       { header: "Diff %", key: "diffPercent", width: 10 },
       { header: "Dagar med prognos", key: "days", width: 18 },
@@ -48,6 +66,10 @@ export async function GET(request: NextRequest) {
         regnr: row.regnr,
         outcome: row.outcome,
         forecast: row.forecast,
+        styckegods: row.forecastStyckegods,
+        partigods: row.forecastPartigods,
+        paketbur: row.forecastPaketbur,
+        egenfakturerat: row.forecastEgenfakturerat,
         diff: row.diff,
         diffPercent: row.diffPercent === null ? null : row.diffPercent / 100,
         days: row.forecastDays,
@@ -62,6 +84,10 @@ export async function GET(request: NextRequest) {
         name: "Totalt",
         outcome,
         forecast,
+        styckegods: sumGroup(rows, "forecastStyckegods"),
+        partigods: sumGroup(rows, "forecastPartigods"),
+        paketbur: sumGroup(rows, "forecastPaketbur"),
+        egenfakturerat: sumGroup(rows, "forecastEgenfakturerat"),
         diff: outcome - forecast,
         diffPercent: forecast ? (outcome - forecast) / forecast : null,
       });

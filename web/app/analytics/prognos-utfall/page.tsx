@@ -37,6 +37,10 @@ type SortKey =
   | "regnr"
   | "outcome"
   | "forecast"
+  | "forecastStyckegods"
+  | "forecastPartigods"
+  | "forecastPaketbur"
+  | "forecastEgenfakturerat"
   | "diff"
   | "diffPercent"
   | "forecastDays";
@@ -48,6 +52,10 @@ const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: "regnr", label: "Regnr", numeric: false },
   { key: "outcome", label: "Utfall", numeric: true },
   { key: "forecast", label: "Prognos", numeric: true },
+  { key: "forecastStyckegods", label: "Styckegods", numeric: true },
+  { key: "forecastPartigods", label: "Partigods", numeric: true },
+  { key: "forecastPaketbur", label: "Paketbur", numeric: true },
+  { key: "forecastEgenfakturerat", label: "Egenfakturerat", numeric: true },
   { key: "diff", label: "Diff", numeric: true },
   { key: "diffPercent", label: "Diff %", numeric: true },
   { key: "forecastDays", label: "Dagar med prognos", numeric: true },
@@ -173,7 +181,22 @@ export default function PrognosUtfall() {
   const totals = useMemo(() => {
     const outcome = visibleRows.reduce((sum, r) => sum + (r.outcome ?? 0), 0);
     const forecast = visibleRows.reduce((sum, r) => sum + (r.forecast ?? 0), 0);
-    return { outcome, forecast, diff: outcome - forecast };
+    const sumGroup = (
+      key:
+        | "forecastStyckegods"
+        | "forecastPartigods"
+        | "forecastPaketbur"
+        | "forecastEgenfakturerat",
+    ) => visibleRows.reduce((sum, r) => sum + (r[key] ?? 0), 0);
+    return {
+      outcome,
+      forecast,
+      diff: outcome - forecast,
+      styckegods: sumGroup("forecastStyckegods"),
+      partigods: sumGroup("forecastPartigods"),
+      paketbur: sumGroup("forecastPaketbur"),
+      egenfakturerat: sumGroup("forecastEgenfakturerat"),
+    };
   }, [visibleRows]);
 
   const isPartialMonth = useMemo(
@@ -363,7 +386,9 @@ export default function PrognosUtfall() {
             <TriangleAlert className="h-5 w-5 flex-shrink-0" />
             <span>
               Prognos saknas för en del av dagarna i månaden (se kolumnen Dagar
-              med prognos), så diffen kan vara missvisande.
+              med prognos), så diffen kan vara missvisande. Prognos per
+              intäktsgrupp finns bara för dagar som körts efter att grupperna
+              infördes, så grupperna kan summera till mindre än Prognos.
             </span>
           </div>
         )}
@@ -419,6 +444,18 @@ export default function PrognosUtfall() {
                     <td className="py-2 pr-4 text-right tabular-nums">
                       {row.forecast === null ? "–" : numberFormat.format(row.forecast)}
                     </td>
+                    <td className="py-2 pr-4 text-right tabular-nums">
+                      {row.forecastStyckegods === null ? "–" : numberFormat.format(row.forecastStyckegods)}
+                    </td>
+                    <td className="py-2 pr-4 text-right tabular-nums">
+                      {row.forecastPartigods === null ? "–" : numberFormat.format(row.forecastPartigods)}
+                    </td>
+                    <td className="py-2 pr-4 text-right tabular-nums">
+                      {row.forecastPaketbur === null ? "–" : numberFormat.format(row.forecastPaketbur)}
+                    </td>
+                    <td className="py-2 pr-4 text-right tabular-nums">
+                      {row.forecastEgenfakturerat === null ? "–" : numberFormat.format(row.forecastEgenfakturerat)}
+                    </td>
                     <td
                       className={`py-2 pr-4 text-right font-bold tabular-nums ${
                         row.diff < 0 ? "text-[var(--error)]" : ""
@@ -449,6 +486,18 @@ export default function PrognosUtfall() {
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">
                     {numberFormat.format(totals.forecast)}
+                  </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
+                    {numberFormat.format(totals.styckegods)}
+                  </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
+                    {numberFormat.format(totals.partigods)}
+                  </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
+                    {numberFormat.format(totals.paketbur)}
+                  </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
+                    {numberFormat.format(totals.egenfakturerat)}
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">
                     {signedFormat.format(totals.diff)}
