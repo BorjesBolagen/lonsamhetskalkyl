@@ -593,6 +593,70 @@ export const buildForecastExportUrl = (
 };
 
 // ============================================================
+// Analys: prognos jämfört med utfall
+// ============================================================
+
+export type ForecastVsOutcomeRow = {
+	regnr: string;
+	equipageName: string | null;
+	outcome: number | null;
+	forecast: number | null;
+	diff: number;
+	diffPercent: number | null;
+	forecastDays: number;
+};
+
+export type ForecastVsOutcomeData = {
+	rows: ForecastVsOutcomeRow[];
+	daysInMonth: number;
+};
+
+export type OutcomeImportPreview = {
+	rowCount: number;
+	totalRevenue: number;
+	duplicateRegnr: string[];
+	regnrWithoutForecast: string[];
+	existingRowsForMonth: number;
+};
+
+/**
+ * Hämtar utfall och summerad prognos per regnr för en månad (YYYY-MM). Endast admin.
+ */
+export const getForecastVsOutcome = async (
+	month: string,
+): Promise<BasicResponse<ForecastVsOutcomeData>> => {
+	const response = await fetch(`/api/analytics/forecast-vs-outcome?month=${month}`, {
+		method: "GET",
+	});
+
+	if (!response.ok) throw new Error((await response.json()).message);
+	return (await response.json()) as BasicResponse<ForecastVsOutcomeData>;
+};
+
+export const buildForecastVsOutcomeExportUrl = (month: string): string =>
+	`/api/analytics/forecast-vs-outcome/export?month=${month}`;
+
+/**
+ * Laddar upp utfallsfilen (.xlsx). mode "preview" skriver inget, "commit" ersätter månadens utfall.
+ */
+export const importMonthlyOutcome = async <T>(
+	file: File,
+	month: string,
+	mode: "preview" | "commit",
+): Promise<BasicResponse<T> & { errors?: string[] }> => {
+	const form = new FormData();
+	form.set("file", file);
+	form.set("month", month);
+	form.set("mode", mode);
+
+	const response = await fetch("/api/analytics/outcome/import", {
+		method: "POST",
+		body: form,
+	});
+	return await response.json();
+};
+
+// ============================================================
 // Historical import
 // ============================================================
 

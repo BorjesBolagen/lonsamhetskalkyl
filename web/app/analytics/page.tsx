@@ -583,7 +583,10 @@ export default function Analytics() {
           Analys
         </h1>
         <p className="mb-6 text-[var(--text-secondary)]">
-          Nattligt sparade prognoser per ekipage: intäkt, vikt och flakmeter.
+          Nattligt sparade prognoser per ekipage: intäkt, vikt och flakmeter.{" "}
+          <a href="/analytics/prognos-utfall" className="underline">
+            Prognos jämfört med utfall
+          </a>
         </p>
 
         {/* Filterrad: datumintervall + export */}

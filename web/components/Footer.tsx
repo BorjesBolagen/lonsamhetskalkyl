@@ -3,7 +3,7 @@ export default function Footer() {
     <div className="bg-[var(--primary-element)] text-[var(--text-primary)] p-5 w-full mt-auto grid grid-cols-3 items-center">
       <div />
       <p className="text-center">
-        &copy; 2026 Lönsamhetskalkyl. Alla rättigheter förbehållna.
+        &copy; {new Date().getFullYear()} Börjes Koncernen. Alla rättigheter förbehållna.
       </p>
       <div className="flex justify-end">
         <img

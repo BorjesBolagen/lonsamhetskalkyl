@@ -444,6 +444,36 @@ export type Database = {
           },
         ]
       }
+      monthly_equipage_outcome: {
+        Row: {
+          id: number
+          imported_at: string
+          imported_by: string | null
+          month: string
+          regnr: string
+          source_file_name: string | null
+          total_revenue: number
+        }
+        Insert: {
+          id?: never
+          imported_at?: string
+          imported_by?: string | null
+          month: string
+          regnr: string
+          source_file_name?: string | null
+          total_revenue: number
+        }
+        Update: {
+          id?: never
+          imported_at?: string
+          imported_by?: string | null
+          month?: string
+          regnr?: string
+          source_file_name?: string | null
+          total_revenue?: number
+        }
+        Relationships: []
+      }
       name_translation: {
         Row: {
           ilog_name: string
@@ -875,6 +905,25 @@ export type Database = {
           best_name: string
           best_score: number
         }[]
+      }
+      forecast_vs_outcome: {
+        Args: { p_month: string }
+        Returns: {
+          equipage_name: string | null
+          forecast: number | null
+          forecast_days: number | null
+          outcome: number | null
+          regnr: string
+        }[]
+      }
+      replace_monthly_equipage_outcome: {
+        Args: {
+          p_file_name: string
+          p_imported_by: string
+          p_month: string
+          p_rows: Json
+        }
+        Returns: number
       }
       get_amount_of_unread_messages: {
         Args: { user_id: string }
