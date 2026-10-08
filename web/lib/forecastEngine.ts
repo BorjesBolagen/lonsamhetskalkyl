@@ -11,7 +11,8 @@ import "server-only";
  *   3. Väljer kundnamn med samma automatik som Hem-vyns förval:
  *      namnöversättning → Jaro-matchning över tröskeln → originalnamn.
  *   4. Beräknar prognostiserad intäkt per bokning via routeConsignment.
- *   5. Aggregerar vikt, flakmeter och intäkt per ekipage och upsertar till
+ *   5. Aggregerar vikt, flakmeter och intäkt (totalt och per intäktsgrupp:
+ *      Styckegods, Partigods, Paketbur, Egenfakturerat) per ekipage och upsertar till
  *      daily_equipage_forecast. Ekipage utan bokningar sparas inte.
  *
  * All databasåtkomst sker via service role (runWithSupabaseAdminContext)
@@ -22,7 +23,7 @@ import { ilogGet } from "@/lib/ilogClient";
 import { mapConsignments, mapEquipages } from "@/lib/ilogMappers";
 import { enrichTaxPointRelationFromSupabase } from "@/lib/taxPointLookup";
 import { prepareProfitabilityRequest } from "@/lib/profitabilityInput";
-import { routeConsignment } from "@/profitability/service";
+import { determineFlowType, FlowType, routeConsignment } from "@/profitability/service";
 import {
   getSupabaseAdminClient,
   runWithSupabaseAdminContext,
@@ -65,6 +66,10 @@ export function getStockholmDateDaysBack(daysBack: number): string {
 
 function toIlogDate(isoDate: string): string {
   return isoDate.replace(/-/g, "");
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -150,11 +155,38 @@ async function resolveCustomerName(
   return resolved;
 }
 
+export type RevenueGroup =
+  | "styckegods"
+  | "partigods"
+  | "paketbur"
+  | "egenfakturerat";
+
+type RevenueByGroup = Record<RevenueGroup, number>;
+
+/**
+ * Mappar sändningens flöde till intäktsgrupp. Partigods = trappstegsmodellen
+ * (steg 1-5, flödet FJARR) samt Sune. Okänt flöde ger 0 kr och bokförs som
+ * Partigods så att grupperna alltid summerar till totalen.
+ */
+function revenueGroupForFlow(flow: FlowType): RevenueGroup {
+  switch (flow) {
+    case FlowType.STYCKEGODS:
+      return "styckegods";
+    case FlowType.PAKETBUR:
+      return "paketbur";
+    case FlowType.EGENFAKTURERAT:
+      return "egenfakturerat";
+    default:
+      return "partigods";
+  }
+}
+
 type EquipageForecast = {
   equipage: EquipageItem;
   totalWeightKg: number;
   totalFlm: number;
   totalEstimatedRevenue: number;
+  revenueByGroup: RevenueByGroup;
   consignmentCount: number;
 };
 
@@ -179,6 +211,12 @@ async function forecastEquipage(
   let totalWeightKg = 0;
   let totalFlm = 0;
   let totalEstimatedRevenue = 0;
+  const revenueByGroup: RevenueByGroup = {
+    styckegods: 0,
+    partigods: 0,
+    paketbur: 0,
+    egenfakturerat: 0,
+  };
 
   for (const consignment of consignments) {
     totalWeightKg += consignment.weight ?? 0;
@@ -206,13 +244,19 @@ async function forecastEquipage(
           { ...consignment, customerName: resolvedName },
         );
 
-        return await routeConsignment(enrichedConsignment, input);
+        const result = await routeConsignment(enrichedConsignment, input);
+        return {
+          result,
+          group: revenueGroupForFlow(determineFlowType(enrichedConsignment)),
+        };
       }),
     );
 
     for (const result of results) {
       if (result.status === "fulfilled") {
-        totalEstimatedRevenue += result.value.estimated_revenue ?? 0;
+        const revenue = result.value.result.estimated_revenue ?? 0;
+        totalEstimatedRevenue += revenue;
+        revenueByGroup[result.value.group] += revenue;
       } else {
         const error = result.reason;
         const errorMessage =
@@ -236,7 +280,13 @@ async function forecastEquipage(
     equipage,
     totalWeightKg,
     totalFlm,
-    totalEstimatedRevenue: Math.round(totalEstimatedRevenue * 100) / 100,
+    totalEstimatedRevenue: roundMoney(totalEstimatedRevenue),
+    revenueByGroup: {
+      styckegods: roundMoney(revenueByGroup.styckegods),
+      partigods: roundMoney(revenueByGroup.partigods),
+      paketbur: roundMoney(revenueByGroup.paketbur),
+      egenfakturerat: roundMoney(revenueByGroup.egenfakturerat),
+    },
     consignmentCount: consignments.length,
   };
 }
@@ -313,6 +363,10 @@ export async function runDailyEquipageForecast(
           total_weight_kg: forecast.totalWeightKg,
           total_flm: forecast.totalFlm,
           total_estimated_revenue: forecast.totalEstimatedRevenue,
+          revenue_styckegods: forecast.revenueByGroup.styckegods,
+          revenue_partigods: forecast.revenueByGroup.partigods,
+          revenue_paketbur: forecast.revenueByGroup.paketbur,
+          revenue_egenfakturerat: forecast.revenueByGroup.egenfakturerat,
           consignment_count: forecast.consignmentCount,
           updated_at: now,
         })),

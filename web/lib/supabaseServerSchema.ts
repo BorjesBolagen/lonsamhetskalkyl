@@ -206,6 +206,10 @@ export type Database = {
           equipage_id: number
           equipage_name: string
           equipage_regnr: string | null
+          revenue_egenfakturerat: number
+          revenue_paketbur: number
+          revenue_partigods: number
+          revenue_styckegods: number
           forecast_date: string
           total_estimated_revenue: number
           total_flm: number
@@ -218,6 +222,10 @@ export type Database = {
           equipage_name: string
           equipage_regnr?: string | null
           forecast_date: string
+          revenue_egenfakturerat?: number
+          revenue_paketbur?: number
+          revenue_partigods?: number
+          revenue_styckegods?: number
           total_estimated_revenue: number
           total_flm: number
           total_weight_kg: number
@@ -229,6 +237,10 @@ export type Database = {
           equipage_name?: string
           equipage_regnr?: string | null
           forecast_date?: string
+          revenue_egenfakturerat?: number
+          revenue_paketbur?: number
+          revenue_partigods?: number
+          revenue_styckegods?: number
           total_estimated_revenue?: number
           total_flm?: number
           total_weight_kg?: number
