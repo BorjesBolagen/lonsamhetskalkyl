@@ -43,6 +43,10 @@ export async function GET(request: NextRequest) {
       { header: "Ekipage", key: "equipage", width: 20 },
       { header: "Total vikt (kg)", key: "weight", width: 16 },
       { header: "Total flakmeter", key: "flm", width: 16 },
+      { header: "Styckegods (SEK)", key: "styckegods", width: 18 },
+      { header: "Partigods (SEK)", key: "partigods", width: 18 },
+      { header: "Paketbur (SEK)", key: "paketbur", width: 18 },
+      { header: "Egenfakturerat (SEK)", key: "egenfakturerat", width: 20 },
       { header: "Prognostiserad intäkt (SEK)", key: "revenue", width: 26 },
       { header: "Antal bokningar", key: "count", width: 16 },
     ];
@@ -54,6 +58,10 @@ export async function GET(request: NextRequest) {
         equipage: row.equipage_name,
         weight: Number(row.total_weight_kg),
         flm: Number(row.total_flm),
+        styckegods: Number(row.revenue_styckegods ?? 0),
+        partigods: Number(row.revenue_partigods ?? 0),
+        paketbur: Number(row.revenue_paketbur ?? 0),
+        egenfakturerat: Number(row.revenue_egenfakturerat ?? 0),
         revenue: Number(row.total_estimated_revenue),
         count: row.consignment_count,
       });
@@ -65,6 +73,10 @@ export async function GET(request: NextRequest) {
         equipage: "",
         weight: rows.reduce((sum, row) => sum + Number(row.total_weight_kg), 0),
         flm: rows.reduce((sum, row) => sum + Number(row.total_flm), 0),
+        styckegods: rows.reduce((sum, row) => sum + Number(row.revenue_styckegods ?? 0), 0),
+        partigods: rows.reduce((sum, row) => sum + Number(row.revenue_partigods ?? 0), 0),
+        paketbur: rows.reduce((sum, row) => sum + Number(row.revenue_paketbur ?? 0), 0),
+        egenfakturerat: rows.reduce((sum, row) => sum + Number(row.revenue_egenfakturerat ?? 0), 0),
         revenue: rows.reduce(
           (sum, row) => sum + Number(row.total_estimated_revenue),
           0,

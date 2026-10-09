@@ -99,6 +99,10 @@ type EquipageTotals = {
   weight: number;
   flm: number;
   revenue: number;
+  styckegods: number;
+  partigods: number;
+  paketbur: number;
+  egenfakturerat: number;
 };
 
 type Metric = "revenue" | "weight" | "flm";
@@ -568,6 +572,10 @@ export default function Analytics() {
         weight: 0,
         flm: 0,
         revenue: 0,
+        styckegods: 0,
+        partigods: 0,
+        paketbur: 0,
+        egenfakturerat: 0,
       };
 
       existing.days += 1;
@@ -575,6 +583,10 @@ export default function Analytics() {
       existing.weight += Number(row.total_weight_kg);
       existing.flm += Number(row.total_flm);
       existing.revenue += Number(row.total_estimated_revenue);
+      existing.styckegods += Number(row.revenue_styckegods ?? 0);
+      existing.partigods += Number(row.revenue_partigods ?? 0);
+      existing.paketbur += Number(row.revenue_paketbur ?? 0);
+      existing.egenfakturerat += Number(row.revenue_egenfakturerat ?? 0);
       byId.set(row.equipage_id, existing);
     }
 
@@ -993,6 +1005,10 @@ export default function Analytics() {
                         <th className="py-2 pr-4 text-right">Bokningar</th>
                         <th className="py-2 pr-4 text-right">Vikt (kg)</th>
                         <th className="py-2 pr-4 text-right">Flakmeter</th>
+                        <th className="py-2 pr-4 text-right">Styckegods</th>
+                        <th className="py-2 pr-4 text-right">Partigods</th>
+                        <th className="py-2 pr-4 text-right">Paketbur</th>
+                        <th className="py-2 pr-4 text-right">Egenfakturerat</th>
                         <th className="py-2 text-right">Intäkt (SEK)</th>
                       </tr>
                     </thead>
@@ -1014,6 +1030,18 @@ export default function Analytics() {
                           </td>
                           <td className="py-2 pr-4 text-right tabular-nums">
                             {decimalFormat.format(totals.flm)}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(totals.styckegods)}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(totals.partigods)}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(totals.paketbur)}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(totals.egenfakturerat)}
                           </td>
                           <td className="py-2 text-right tabular-nums">
                             {numberFormat.format(totals.revenue)}
@@ -1044,6 +1072,26 @@ export default function Analytics() {
                               totalsPerEquipage.reduce((sum, t) => sum + t.flm, 0),
                             )}
                           </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(
+                              totalsPerEquipage.reduce((sum, t) => sum + t.styckegods, 0),
+                            )}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(
+                              totalsPerEquipage.reduce((sum, t) => sum + t.partigods, 0),
+                            )}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(
+                              totalsPerEquipage.reduce((sum, t) => sum + t.paketbur, 0),
+                            )}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(
+                              totalsPerEquipage.reduce((sum, t) => sum + t.egenfakturerat, 0),
+                            )}
+                          </td>
                           <td className="py-2 text-right tabular-nums">
                             {numberFormat.format(
                               totalsPerEquipage.reduce(
@@ -1057,7 +1105,7 @@ export default function Analytics() {
                       {totalsPerEquipage.length === 0 && !isLoading && (
                         <tr>
                           <td
-                            colSpan={6}
+                            colSpan={10}
                             className="py-4 text-center text-[var(--text-secondary)]"
                           >
                             Ingen prognosdata för valda ekipage i perioden.
