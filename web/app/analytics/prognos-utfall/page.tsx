@@ -47,15 +47,27 @@ type SortKey =
 
 type MissingFilter = "all" | "missingOutcome" | "missingForecast";
 
-const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
+type GroupKey =
+  | "forecastStyckegods"
+  | "forecastPartigods"
+  | "forecastPaketbur"
+  | "forecastEgenfakturerat";
+
+const COLUMNS: {
+  key: SortKey;
+  label: string;
+  numeric: boolean;
+  /** Intäktsgrupp som kan väljas bort ur prognosen och diffen. */
+  group?: GroupKey;
+}[] = [
   { key: "name", label: "Namn", numeric: false },
   { key: "regnr", label: "Regnr", numeric: false },
   { key: "outcome", label: "Utfall", numeric: true },
   { key: "forecast", label: "Prognos", numeric: true },
-  { key: "forecastStyckegods", label: "Styckegods", numeric: true },
-  { key: "forecastPartigods", label: "Partigods", numeric: true },
-  { key: "forecastPaketbur", label: "Paketbur", numeric: true },
-  { key: "forecastEgenfakturerat", label: "Egenfakturerat", numeric: true },
+  { key: "forecastStyckegods", label: "Styckegods", numeric: true, group: "forecastStyckegods" },
+  { key: "forecastPartigods", label: "Partigods", numeric: true, group: "forecastPartigods" },
+  { key: "forecastPaketbur", label: "Paketbur", numeric: true, group: "forecastPaketbur" },
+  { key: "forecastEgenfakturerat", label: "Egenfakturerat", numeric: true, group: "forecastEgenfakturerat" },
   { key: "diff", label: "Diff", numeric: true },
   { key: "diffPercent", label: "Diff %", numeric: true },
   { key: "forecastDays", label: "Dagar med prognos", numeric: true },
@@ -85,7 +97,8 @@ export default function PrognosUtfall() {
   const [isCheckingRole, setIsCheckingRole] = useState(true);
 
   const [month, setMonth] = useState(defaultMonth);
-  const [rows, setRows] = useState<ForecastVsOutcomeRow[]>([]);
+  const [rawRows, setRows] = useState<ForecastVsOutcomeRow[]>([]);
+  const [excludedGroups, setExcludedGroups] = useState<GroupKey[]>([]);
   const [daysInMonth, setDaysInMonth] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +155,28 @@ export default function PrognosUtfall() {
   useEffect(() => {
     if (!isCheckingRole) loadData();
   }, [isCheckingRole, loadData]);
+
+  // Bortvalda grupper dras av från prognosen, och diffen räknas om på det.
+  const rows = useMemo(() => {
+    if (excludedGroups.length === 0) return rawRows;
+    return rawRows.map((row) => {
+      if (row.forecast === null) return row;
+      const removed = excludedGroups.reduce((sum, g) => sum + (row[g] ?? 0), 0);
+      const forecast = row.forecast - removed;
+      const diff = (row.outcome ?? 0) - forecast;
+      return {
+        ...row,
+        forecast,
+        diff,
+        diffPercent: forecast ? (diff / forecast) * 100 : null,
+      };
+    });
+  }, [rawRows, excludedGroups]);
+
+  const toggleGroup = (group: GroupKey) =>
+    setExcludedGroups((prev) =>
+      prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group],
+    );
 
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -378,6 +413,16 @@ export default function PrognosUtfall() {
           </p>
         )}
 
+        {excludedGroups.length > 0 && (
+          <p className="mb-4 rounded bg-[var(--primary-element)] p-3 text-sm shadow-md">
+            Prognos och diff räknas utan{" "}
+            {COLUMNS.filter((c) => c.group && excludedGroups.includes(c.group))
+              .map((c) => c.label)
+              .join(", ")}
+            . Utfallet är oförändrat.
+          </p>
+        )}
+
         {isPartialMonth && (
           <div
             className="mb-4 flex items-center gap-2 rounded border-2 border-yellow-300 bg-yellow-100 p-3 text-sm text-yellow-800"
@@ -418,6 +463,16 @@ export default function PrognosUtfall() {
                       }
                       className={`py-2 pr-4 ${column.numeric ? "text-right" : ""}`}
                     >
+                      {column.group && (
+                        <input
+                          type="checkbox"
+                          checked={!excludedGroups.includes(column.group)}
+                          onChange={() => toggleGroup(column.group!)}
+                          aria-label={`Räkna med ${column.label} i prognos och diff`}
+                          title="Räkna med i prognos och diff"
+                          className="mr-1 align-middle"
+                        />
+                      )}
                       <button
                         type="button"
                         onClick={() => toggleSort(column.key)}
