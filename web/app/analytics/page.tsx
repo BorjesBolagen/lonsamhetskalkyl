@@ -271,6 +271,8 @@ function MetricChartCard({
   );
 }
 
+const FORECAST_CHUNK_SIZE = 10;
+
 export default function Analytics() {
   const router = useRouter();
 
@@ -337,21 +339,24 @@ export default function Analytics() {
     return dates;
   };
 
-  /** Kör prognosen för ett datum via strömmen. Resolvar true om den gick bra. */
-  const runForecastForDate = (date: string) =>
-    new Promise<boolean>((resolve) => {
-      const url = `/api/cron/manual-daily-forecast-stream?date=${encodeURIComponent(
-        date,
-      )}`;
+  /**
+   * Kör prognosen för en del av ekipagen ett datum via strömmen. Resolvar
+   * { ok, nextOffset }; nextOffset är null när alla ekipage är klara.
+   */
+  const runForecastChunk = (date: string, offset: number, limit: number) =>
+    new Promise<{ ok: boolean; nextOffset: number | null }>((resolve) => {
+      const url =
+        `/api/cron/manual-daily-forecast-stream?date=${encodeURIComponent(date)}` +
+        `&offset=${offset}&limit=${limit}`;
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
-      const finish = (ok: boolean) => {
+      const finish = (ok: boolean, nextOffset: number | null = null) => {
         eventSource.close();
         if (eventSourceRef.current === eventSource) {
           eventSourceRef.current = null;
         }
-        resolve(ok);
+        resolve({ ok, nextOffset });
       };
 
       eventSource.onmessage = (event) => {
@@ -363,7 +368,7 @@ export default function Analytics() {
               color: payload.color ?? "green",
             });
           } else if (payload.type === "done") {
-            finish(true);
+            finish(true, payload.summary?.nextOffset ?? null);
           } else if (payload.type === "error") {
             appendForecastLog({ message: `Fel: ${payload.message}`, color: "red" });
             finish(false);
@@ -406,7 +411,17 @@ export default function Analytics() {
         message: `Datum ${index + 1}/${dates.length}: ${date}`,
         color: "yellow",
       });
-      const ok = await runForecastForDate(date);
+      // Varje dag delas upp i delar om FORECAST_CHUNK_SIZE ekipage, så att
+      // ingen enskild förfrågan når Vercels tidsgräns.
+      let ok = true;
+      let offset: number | null = 0;
+      while (offset !== null && !cancelRangeRef.current) {
+        const result: { ok: boolean; nextOffset: number | null } =
+          await runForecastChunk(date, offset, FORECAST_CHUNK_SIZE);
+        ok = result.ok;
+        if (!ok) break;
+        offset = result.nextOffset;
+      }
       if (!ok && !cancelRangeRef.current) {
         appendForecastLog({ message: `Avbryter: ${date} misslyckades.`, color: "red" });
         break;

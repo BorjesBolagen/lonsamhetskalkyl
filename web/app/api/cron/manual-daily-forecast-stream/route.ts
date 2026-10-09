@@ -5,6 +5,8 @@
  *
  * Query params:
  *   - date=YYYY-MM-DD
+ *   - offset, limit (valfria heltal): kör bara en del av ekipagen, så att en
+ *     dag kan delas upp i flera förfrågor och inte når Vercels tidsgräns.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -23,6 +25,7 @@ export const dynamic = "force-dynamic";
 
 function createSseStream(
   forecastDate: string,
+  options: { offset?: number; limit?: number },
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
 
@@ -40,7 +43,11 @@ function createSseStream(
 
       try {
         logger(`Startar prognos för datum ${forecastDate}`);
-        const summary = await runDailyEquipageForecast(forecastDate, logger);
+        const summary = await runDailyEquipageForecast(
+          forecastDate,
+          logger,
+          options,
+        );
         send({ type: "done", summary });
       } catch (error) {
         send({
@@ -75,7 +82,16 @@ export async function GET(request: NextRequest) {
   }
 
   const forecastDate = dateParam ?? getStockholmDateDaysBack(DAYS_BACK);
-  const stream = createSseStream(forecastDate);
+  const toCount = (value: string | null) => {
+    const parsed = Number(value);
+    return value !== null && Number.isInteger(parsed) && parsed >= 0
+      ? parsed
+      : undefined;
+  };
+  const stream = createSseStream(forecastDate, {
+    offset: toCount(url.searchParams.get("offset")),
+    limit: toCount(url.searchParams.get("limit")) || undefined,
+  });
 
   return new Response(stream, {
     headers: {
