@@ -99,6 +99,10 @@ type EquipageTotals = {
   weight: number;
   flm: number;
   revenue: number;
+  styckegods: number;
+  partigods: number;
+  paketbur: number;
+  egenfakturerat: number;
 };
 
 type Metric = "revenue" | "weight" | "flm";
@@ -271,6 +275,8 @@ function MetricChartCard({
   );
 }
 
+const FORECAST_CHUNK_SIZE = 10;
+
 export default function Analytics() {
   const router = useRouter();
 
@@ -337,21 +343,24 @@ export default function Analytics() {
     return dates;
   };
 
-  /** Kör prognosen för ett datum via strömmen. Resolvar true om den gick bra. */
-  const runForecastForDate = (date: string) =>
-    new Promise<boolean>((resolve) => {
-      const url = `/api/cron/manual-daily-forecast-stream?date=${encodeURIComponent(
-        date,
-      )}`;
+  /**
+   * Kör prognosen för en del av ekipagen ett datum via strömmen. Resolvar
+   * { ok, nextOffset }; nextOffset är null när alla ekipage är klara.
+   */
+  const runForecastChunk = (date: string, offset: number, limit: number) =>
+    new Promise<{ ok: boolean; nextOffset: number | null }>((resolve) => {
+      const url =
+        `/api/cron/manual-daily-forecast-stream?date=${encodeURIComponent(date)}` +
+        `&offset=${offset}&limit=${limit}`;
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
-      const finish = (ok: boolean) => {
+      const finish = (ok: boolean, nextOffset: number | null = null) => {
         eventSource.close();
         if (eventSourceRef.current === eventSource) {
           eventSourceRef.current = null;
         }
-        resolve(ok);
+        resolve({ ok, nextOffset });
       };
 
       eventSource.onmessage = (event) => {
@@ -363,7 +372,7 @@ export default function Analytics() {
               color: payload.color ?? "green",
             });
           } else if (payload.type === "done") {
-            finish(true);
+            finish(true, payload.summary?.nextOffset ?? null);
           } else if (payload.type === "error") {
             appendForecastLog({ message: `Fel: ${payload.message}`, color: "red" });
             finish(false);
@@ -406,7 +415,17 @@ export default function Analytics() {
         message: `Datum ${index + 1}/${dates.length}: ${date}`,
         color: "yellow",
       });
-      const ok = await runForecastForDate(date);
+      // Varje dag delas upp i delar om FORECAST_CHUNK_SIZE ekipage, så att
+      // ingen enskild förfrågan når Vercels tidsgräns.
+      let ok = true;
+      let offset: number | null = 0;
+      while (offset !== null && !cancelRangeRef.current) {
+        const result: { ok: boolean; nextOffset: number | null } =
+          await runForecastChunk(date, offset, FORECAST_CHUNK_SIZE);
+        ok = result.ok;
+        if (!ok) break;
+        offset = result.nextOffset;
+      }
       if (!ok && !cancelRangeRef.current) {
         appendForecastLog({ message: `Avbryter: ${date} misslyckades.`, color: "red" });
         break;
@@ -553,6 +572,10 @@ export default function Analytics() {
         weight: 0,
         flm: 0,
         revenue: 0,
+        styckegods: 0,
+        partigods: 0,
+        paketbur: 0,
+        egenfakturerat: 0,
       };
 
       existing.days += 1;
@@ -560,6 +583,10 @@ export default function Analytics() {
       existing.weight += Number(row.total_weight_kg);
       existing.flm += Number(row.total_flm);
       existing.revenue += Number(row.total_estimated_revenue);
+      existing.styckegods += Number(row.revenue_styckegods ?? 0);
+      existing.partigods += Number(row.revenue_partigods ?? 0);
+      existing.paketbur += Number(row.revenue_paketbur ?? 0);
+      existing.egenfakturerat += Number(row.revenue_egenfakturerat ?? 0);
       byId.set(row.equipage_id, existing);
     }
 
@@ -978,6 +1005,10 @@ export default function Analytics() {
                         <th className="py-2 pr-4 text-right">Bokningar</th>
                         <th className="py-2 pr-4 text-right">Vikt (kg)</th>
                         <th className="py-2 pr-4 text-right">Flakmeter</th>
+                        <th className="py-2 pr-4 text-right">Styckegods</th>
+                        <th className="py-2 pr-4 text-right">Partigods</th>
+                        <th className="py-2 pr-4 text-right">Paketbur</th>
+                        <th className="py-2 pr-4 text-right">Egenfakturerat</th>
                         <th className="py-2 text-right">Intäkt (SEK)</th>
                       </tr>
                     </thead>
@@ -999,6 +1030,18 @@ export default function Analytics() {
                           </td>
                           <td className="py-2 pr-4 text-right tabular-nums">
                             {decimalFormat.format(totals.flm)}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(totals.styckegods)}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(totals.partigods)}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(totals.paketbur)}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(totals.egenfakturerat)}
                           </td>
                           <td className="py-2 text-right tabular-nums">
                             {numberFormat.format(totals.revenue)}
@@ -1029,6 +1072,26 @@ export default function Analytics() {
                               totalsPerEquipage.reduce((sum, t) => sum + t.flm, 0),
                             )}
                           </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(
+                              totalsPerEquipage.reduce((sum, t) => sum + t.styckegods, 0),
+                            )}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(
+                              totalsPerEquipage.reduce((sum, t) => sum + t.partigods, 0),
+                            )}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(
+                              totalsPerEquipage.reduce((sum, t) => sum + t.paketbur, 0),
+                            )}
+                          </td>
+                          <td className="py-2 pr-4 text-right tabular-nums">
+                            {numberFormat.format(
+                              totalsPerEquipage.reduce((sum, t) => sum + t.egenfakturerat, 0),
+                            )}
+                          </td>
                           <td className="py-2 text-right tabular-nums">
                             {numberFormat.format(
                               totalsPerEquipage.reduce(
@@ -1042,7 +1105,7 @@ export default function Analytics() {
                       {totalsPerEquipage.length === 0 && !isLoading && (
                         <tr>
                           <td
-                            colSpan={6}
+                            colSpan={10}
                             className="py-4 text-center text-[var(--text-secondary)]"
                           >
                             Ingen prognosdata för valda ekipage i perioden.

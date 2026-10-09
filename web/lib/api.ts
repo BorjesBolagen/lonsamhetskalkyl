@@ -531,6 +531,10 @@ export type ForecastAnalyticsRow = {
 	total_weight_kg: number;
 	total_flm: number;
 	total_estimated_revenue: number;
+	revenue_styckegods: number;
+	revenue_partigods: number;
+	revenue_paketbur: number;
+	revenue_egenfakturerat: number;
 	consignment_count: number;
 	created_at: string;
 	updated_at: string;

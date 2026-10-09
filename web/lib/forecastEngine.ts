@@ -36,6 +36,8 @@ export type DailyForecastRunSummary = {
   equipagesTotal: number;
   equipagesWithConsignments: number;
   rowsSaved: number;
+  /** Start för nästa del om körningen delats upp; null när alla ekipage är klara. */
+  nextOffset: number | null;
   consignmentsProcessed: number;
   failures: { equipage: string; reason: string }[];
 };
@@ -296,9 +298,17 @@ async function forecastEquipage(
  * resultatet i daily_equipage_forecast. Körningen är idempotent: en
  * omkörning för samma datum skriver över befintliga rader.
  */
+export type ForecastRunOptions = {
+  /** Hoppa över de första `offset` ekipagen (sorterade på id). */
+  offset?: number;
+  /** Max antal ekipage i den här körningen; utan värde körs alla. */
+  limit?: number;
+};
+
 export async function runDailyEquipageForecast(
   forecastDate: string,
   logger: ForecastLogger = DEFAULT_LOGGER,
+  options: ForecastRunOptions = {},
 ): Promise<DailyForecastRunSummary> {
   return runWithSupabaseAdminContext(async () => {
     const ilogDate = toIlogDate(forecastDate);
@@ -306,7 +316,11 @@ export async function runDailyEquipageForecast(
     const rawEquipages = await ilogGet<unknown[]>(
       "/ilog-api-web/driver/equipages",
     );
-    const equipages = mapEquipages(rawEquipages);
+    const allEquipages = mapEquipages(rawEquipages).sort((a, b) => a.id - b.id);
+    const offset = Math.max(0, options.offset ?? 0);
+    const end = options.limit ? offset + options.limit : allEquipages.length;
+    const equipages = allEquipages.slice(offset, end);
+    const nextOffset = end < allEquipages.length ? end : null;
 
     const nameCache = new Map<string, string>();
     const forecasts: EquipageForecast[] = [];
@@ -382,7 +396,8 @@ export async function runDailyEquipageForecast(
 
     return {
       forecastDate,
-      equipagesTotal: equipages.length,
+      equipagesTotal: allEquipages.length,
+      nextOffset,
       equipagesWithConsignments: forecasts.length,
       rowsSaved,
       consignmentsProcessed: forecasts.reduce(
