@@ -288,6 +288,9 @@ export default function Analytics() {
   const [error, setError] = useState<string | null>(null);
   const [isForecastModalOpen, setIsForecastModalOpen] = useState(false);
   const [forecastDate, setForecastDate] = useState(defaultToDate);
+  const [forecastToDate, setForecastToDate] = useState("");
+  const [weekdaysOnly, setWeekdaysOnly] = useState(true);
+  const cancelRangeRef = useRef(false);
   const [forecastLogs, setForecastLogs] = useState<ForecastLogEntry[]>([]);
   const [isForecastRunning, setIsForecastRunning] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -319,55 +322,104 @@ export default function Analytics() {
     }
   };
 
-  const startManualForecast = () => {
-    if (isForecastRunning) return;
-    setForecastLogs([]);
-    setIsForecastRunning(true);
+  /** Alla datum från..till (inklusive), valfritt bara vardagar. */
+  const datesInRange = (from: string, to: string, weekdaysOnly: boolean) => {
+    const dates: string[] = [];
+    const cursor = new Date(`${from}T12:00:00Z`);
+    const end = new Date(`${to}T12:00:00Z`);
+    while (cursor <= end) {
+      const day = cursor.getUTCDay();
+      if (!weekdaysOnly || (day !== 0 && day !== 6)) {
+        dates.push(cursor.toISOString().slice(0, 10));
+      }
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return dates;
+  };
 
-    const url = `/api/cron/manual-daily-forecast-stream?date=${encodeURIComponent(
-      forecastDate,
-    )}`;
-    const eventSource = new EventSource(url);
-    eventSourceRef.current = eventSource;
+  /** Kör prognosen för ett datum via strömmen. Resolvar true om den gick bra. */
+  const runForecastForDate = (date: string) =>
+    new Promise<boolean>((resolve) => {
+      const url = `/api/cron/manual-daily-forecast-stream?date=${encodeURIComponent(
+        date,
+      )}`;
+      const eventSource = new EventSource(url);
+      eventSourceRef.current = eventSource;
 
-    eventSource.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === "log") {
-          appendForecastLog({
-            message: payload.message,
-            color: payload.color ?? "green",
-          });
-        } else if (payload.type === "done") {
-          appendForecastLog({ message: "Prognos klar. Klicka på Hämta data för att läsa in nya datan", color: "yellow" });
-          setIsForecastRunning(false);
-          eventSource.close();
-          eventSourceRef.current = null;
-        } else if (payload.type === "error") {
-          appendForecastLog({ message: `Fel: ${payload.message}`, color: "red" });
-          setIsForecastRunning(false);
-          eventSource.close();
+      const finish = (ok: boolean) => {
+        eventSource.close();
+        if (eventSourceRef.current === eventSource) {
           eventSourceRef.current = null;
         }
-      } catch (parseError) {
+        resolve(ok);
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === "log") {
+            appendForecastLog({
+              message: payload.message,
+              color: payload.color ?? "green",
+            });
+          } else if (payload.type === "done") {
+            finish(true);
+          } else if (payload.type === "error") {
+            appendForecastLog({ message: `Fel: ${payload.message}`, color: "red" });
+            finish(false);
+          }
+        } catch {
+          appendForecastLog({
+            message: `Ogiltigt SSE-meddelande: ${event.data}`,
+            color: "red",
+          });
+        }
+      };
+
+      eventSource.onerror = () => {
         appendForecastLog({
-          message: `Ogiltigt SSE-meddelande: ${event.data}`,
+          message: "Stream-fel. Kontrollera att du är inloggad som admin.",
           color: "red",
         });
-      }
-    };
+        finish(false);
+      };
+    });
 
-    eventSource.onerror = () => {
+  const startManualForecast = async () => {
+    if (isForecastRunning) return;
+    const lastDate = forecastToDate && forecastToDate >= forecastDate ? forecastToDate : forecastDate;
+    const dates = datesInRange(forecastDate, lastDate, weekdaysOnly);
+    if (dates.length === 0) {
+      appendForecastLog({ message: "Inga datum att köra i intervallet.", color: "yellow" });
+      return;
+    }
+
+    setForecastLogs([]);
+    setIsForecastRunning(true);
+    cancelRangeRef.current = false;
+
+    // Ett datum i taget, varje i en egen förfrågan, så att ingen enskild
+    // förfrågan hamnar över Vercels tidsgräns.
+    for (const [index, date] of dates.entries()) {
+      if (cancelRangeRef.current) break;
       appendForecastLog({
-        message: "Stream-fel. Kontrollera att du är inloggad som admin.",
-        color: "red",
+        message: `Datum ${index + 1}/${dates.length}: ${date}`,
+        color: "yellow",
       });
-      setIsForecastRunning(false);
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      const ok = await runForecastForDate(date);
+      if (!ok && !cancelRangeRef.current) {
+        appendForecastLog({ message: `Avbryter: ${date} misslyckades.`, color: "red" });
+        break;
       }
-    };
+    }
+
+    if (!cancelRangeRef.current) {
+      appendForecastLog({
+        message: "Prognos klar. Klicka på Hämta data för att läsa in nya datan",
+        color: "yellow",
+      });
+    }
+    setIsForecastRunning(false);
   };
 
   useEffect(() => {
@@ -721,9 +773,9 @@ export default function Analytics() {
               </div>
 
               <div className="space-y-4 p-4">
-                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <label className="flex flex-col gap-1 text-sm font-bold text-[var(--text-secondary)]">
-                    Datum
+                    {forecastToDate ? "Från datum" : "Datum"}
                     <input
                       type="date"
                       value={forecastDate}
@@ -731,6 +783,25 @@ export default function Analytics() {
                       className="rounded border border-[var(--seperating-gray)] bg-[var(--input-text)] p-2"
                       max={defaultToDate()}
                     />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm font-bold text-[var(--text-secondary)]">
+                    Till datum (valfritt, för intervall)
+                    <input
+                      type="date"
+                      value={forecastToDate}
+                      onChange={(event) => setForecastToDate(event.target.value)}
+                      className="rounded border border-[var(--seperating-gray)] bg-[var(--input-text)] p-2"
+                      min={forecastDate}
+                      max={defaultToDate()}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={weekdaysOnly}
+                      onChange={(event) => setWeekdaysOnly(event.target.checked)}
+                    />
+                    Bara vardagar i intervallet
                   </label>
                   <button
                     type="button"
@@ -754,6 +825,7 @@ export default function Analytics() {
                         <button
                           type="button"
                           onClick={() => {
+                            cancelRangeRef.current = true;
                             eventSourceRef.current?.close();
                             eventSourceRef.current = null;
                             setIsForecastRunning(false);

@@ -17,6 +17,10 @@ import {
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const DAYS_BACK = 7;
 
+// En dag per förfrågan; intervall körs dag för dag från Analys-fliken.
+export const maxDuration = 1800;
+export const dynamic = "force-dynamic";
+
 function createSseStream(
   forecastDate: string,
 ): ReadableStream<Uint8Array> {
